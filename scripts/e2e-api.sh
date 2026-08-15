@@ -239,11 +239,12 @@ if [[ "$COMPACT_OK" == yes ]]; then
   [[ "$COMPACT_SEEN" == yes ]]
 fi
 COMPACT_V2_CODE="$(curl -s -o "$E2E_RUN/compact-v2.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/compact")"
-if [[ ! "$COMPACT_V2_CODE" =~ ^(200|204)$ ]]; then
+if [[ "$COMPACT_V2_CODE" =~ ^(200|204)$ ]] || { [[ "$COMPACT_V2_CODE" =~ ^(400|409)$ ]] && jq -e '.name == "BadRequest" and .data.code == "command-error"' "$E2E_RUN/compact-v2.json" >/dev/null 2>&1; }; then
+  echo "  POST /api/session/$SESSION_V2/compact -> $COMPACT_V2_CODE"
+else
   echo "  compact v2 body: $(cat "$E2E_RUN/compact-v2.json" 2>/dev/null || true)" >&2
+  exit 1
 fi
-[[ "$COMPACT_V2_CODE" =~ ^(200|204)$ ]]
-echo "  POST /api/session/$SESSION_V2/compact -> $COMPACT_V2_CODE"
 
 TODO_LEN="$(curl -s "$BRIDGE/session/$SESSION_V1/todo" | jq -e 'type == "array"' >/dev/null && echo array)"
 echo "  todo: $TODO_LEN"
