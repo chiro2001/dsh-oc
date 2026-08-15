@@ -44,6 +44,11 @@
     "@deepseek-ai/dsh-cmdline": ">=0.1.0-rc.6",
     "@deepseek-ai/dsh-home-paths": ">=0.1.0-rc.6"
   },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-cmdline": { "optional": true },
+    "@deepseek-ai/dsh-home-paths": { "optional": true }
+  },
   "devDependencies": {
     "@deepseek-ai/dsh-cmdline": "0.1.0-rc.6",
     "@deepseek-ai/dsh-credentials": "0.1.0-rc.6",
