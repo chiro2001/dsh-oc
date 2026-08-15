@@ -1,4 +1,5 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
+import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type {
   AssistantMessage as DshAssistantMessage,
   ContentBlock,
@@ -359,6 +360,7 @@ function applyToolResultV1(
   calls: Map<string, ToolCallInfo>,
   event: SessionEvent<'tool/result'>,
   opts: MessageConvertOptions,
+  view?: ToolEventView,
 ): void {
   const data = event.data
   const callId = String(data.message.content[0]?.toolCallId ?? data.message.source.callId)
@@ -373,6 +375,8 @@ function applyToolResultV1(
     error: data.error,
     time: event.time,
     meta: data.meta,
+    view,
+    callView: call.view,
   }
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i] as V1MessageEntry
@@ -400,6 +404,7 @@ function applyToolResultV1(
 export function convertMessagesV1(
   events: readonly SessionEvent[],
   opts: MessageConvertOptions,
+  views?: ReadonlyArray<ToolEventView | undefined>,
 ): V1MessageEntry[] {
   const entries: V1MessageEntry[] = []
   const calls = new Map<string, ToolCallInfo>()
@@ -410,7 +415,9 @@ export function convertMessagesV1(
   const pending = new Map<string, V1MessageEntry>()
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastMessageId = ''
-  for (const event of events) {
+  for (let eventIndex = 0; eventIndex < events.length; eventIndex++) {
+    const event = events[eventIndex] as SessionEvent
+    const view = views?.[eventIndex]
     switch (event.type) {
       case 'turn/start': {
         turnStarts.set(event.data.turn, event.time)
@@ -522,6 +529,7 @@ export function convertMessagesV1(
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
+          ...(view === undefined ? {} : { view }),
         }
         calls.set(call.callId, call)
         const stepKey = `${data.turn}:${data.step}`
@@ -545,7 +553,7 @@ export function convertMessagesV1(
         break
       }
       case 'tool/result': {
-        applyToolResultV1(entries, calls, event, opts)
+        applyToolResultV1(entries, calls, event, opts, view)
         break
       }
       default:
@@ -793,6 +801,7 @@ function applyToolResultV2(
 export function convertMessagesV2(
   events: readonly SessionEvent[],
   opts: MessageConvertOptions,
+  views?: ReadonlyArray<ToolEventView | undefined>,
 ): SessionMessage[] {
   const messages: SessionMessage[] = []
   const calls = new Map<string, ToolCallInfo>()
@@ -803,7 +812,9 @@ export function convertMessagesV2(
   const pending = new Map<string, SessionMessageAssistant>()
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastAssistant: V2AssistantState | undefined
-  for (const event of events) {
+  for (let eventIndex = 0; eventIndex < events.length; eventIndex++) {
+    const event = events[eventIndex] as SessionEvent
+    const view = views?.[eventIndex]
     switch (event.type) {
       case 'turn/start': {
         turnStarts.set(event.data.turn, event.time)
@@ -902,6 +913,7 @@ export function convertMessagesV2(
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
+          ...(view === undefined ? {} : { view }),
         }
         calls.set(call.callId, call)
         const stepKey = `${data.turn}:${data.step}`

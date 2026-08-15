@@ -47,9 +47,13 @@ e2e_new_run() {
   local sequence="$3"
   local repeat_last="$4"
   local tool_args="${5:-}"
+  local tool_name="${6:-}"
   local extra=()
   if [[ -n "$tool_args" ]]; then
     extra+=(--tool-arguments "$tool_args")
+  fi
+  if [[ -n "$tool_name" ]]; then
+    extra+=(--tool-name "$tool_name")
   fi
   local json
   json="$(node "$E2E_ENV_JS" new-run --label "$label" --permission "$permission" --sequence "$sequence" --repeat-last "$repeat_last" "${extra[@]}")"

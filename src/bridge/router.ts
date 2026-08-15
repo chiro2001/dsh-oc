@@ -8,6 +8,7 @@ import type {
   RpcMethodMap,
   SessionSummary,
 } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
 import type { FileDiff as V1FileDiff } from '@opencode-ai/sdk/client'
 import type {
   LocationInfo,
@@ -41,7 +42,8 @@ import {
 import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertTodos } from './convert/todo.js'
-import { convertProducedFiles } from './events.js'
+import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
+import { convertProducedFiles, toSnapshotFileDiffs } from './events.js'
 import { externalProviderId, projectIdFor } from './convert/common.js'
 import { InteractionState } from './state.js'
 import { SseHub } from './sse.js'
@@ -366,14 +368,52 @@ async function questionReject(
   ctx.state.removeQuestion(requestID)
 }
 
-function producedFilesV1(value: unknown): V1FileDiff[] {
-  return convertProducedFiles(value).map((diff) => ({
+function producedFilesV1(diffs: readonly { file?: string; additions: number; deletions: number }[]): V1FileDiff[] {
+  return diffs.map((diff) => ({
     file: diff.file ?? '',
     before: '',
     after: '',
     additions: diff.additions,
     deletions: diff.deletions,
   }))
+}
+
+function historyChanges(history: { events: HistoryEntry[] }): FileChange[] {
+  const calls = new Map<string, ToolCallInfo>()
+  const changes: FileChange[] = []
+  for (const entry of history.events) {
+    const event = entry.event
+    if (event.type === 'tool/call') {
+      calls.set(String(event.data.callId), {
+        callId: String(event.data.callId),
+        name: event.data.name,
+        arguments: event.data.arguments,
+        ...(entry.view?.for === 'call' ? { view: entry.view } : {}),
+      })
+    } else if (event.type === 'tool/result') {
+      const block = event.data.message.content[0] as ToolResultBlock | undefined
+      const callId = String(block?.toolCallId ?? event.data.message.source.callId)
+      const call = calls.get(callId)
+      if (!call) continue
+      changes.push(...fileChangesFromToolResult(call, {
+        callId,
+        content: event.data.message.content,
+        error: event.data.error,
+        time: event.time,
+        meta: event.data.meta,
+        ...(entry.view?.for === 'result' ? { view: entry.view } : {}),
+      }))
+    }
+  }
+  return changes
+}
+
+function historyFileDiffs(history: { events: HistoryEntry[]; projections?: { values?: Partial<Record<string, unknown>> } }): Array<{ file?: string; patch?: string; additions: number; deletions: number; status?: 'added' | 'deleted' | 'modified' }> {
+  const values = history.projections?.values as Partial<Record<string, unknown>> | undefined
+  if (values?.['produced-files'] !== undefined) {
+    return convertProducedFiles(values['produced-files'])
+  }
+  return toSnapshotFileDiffs(historyChanges(history))
 }
 
 export function createBridgeRouter(
@@ -509,14 +549,16 @@ export function createBridgeRouter(
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
     const history = await rpc(ctx, 'session.history', { sessionId: sid(id), maxMessages: limit })
     const defaultModel = await defaultModelRef(ctx)
+    const entries = history.events
     return json(200, convertMessagesV1(
-      history.events.map((entry) => entry.event),
+      entries.map((entry) => entry.event),
       {
         sessionId: id,
         cwd,
         defaultModel,
         onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`),
       },
+      entries.map((entry) => entry.view),
     ))
   })
 
@@ -563,8 +605,7 @@ export function createBridgeRouter(
   register('GET', '/session/:id/diff', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
-    const values = history.projections?.values as Partial<Record<string, unknown>> | undefined
-    return json(200, producedFilesV1(values?.['produced-files']))
+    return json(200, producedFilesV1(historyFileDiffs(history)))
   })
 
   // ---- permission / question (legacy v1-style routes) ----
@@ -634,19 +675,27 @@ export function createBridgeRouter(
     const id = req.params.sessionID as string
     const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
     const defaultModel = await defaultModelRef(ctx)
+    const entries = history.events
     const response: SessionMessagesResponse = {
       data: convertMessagesV2(
-        history.events.map((entry) => entry.event),
+        entries.map((entry) => entry.event),
         {
           sessionId: id,
           cwd,
           defaultModel,
           onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
         },
+        entries.map((entry) => entry.view),
       ),
       cursor: {},
     }
     return json(200, response)
+  })
+
+  register('GET', '/api/session/:sessionID/diff', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
+    return json(200, historyFileDiffs(history))
   })
 
   register('GET', '/api/session/:sessionID/permission', 'json', async (req, ctx) => {
