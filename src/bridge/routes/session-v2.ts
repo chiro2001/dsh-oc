@@ -74,6 +74,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
         },
       })
     }
+    await R.applyAgentFromBody(ctx, id, req.body)
     await R.applyModelSelection(ctx, id, req.body)
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()

@@ -17,6 +17,7 @@
 | 模型选择器回写 dsh（`/api/session/:id/model`） | ✅ | `POST /api/session/:sessionID/model`、`POST /session/:id/message` body model | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | Reasoning effort / variant 展示与切换 | ✅ | `Model.variants`、`ModelV2Info.variants`、session model `variant` | `tests/convert/model.spec.ts`、TUI `ctrl+t` | 本提交 |
 | dsh agent preset 展示与切换（minimal 等） | ✅ | `GET /agent`、`GET /api/agent`、`POST /api/session/:sessionID/agent`、`POST /session/:id/command` `/preset` | `tests/bridge-router.spec.ts`；隔离 profile 无 minimal 时仅 build | 本提交 |
+| Tab/`/preset` 切换 agent 随 prompt 生效 | ✅ | prompt 体 `agent` 应用到会话；已产生回复的会话被 dsh 锁定（409）时，首次提交后显示一次锁定提示 | `tests/bridge-router.spec.ts`、真实 TUI 验证 | 本提交 |
 | 模型/Provider 错误映射 | ✅ | `src/bridge/errors.ts`、`src/bridge/rpc.ts` | `tests/bridge-router.spec.ts`（404/409/400/501） | `f30b156` |
 
 ## 2. 会话
@@ -146,7 +147,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`a3c779e`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`b6e334c`（2026-08-16）。
 
 ### 路由注册表
 
@@ -170,11 +171,11 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 36 | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
+| `tests/bridge-events.spec.ts` | 38 | b6e334c fix(bridge): close reasoning parts when text starts or on interrupt |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 76 | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
+| `tests/bridge-router.spec.ts` | 79 | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
+| `tests/convert/message.spec.ts` | 20 | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -187,7 +188,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 32 | 5c1cdba feat(tui): allow disabling the exit hint via DSH_OC_DISABLE_EXIT_NOTE |
+| `tests/tui/index.spec.ts` | 32 | 77f5c63 docs(help): reflect real titles, Esc interrupt and preset inheritance |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -196,7 +197,7 @@
 |---|---|
 | `src/bridge/convert/common.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/goal.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `src/bridge/convert/message.ts` | ebc3ffc fix(bridge): reuse streamed part ids so --mini renders one reply |
+| `src/bridge/convert/message.ts` | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
 | `src/bridge/convert/model.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -204,11 +205,11 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
+| `src/bridge/events.ts` | b6e334c fix(bridge): close reasoning parts when text starts or on interrupt |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | a40a0da refactor(bridge): split route registrations into src/bridge/routes.ts |
+| `src/bridge/router.ts` | 23d25d9 perf(bridge): keep large-home title warm in the background, low concurrency |
 | `src/bridge/routes.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/boot.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/permission.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
@@ -218,7 +219,7 @@
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/help.ts` | e256572 feat(bridge): session-scoped always permission memory |
+| `src/help.ts` | 77f5c63 docs(help): reflect real titles, Esc interrupt and preset inheritance |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
@@ -230,7 +231,7 @@
 | `scripts/cleanup-merged-branches.sh` | 2848dc8 fix(scripts): accept --apply/--remote flags before the target branch |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
-| `scripts/e2e-tui-abort.sh` | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
+| `scripts/e2e-tui-abort.sh` | f8adeab test(abort): assert mini Esc interrupts a real mid-stream turn |
 | `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
@@ -251,7 +252,7 @@
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/generate-tui-branding-art.mjs` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/perf-session-gen.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
-| `scripts/perf.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
+| `scripts/perf.mjs` | 2ee0b75 perf(scripts): report session title coverage in perf runs |
 | `scripts/probe-opencode.mjs` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |

@@ -43,6 +43,9 @@
 - 打断/流式转圈：text 块开始时立即关闭 reasoning part（带 end 时间）；中断
   （无最终 assistant/message）时 turn/end 也会关闭仍打开的 reasoning part，
   TUI 的 thinking 指示不再一直转圈。
+- Tab/agent 选择随 prompt 生效：v1/v2 全部 prompt 路由现在会应用请求体里的
+  `agent`；dsh 对已产生回复的会话锁定 agent preset（409），此时第一条消息后
+  会在 TUI 显示一次“Agent switch locked”提示，不再静默失效。
 
 ## [0.1.0-rc.1] - 2026-08-15
 

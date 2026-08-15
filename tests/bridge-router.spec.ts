@@ -1800,6 +1800,127 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     })
   })
 
+  it('applies the Tab-selected agent carried in prompt bodies', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async (request) => {
+          calls.push({ method: 'agentPreset.select', payload: request.payload })
+          return okRpc({ agentPreset: 'standard' })
+        },
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server } = await boot(api)
+    for (const path of ['/session/s1/message', '/session/s1/prompt', '/api/session/s1/prompt']) {
+      const result = await request(server, 'POST', path, {
+        agent: 'standard',
+        parts: [{ type: 'text', text: 'hi' }],
+      })
+      expect(result.status).toBe(200)
+    }
+    const asyncResult = await request(server, 'POST', '/session/s1/prompt_async', {
+      agent: 'standard',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(asyncResult.status).toBe(204)
+    const selects = calls.filter((call) => call.method === 'agentPreset.select')
+    expect(selects).toHaveLength(4)
+    expect(selects[0]).toMatchObject({
+      method: 'agentPreset.select',
+      payload: { sessionId: 's1', agentPreset: 'standard' },
+    })
+  })
+
+  it('does not switch agents when the prompt carries the default build agent', async () => {
+    const base = fakeApi()
+    let selects = 0
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [{ id: 'minimal', trust: 'system', isDefault: true }],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => {
+          selects += 1
+          return okRpc({ agentPreset: 'minimal' })
+        },
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/message', {
+      agent: 'build',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(result.status).toBe(200)
+    expect(selects).toBe(0)
+  })
+
+  it('notifies once when the prompt agent is locked by dsh', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => errRpc('agent-preset-locked', 'agent preset is fixed'),
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server, router } = await boot(api)
+    const hub = router.ctx.hub
+    const originalBroadcast = hub.broadcast.bind(hub)
+    const notices: string[] = []
+    ;(hub as unknown as {
+      broadcast(events: Array<{ payload: { type?: string; properties?: { part?: { text?: string } } } }>): void
+    }).broadcast = (events) => {
+      for (const event of events) {
+        if (event.payload.type === 'message.part.updated') {
+          const text = event.payload.properties?.part?.text
+          if (typeof text === 'string') notices.push(text)
+        }
+      }
+      originalBroadcast(events as never)
+    }
+    for (let index = 0; index < 2; index++) {
+      const result = await request(server, 'POST', '/session/s1/message', {
+        agent: 'standard',
+        parts: [{ type: 'text', text: 'hi' }],
+      })
+      expect(result.status).toBe(200)
+    }
+    const locked = notices.filter((text) => text.includes('Agent switch locked'))
+    expect(locked).toHaveLength(1)
+  })
+
   it('switches blank-session agents and maps agent-preset-locked to 409', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []

@@ -94,6 +94,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
+    await R.applyAgentFromBody(ctx, id, req.body)
     await R.applyModelSelection(ctx, id, req.body)
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()
@@ -112,6 +113,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
+    await R.applyAgentFromBody(ctx, id, req.body)
     await R.applyModelSelection(ctx, id, req.body)
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()
@@ -130,15 +132,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(204)
     }
-    const agent = typeof body.agent === 'string' && body.agent.length > 0 ? body.agent : undefined
-    if (agent !== undefined && agent !== R.DEFAULT_AGENT_NAME) {
-      try {
-        await R.switchAgentPreset(ctx, id, agent)
-        R.broadcastSessionAgent(ctx, id, agent)
-      } catch (error) {
-        ctx.log(`[bridge] prompt_async agent switch failed: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
+    await R.applyAgentFromBody(ctx, id, body)
     await R.applyModelSelection(ctx, id, body)
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()

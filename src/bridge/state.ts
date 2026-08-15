@@ -157,6 +157,21 @@ export class InteractionState {
     this.currentSessionId = sessionId
   }
 
+  /** Agent-preset-lock notices already shown (dedupe per session + agent). */
+  private readonly lockedAgentNotices = new Set<string>()
+
+  lockedAgentNoticeSeen(sessionId: string, agent: string): boolean {
+    return this.lockedAgentNotices.has(InteractionState.lockedAgentKey(sessionId, agent))
+  }
+
+  markLockedAgentNotice(sessionId: string, agent: string): void {
+    this.lockedAgentNotices.add(InteractionState.lockedAgentKey(sessionId, agent))
+  }
+
+  private static lockedAgentKey(sessionId: string, agent: string): string {
+    return `${sessionId}\u0000${agent}`
+  }
+
   registerApproval(entry: PermissionEntry): PermissionEntry {
     this.permissions.set(entry.opencodeId, entry)
     this.byApprovalId.set(entry.approvalId, entry.opencodeId)

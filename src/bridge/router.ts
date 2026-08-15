@@ -1180,6 +1180,37 @@ export async function applyModelSelection(
   })
 }
 
+/** Apply the agent carried in a prompt body (Tab/agent picker selection). */
+export async function applyAgentFromBody(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  body: unknown,
+): Promise<void> {
+  const record = bodyAsRecord(body)
+  const agent = typeof record.agent === 'string' && record.agent.length > 0 ? record.agent : undefined
+  if (agent === undefined || agent === DEFAULT_AGENT_NAME) return
+  try {
+    await switchAgentPreset(ctx, sessionId, agent)
+    broadcastSessionAgent(ctx, sessionId, agent)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    ctx.log(`[bridge] prompt agent switch failed for ${sessionId}: ${message}`)
+    const errorBody = (error as { body?: { data?: Record<string, unknown> } }).body
+    const code = typeof errorBody?.data?.code === 'string'
+      ? (errorBody.data.code as string)
+      : ''
+    if (code === 'agent-preset-locked' && !ctx.state.lockedAgentNoticeSeen(sessionId, agent)) {
+      ctx.state.markLockedAgentNotice(sessionId, agent)
+      broadcastCommandResult(
+        ctx,
+        sessionId,
+        `Agent switch locked: 该会话已产生回复，agent preset 已固定；请新建会话后切换（Tab 或 /preset ${agent}）`,
+        'idle',
+      )
+    }
+  }
+}
+
 /**
  * dsh `session.fork` anchors on a completed-turn boundary by event seq.
  * opencode's fork payload names a message id, so translate it to the seq of
