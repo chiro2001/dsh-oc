@@ -17,7 +17,7 @@ export function ocHelp(version: string = DSH_OC_VERSION): string {
   ✅ 会话列表/新建/续聊/fork/compact，SSE 流式消息
   ✅ dsh 模型目录、reasoning effort、agent preset 切换
   ✅ 工具卡片（bash/read/write/edit）、流式工具参数、diff 与 Modified Files
-  ✅ 权限/提问流、子代理会话树
+  ✅ 权限/提问流、子代理会话树与后台子代理
   ✅ 自动更新关闭、二进制版本锁定 ${OPENCODE_VERSION}
   ✅ DSH OC 品牌启动 logo
   ✅ 会话列表真实标题（标题 → 目录名 → id 回退）
