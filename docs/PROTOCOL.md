@@ -169,6 +169,7 @@ GET /api/integration?location[directory]=...
 | `GET /api/integration` | STUB | `[]` |
 | `GET /api/model` | MAP | `apiProxy.llm.models` |
 | `GET /api/provider` | MAP | `apiProxy.llm.models/providers` |
+| `GET /api/provider/{id}` | MAP | 单 provider `{ location, data: ProviderV2Info }`；未找到 404 |
 | `GET /api/reference` | STUB | `[]` |
 | `GET /api/command` | MAP | 注册 `/preset`、`/goal`、`/help` |
 | `GET /api/skill` | STUB/LATER | `[]` |

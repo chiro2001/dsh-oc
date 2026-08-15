@@ -109,6 +109,8 @@ curl -s "$BRIDGE/api/model" | jq -e '(.data | type) == "array" and ([.data[].id]
 echo "  /api/model.data array with mock-model"
 curl -s "$BRIDGE/api/provider" | jq -e '(.data | type) == "array" and ([.data[].id] | index("deepseek") != null)' >/dev/null
 echo "  /api/provider.data array with deepseek provider"
+curl -s "$BRIDGE/api/provider/deepseek" | jq -e '.data.id == "deepseek"' >/dev/null
+echo "  /api/provider/deepseek single provider ok"
 curl -s "$BRIDGE/api/model" | jq -e '(.data[] | select(.id == "mock-model") | .variants | length) > 0' >/dev/null
 echo "  /api/model mock-model advertises reasoning variants"
 curl -s "$BRIDGE/command" | jq -e '([.[].name] | index("preset") != null)' >/dev/null

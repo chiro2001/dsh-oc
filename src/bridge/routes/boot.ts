@@ -2,6 +2,7 @@
 import * as R from '../router.js'
 import { convertToProviderCatalog, convertToV1Providers, convertToV2Models, convertToV2Providers } from '../convert/model.js'
 import { projectIdFor } from '../convert/common.js'
+import { notFound } from '../errors.js'
 import type { RouteRegistrar } from '../routes.js'
 
 export function registerBootRoutes(register: RouteRegistrar): void {
@@ -95,6 +96,15 @@ export function registerBootRoutes(register: RouteRegistrar): void {
   register('GET', '/api/provider', 'json', async (_req, ctx) => {
     const groups = await R.modelGroups(ctx)
     return R.json(200, { location: R.locationInfo(ctx), data: convertToV2Providers(groups) })
+  })
+
+  register('GET', '/api/provider/:providerID', 'json', async (req, ctx) => {
+    const providerID = req.params.providerID as string
+    const groups = await R.modelGroups(ctx)
+    const providers = convertToV2Providers(groups)
+    const found = providers.find((provider) => provider.id === providerID)
+    if (found === undefined) throw notFound('provider not found', { providerID })
+    return R.json(200, { location: R.locationInfo(ctx), data: found })
   })
 
   register('GET', '/api/permission/saved', 'json', async (_req, ctx) => R.json(200, {

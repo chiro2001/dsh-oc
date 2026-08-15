@@ -27,6 +27,7 @@
 - `GET /api/session/{id}/context`：返回 `{ data: SessionMessage[] }`（v2 消息转换复用）。
 - `GET /api/session/{id}/event`：按会话过滤的 SSE 事件流（`/global/event` 子集）。
 - `GET /api/session/{id}/message/{messageID}`：v2 单条消息查询（`{ data: SessionMessage }`）。
+- `GET /api/provider/{id}`：单 provider 查询（`{ location, data: ProviderV2Info }`）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温
