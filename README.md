@@ -22,6 +22,16 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 - [docs/ROADMAP.md](docs/ROADMAP.md)：下一阶段需求与验收标准。
 - [docs/FEATURES.md](docs/FEATURES.md)：功能支持状态矩阵（含自动追踪部分）。
 
+## 开发完成状态（2026-08-15）
+
+- ROADMAP N1–N6 全部完成：自动更新关闭/版本锁定、流式 toolcall/progress、Goal
+  完整生命周期、会话性能测试、协议升级探针、能力矩阵与 `--help`。
+- 额外能力：DSH OC 品牌启动 logo、文本/图片附件、`Always` 权限会话记忆、v2
+  会话搜索/分页/排序、SSE mux/host 重连与重放去重、dsh skills 目录与斜杠命令、
+  GitHub Actions CI（build/typecheck/test/probe）。
+- 详细状态与验收方式见 [docs/ROADMAP.md](docs/ROADMAP.md) 与
+  [docs/FEATURES.md](docs/FEATURES.md)。
+
 ## 安装使用
 
 ```bash
