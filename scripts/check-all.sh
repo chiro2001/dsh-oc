@@ -38,7 +38,8 @@ if [[ "$E2E" == "1" ]]; then
   STABLE_E2E="e2e-api.sh e2e-tui-boot.sh e2e-tui-turn.sh e2e-tui-tools.sh \
     e2e-tui-command.sh e2e-api-goal.sh e2e-tui-goal.sh e2e-tui-brand.sh \
     e2e-tui-dir.sh e2e-tui-fork.sh e2e-tui-offline.sh e2e-tui-version-lock.sh \
-    e2e-tui-help.sh e2e-tui-print-logs.sh e2e-api-permission.sh"
+    e2e-tui-help.sh e2e-tui-print-logs.sh e2e-api-permission.sh \
+    e2e-tui-permission.sh e2e-tui-permission-ext.sh"
   if [[ "${CI_E2E_SUBSET:-}" == "api" ]]; then
     E2E_SCRIPTS="e2e-api.sh e2e-api-goal.sh"
   elif [[ "${CI_E2E_SUBSET:-}" == "1" ]]; then
