@@ -130,6 +130,8 @@ pnpm typecheck
 pnpm test
 pnpm run features:update   # 刷新 docs/FEATURES.md 的自动追踪部分
 pnpm run perf              # 会话性能测试（生成合成历史 → 启动真实 bridge → 输出 JSON 报告）
+pnpm run e2e               # 全量 e2e（真实 opencode TUI）
+pnpm run e2e:api           # API e2e 子集（快速回归）
 dsh plugin --profile oc add .
 dsh --profile oc
 ```

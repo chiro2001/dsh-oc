@@ -34,7 +34,9 @@
     "perf": "node scripts/perf.mjs",
     "perf:gen": "node scripts/perf-session-gen.mjs",
     "features:update": "node scripts/update-feature-matrix.mjs",
-    "pack:dry": "pnpm pack --dry-run"
+    "pack:dry": "pnpm pack --dry-run",
+    "e2e": "bash scripts/check-all.sh --e2e",
+    "e2e:api": "CI_E2E_SUBSET=api bash scripts/check-all.sh --e2e"
   },
   "dependencies": {
     "zod": "^4.0.0"

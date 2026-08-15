@@ -30,6 +30,7 @@
   协议探针自动扫描路由目录。
 - `scripts/cleanup-merged-branches.sh`：列出/删除已并入 main 的遗留分支
   （默认 dry-run，`--apply` 本地删除，`--remote` 同步删除远端）。
+- `pnpm run e2e` / `pnpm run e2e:api`：一键跑全量或 API 子集 e2e。
 
 ## [0.1.0-rc.1] - 2026-08-15
 
