@@ -54,10 +54,13 @@ dsh --profile oc
 从 GitHub 源安装时，更新到最新 `main`：
 
 ```bash
-cd "$DSH_HOME/profiles/oc"        # 默认 $DSH_HOME=~/.dsh
-pnpm update @deepseek-ai/dsh-oc
+dsh plugin --profile oc add chiro2001/dsh-oc
 dsh --profile oc --help            # 验证新版本已生效
 ```
+
+> 包的 npm 名称仍是 `@deepseek-ai/dsh-oc`（安装源是
+> `github:chiro2001/dsh-oc`）；也可在 `$DSH_HOME/profiles/oc` 下用
+> `pnpm update @deepseek-ai/dsh-oc` 更新。
 
 本地开发时（仓库已 clone 到本地），重新构建并指向本地路径即可：
 
