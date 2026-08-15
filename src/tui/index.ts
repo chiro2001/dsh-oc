@@ -5,8 +5,9 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-cmdline'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -33,6 +34,9 @@ export const OPENCODE_CONFIG_FILE = 'opencode.json'
 
 /** KV state file used by the opencode TUI for per-feature signals. */
 export const OPENCODE_KV_FILE = 'kv.json'
+
+/** Branding TUI plugin directory name inside the isolated opencode config. */
+export const OPENCODE_BRANDING_PLUGIN = 'dsh-oc-logo'
 
 /**
  * Verified opencode 1.18.18 switches that disable background update checks,
@@ -75,40 +79,60 @@ function readJsonObject(path: string): Record<string, unknown> {
  * `messages_toggle_timestamps` bound to `ctrl+shift+t` for toggling at runtime.
  * Existing config/state values are preserved by merging.
  */
+/** Absolute path of the shipped `tui-branding/` plugin package. */
+export function brandingSourceDir(): string {
+  return fileURLToPath(new URL('../../tui-branding/', import.meta.url))
+}
+
+/**
+ * Seed the isolated opencode TUI state:
+ * - always copies the dsh-oc branding plugin into the config dir and lists it
+ *   in `tui.json` (replacing the OpenCode ASCII logo on the home screen);
+ * - when `DSH_OC_TUI_TIMESTAMPS=1`, additionally enables default timestamps
+ *   through `kv.json` and `tui.json` keybinds.
+ * Existing config/state values are preserved by merging.
+ */
 export function prepareOpenCodeTuiState(
   dshHome: string,
   env: NodeJS.ProcessEnv = process.env,
 ): void {
-  if (!tuiTimestampsEnabled(env)) return
-
   const configDir = join(dshHome, 'opencode', 'config')
   const tuiConfigPath = join(configDir, OPENCODE_TUI_FILE)
-  const kvPath = join(dshHome, 'opencode', 'state', 'opencode', OPENCODE_KV_FILE)
+  const pluginDir = join(configDir, 'plugins', OPENCODE_BRANDING_PLUGIN)
 
   mkdirSync(configDir, { recursive: true })
-  mkdirSync(dirname(kvPath), { recursive: true })
+  cpSync(brandingSourceDir(), pluginDir, { recursive: true, force: true })
 
   const tuiConfig = readJsonObject(tuiConfigPath)
-  const keybinds = typeof tuiConfig.keybinds === 'object' && tuiConfig.keybinds !== null && !Array.isArray(tuiConfig.keybinds)
-    ? tuiConfig.keybinds as Record<string, unknown>
-    : {}
+  const pluginList = Array.isArray(tuiConfig.plugin) ? tuiConfig.plugin as unknown[] : []
+  const merged: Record<string, unknown> = {
+    ...tuiConfig,
+    plugin: [...new Set([...pluginList, pluginDir])],
+  }
+  if (tuiTimestampsEnabled(env)) {
+    const keybinds = typeof tuiConfig.keybinds === 'object' && tuiConfig.keybinds !== null && !Array.isArray(tuiConfig.keybinds)
+      ? tuiConfig.keybinds as Record<string, unknown>
+      : {}
+    merged.keybinds = {
+      ...keybinds,
+      session_toggle_timestamps: 'ctrl+shift+t',
+      messages_toggle_timestamps: 'ctrl+shift+t',
+    }
+  }
   writeFileSync(
     tuiConfigPath,
-    `${JSON.stringify({
-      ...tuiConfig,
-      keybinds: {
-        ...keybinds,
-        session_toggle_timestamps: 'ctrl+shift+t',
-        messages_toggle_timestamps: 'ctrl+shift+t',
-      },
-    }, null, 2)}\n`,
+    `${JSON.stringify(merged, null, 2)}\n`,
   )
 
-  const kv = readJsonObject(kvPath)
-  writeFileSync(
-    kvPath,
-    `${JSON.stringify({ ...kv, timestamps: 'show' }, null, 2)}\n`,
-  )
+  if (tuiTimestampsEnabled(env)) {
+    const kvPath = join(dshHome, 'opencode', 'state', 'opencode', OPENCODE_KV_FILE)
+    mkdirSync(dirname(kvPath), { recursive: true })
+    const kv = readJsonObject(kvPath)
+    writeFileSync(
+      kvPath,
+      `${JSON.stringify({ ...kv, timestamps: 'show' }, null, 2)}\n`,
+    )
+  }
 }
 
 /**
@@ -154,6 +178,7 @@ export function ocHelp(version: string = DSH_OC_VERSION): string {
   ✅ 工具卡片（bash/read/write/edit）、diff 与 Modified Files
   ✅ 权限/提问流、子代理会话树
   ✅ 自动更新关闭、二进制版本锁定 ${OPENCODE_VERSION}
+  ✅ DSH OC 品牌启动 logo
   🟡 文件附件仅文本/data image；"Allow always" 降级为 once
   ❌ MCP/LSP/formatter/skills/integration 等外围路由为 stub
 

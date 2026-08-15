@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildChildEnv,
+  brandingSourceDir,
   DSH_OC_TUI_TIMESTAMPS,
   filterSupportedArgs,
   helpRequested,
@@ -11,6 +12,7 @@ import {
   OcTuiConfig,
   ocHelp,
   OPENCODE_CONFIG_FILE,
+  OPENCODE_BRANDING_PLUGIN,
   OPENCODE_NETWORK_SAFETY_ENV,
   prepareOpenCodeConfig,
   prepareOpenCodeTuiState,
@@ -235,11 +237,34 @@ describe('prepareOpenCodeTuiState', () => {
     expect(kv).toEqual({ sidebar: 'hide', timestamps: 'show' })
   })
 
-  it('does nothing when timestamps are not enabled', () => {
+  it('always registers the branding plugin but skips kv.json without timestamps', () => {
     const home = tmpDir('timestamps-off')
     prepareOpenCodeTuiState(home, {})
     expect(existsSync(join(home, 'opencode', 'state', 'opencode', 'kv.json'))).toBe(false)
-    expect(existsSync(join(home, 'opencode', 'config', 'tui.json'))).toBe(false)
+    const tui = JSON.parse(readFileSync(join(home, 'opencode', 'config', 'tui.json'), 'utf8'))
+    const pluginDir = join(home, 'opencode', 'config', 'plugins', OPENCODE_BRANDING_PLUGIN)
+    expect(tui.plugin).toEqual([pluginDir])
+    expect(existsSync(join(pluginDir, 'tui.tsx'))).toBe(true)
+    expect(existsSync(join(pluginDir, 'package.json'))).toBe(true)
+  })
+
+  it('dedupes an existing branding plugin entry and preserves other plugins', () => {
+    const home = tmpDir('plugin-dedupe')
+    const configDir = join(home, 'opencode', 'config')
+    mkdirSync(configDir, { recursive: true })
+    const pluginDir = join(configDir, 'plugins', OPENCODE_BRANDING_PLUGIN)
+    writeFileSync(join(configDir, 'tui.json'), JSON.stringify({ plugin: [pluginDir, '/other/plugin'] }))
+
+    prepareOpenCodeTuiState(home, {})
+
+    const tui = JSON.parse(readFileSync(join(configDir, 'tui.json'), 'utf8'))
+    expect(tui.plugin).toEqual([pluginDir, '/other/plugin'])
+    expect(tui.plugin.filter((entry: string) => entry === pluginDir)).toHaveLength(1)
+  })
+
+  it('ships the branding plugin source from the repo', () => {
+    expect(existsSync(join(brandingSourceDir(), 'tui.tsx'))).toBe(true)
+    expect(existsSync(join(brandingSourceDir(), 'package.json'))).toBe(true)
   })
 })
 

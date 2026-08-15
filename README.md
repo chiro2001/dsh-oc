@@ -101,6 +101,7 @@ dsh --profile oc --dir ~/project --mini
 | 工具卡片（bash/read/write/edit）、diff 与 Modified Files | ✅ |
 | 权限/提问流、子代理会话树 | ✅ |
 | 自动更新关闭、二进制版本锁定 | ✅ |
+| DSH OC 品牌启动 logo（替换 OpenCode 字符画） | ✅ |
 | 文本/data image 附件 | 🟡 |
 | `Allow always` 权限 | 🟡（降级为 once） |
 | MCP / LSP / formatter / skills / integration 等外围路由 | ❌（schema-valid stub） |
@@ -129,6 +130,7 @@ bash scripts/e2e-tui-timestamps.sh  # DSH_OC_TUI_TIMESTAMPS=1 下时间戳文本
 bash scripts/e2e-tui-offline.sh     # 代理不可达 + 清空缓存时 TUI 仍能启动
 bash scripts/e2e-tui-version-lock.sh  # 显式二进制版本不匹配时明确报错退出
 bash scripts/e2e-tui-help.sh        # dsh --profile oc --help 输出能力摘要并退出
+bash scripts/e2e-tui-brand.sh       # TUI 首页显示 DSH OC 品牌 logo（替换 OpenCode 字符画）
 ```
 
 tarball 验证模式（用 npm tarball 而不是本地路径安装）：

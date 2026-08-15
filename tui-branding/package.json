@@ -1,0 +1,14 @@
+{
+  "name": "dsh-oc-logo",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./tui": "./tui.tsx"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*",
+    "@opentui/core": "*",
+    "@opentui/solid": "*",
+    "solid-js": "*"
+  }
+}

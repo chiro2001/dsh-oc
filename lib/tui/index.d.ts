@@ -90,6 +90,8 @@ declare const OPENCODE_TUI_FILE = "tui.json";
 declare const OPENCODE_CONFIG_FILE = "opencode.json";
 /** KV state file used by the opencode TUI for per-feature signals. */
 declare const OPENCODE_KV_FILE = "kv.json";
+/** Branding TUI plugin directory name inside the isolated opencode config. */
+declare const OPENCODE_BRANDING_PLUGIN = "dsh-oc-logo";
 /**
  * Verified opencode 1.18.18 switches that disable background update checks,
  * remote model catalog fetches and LSP binary downloads. Set before the child
@@ -109,6 +111,16 @@ declare function tuiTimestampsEnabled(env?: NodeJS.ProcessEnv): boolean;
  * (`$XDG_STATE_HOME/opencode/kv.json`), so this writes that state and also
  * writes a minimal `tui.json` with `session_toggle_timestamps` /
  * `messages_toggle_timestamps` bound to `ctrl+shift+t` for toggling at runtime.
+ * Existing config/state values are preserved by merging.
+ */
+/** Absolute path of the shipped `tui-branding/` plugin package. */
+declare function brandingSourceDir(): string;
+/**
+ * Seed the isolated opencode TUI state:
+ * - always copies the dsh-oc branding plugin into the config dir and lists it
+ *   in `tui.json` (replacing the OpenCode ASCII logo on the home screen);
+ * - when `DSH_OC_TUI_TIMESTAMPS=1`, additionally enables default timestamps
+ *   through `kv.json` and `tui.json` keybinds.
  * Existing config/state values are preserved by merging.
  */
 declare function prepareOpenCodeTuiState(dshHome: string, env?: NodeJS.ProcessEnv): void;
@@ -239,5 +251,5 @@ declare class OcTuiService extends Service {
   private fail;
 }
 //#endregion
-export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, buildChildEnv, filterSupportedArgs, helpRequested, installSignalForwarding, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiTimestampsEnabled };
+export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_BRANDING_PLUGIN, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, brandingSourceDir, buildChildEnv, filterSupportedArgs, helpRequested, installSignalForwarding, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiTimestampsEnabled };
 //# sourceMappingURL=index.d.ts.map
