@@ -30,8 +30,10 @@ SEED_URL="$E2E_BRIDGE_URL"
 
 seed_session() {
   local text="$1"
+  local title="$2"
   local session
-  session="$(curl -s -X POST "$SEED_URL/session" -H 'Content-Type: application/json' -d '{}' | jq -er .id)"
+  session="$(curl -s -X POST "$SEED_URL/session" -H 'Content-Type: application/json' \
+    -d "{\"title\":\"$title\",\"agent\":\"build\"}" | jq -er .id)"
   curl -s -X POST "$SEED_URL/session/$session/message" -H 'Content-Type: application/json' \
     -d "{\"parts\":[{\"type\":\"text\",\"text\":\"$text\"}]}" | jq -e '.info.role == "assistant"' >/dev/null
   local deadline=$((SECONDS + 60))
@@ -48,8 +50,8 @@ seed_session() {
   echo "$session"
 }
 
-SESSION_A="$(seed_session "continue seed A")"
-SESSION_B="$(seed_session "continue seed B")"
+SESSION_A="$(seed_session "continue seed A" "Continue Title A")"
+SESSION_B="$(seed_session "continue seed B" "Continue Title B")"
 echo "  seeded A=$SESSION_A B=$SESSION_B"
 
 echo "== restart dsh with --continue =="
@@ -79,6 +81,15 @@ if [[ -z "$CONTINUE_HINT" ]]; then
   exit 1
 fi
 echo "  newest session visible: $CONTINUE_HINT"
+
+echo "== resumed session real title =="
+CONTINUE_TITLES="$(curl -s "$E2E_BRIDGE_URL/session" | jq -r '.[].title' 2>/dev/null || true)"
+if ! grep -q 'Continue Title B' <<<"$CONTINUE_TITLES"; then
+  echo "e2e: resumed session real title not visible in the session list" >&2
+  echo "$CONTINUE_TITLES" >&2
+  exit 1
+fi
+echo "  resumed session real title: Continue Title B"
 
 echo "== exit through prompt submit =="
 e2e_tui_exit

@@ -51,6 +51,8 @@
   `--mini` 模式下的 once/always+自动放行/reject/question 与单次回复渲染。
 - `scripts/e2e-tui-mini.sh`：`--mini` 优雅退出（三连 Ctrl+C）后断言 dsh-oc
   退出提示可见。
+- `scripts/e2e-tui-continue.sh`：种子会话带显式标题，`--continue` 恢复后断言
+  会话列表返回真实标题（历史“恢复会话无标题”回归项）。
 - `scripts/perf.mjs` 新增 `measurements.titleCoverage`：量化列表真实标题覆盖率。
 - `e2e-tui-abort.sh`：mini 分支改为等 SSE 出现真实流式增量后再按 Esc，断言确实
   打断进行中的流（长 mock 开启 `repeatLast`，修复此前第二次请求被 500 拒绝的假通过）。
