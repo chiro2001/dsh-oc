@@ -105,6 +105,7 @@ function toolCallId(resultEvent: SessionEvent<'tool/result'>): string {
 export class MuxEventTranslator {
   private currentAssistant = new Map<string, string>()
   private pendingCalls = new Map<string, Map<string, ToolCallInfo>>()
+  private blockStarts = new Map<string, number>()
 
   constructor(private deps: TranslateDeps) {}
 
@@ -260,9 +261,20 @@ export class MuxEventTranslator {
             parts: entry.parts as unknown as Array<Record<string, unknown>>,
           }
         })
+      case 'assistant/chunk': {
+        const chunk = event.data.chunk
+        if (chunk.type === 'block-start') {
+          this.blockStarts.set(`${event.data.turn}:${event.data.step}:${chunk.index}:${chunk.blockType}`, event.time)
+        }
+        return []
+      }
       case 'assistant/message': {
         const events = messageEvents(sessionId, this.deps, () => {
-          const entry = assistantMessageFromEvent(event, messageOptions(sessionId, this.deps))
+          const entry = assistantMessageFromEvent(
+            event,
+            messageOptions(sessionId, this.deps),
+            (index, blockType) => this.blockStarts.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`),
+          )
           return {
             info: entry.info as unknown as Record<string, unknown>,
             parts: entry.parts as unknown as Array<Record<string, unknown>>,

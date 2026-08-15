@@ -36,6 +36,24 @@ describe('convert/model', () => {
     expect(model?.status).toBe('active')
   })
 
+  it('uses dsh-llm-deepseek capacities and opencode naming for v4 models', () => {
+    const deepseekGroups: ModelProviderGroup[] = [
+      {
+        id: 'deepseek-official',
+        name: 'DeepSeek Official',
+        models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' }],
+      },
+    ]
+    const provider = convertToV1Providers(deepseekGroups)[0]
+    expect(provider?.models['deepseek-v4-flash']?.name).toBe('DeepSeek V4 Flash')
+    expect(provider?.models['deepseek-v4-flash']?.limit).toEqual({ context: 1_000_000, output: 256_000 })
+    expect(convertToV2Models(deepseekGroups)[0]).toMatchObject({
+      name: 'DeepSeek V4 Flash',
+      limit: { context: 1_000_000, output: 256_000 },
+    })
+  })
+
+
   it('builds the v1 provider catalog wrapper', () => {
     const catalog = convertToProviderCatalog(groups)
     expect(catalog.all.map((entry) => entry.id)).toEqual(['deepseek', 'openai'])

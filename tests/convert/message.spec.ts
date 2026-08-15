@@ -57,6 +57,23 @@ describe('convert/message (v1)', () => {
     }
   })
 
+  it('uses assistant chunk block-start times for reasoning duration', () => {
+    const events = [
+      sessionEvent('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'block-start', index: 0, blockType: 'reasoning' },
+      }, 1, 1000),
+      makeAssistantEvent([
+        { type: 'reasoning', text: 'think' },
+        { type: 'text', text: 'answer' },
+      ]),
+    ]
+    const [entry] = convertMessagesV1(events, opts)
+    expect(entry?.parts[0]).toMatchObject({ type: 'reasoning', time: { start: 1000, end: 1200 } })
+    expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1200, end: 1200 } })
+  })
+
   it('pairs tool/result with the assistant tool part', () => {
     const events = [
       makeAssistantEvent([

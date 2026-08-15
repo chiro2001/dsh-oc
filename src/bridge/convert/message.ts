@@ -102,7 +102,7 @@ function textPart(
   id: string,
   messageID: string,
   text: string,
-  time: number,
+  time: { start: number; end: number },
   opts: MessageConvertOptions,
 ): TextPart {
   return {
@@ -111,7 +111,7 @@ function textPart(
     messageID,
     type: 'text',
     text,
-    time: { start: time, end: time },
+    time: { start: time.start, end: time.end },
   }
 }
 
@@ -120,13 +120,15 @@ export function assistantPartsFromMessage(
   message: DshAssistantMessage,
   time: number,
   opts: MessageConvertOptions,
+  blockStart?: (index: number, blockType: string) => number | undefined,
 ): { parts: Part[]; calls: Map<string, ToolCallInfo> } {
   const parts: Part[] = []
   const calls = new Map<string, ToolCallInfo>()
   const messageID = String(message.id)
   message.content.forEach((block, index) => {
+    const start = blockStart?.(index, block.type) ?? time
     if (block.type === 'text') {
-      parts.push(textPart(`${messageID}:${index}`, messageID, block.text, time, opts))
+      parts.push(textPart(`${messageID}:${index}`, messageID, block.text, { start, end: time }, opts))
     } else if (block.type === 'reasoning') {
       parts.push({
         id: `${messageID}:${index}`,
@@ -134,7 +136,7 @@ export function assistantPartsFromMessage(
         messageID,
         type: 'reasoning',
         text: block.text,
-        time: { start: time, end: time },
+        time: { start, end: time },
       })
     } else if (block.type === 'tool-call') {
       const call: ToolCallInfo = {
@@ -166,7 +168,7 @@ function userPartsFromMessage(
   const parts: Part[] = []
   content.forEach((block, index) => {
     if (block.type === 'text') {
-      parts.push(textPart(`${messageId}:${index}`, messageId, block.text, time, opts))
+      parts.push(textPart(`${messageId}:${index}`, messageId, block.text, { start: time, end: time }, opts))
     } else if (block.type === 'image') {
       // First version: image parts are skipped; the text surface still works.
       opts.onSkip?.('user/message', `image block skipped (${String((block.attachment as { mediaType?: string }).mediaType ?? 'unknown')})`)
@@ -226,6 +228,7 @@ export function convertMessagesV1(
 ): V1MessageEntry[] {
   const entries: V1MessageEntry[] = []
   const calls = new Map<string, ToolCallInfo>()
+  const blockStarts = new Map<string, number>()
   let lastMessageId = ''
   for (const event of events) {
     switch (event.type) {
@@ -239,6 +242,13 @@ export function convertMessagesV1(
         lastMessageId = id
         break
       }
+      case 'assistant/chunk': {
+        const chunk = event.data.chunk
+        if (chunk.type === 'block-start') {
+          blockStarts.set(`${event.data.turn}:${event.data.step}:${chunk.index}:${chunk.blockType}`, event.time)
+        }
+        break
+      }
       case 'assistant/message': {
         const data = event.data
         const id = String(data.message.id)
@@ -246,6 +256,7 @@ export function convertMessagesV1(
           data.message,
           event.time,
           opts,
+          (index, blockType) => blockStarts.get(`${data.turn}:${data.step}:${index}:${blockType}`),
         )
         for (const [callId, call] of messageCalls) calls.set(callId, call)
         entries.push({
@@ -293,9 +304,10 @@ export function userMessageFromEvent(
 export function assistantMessageFromEvent(
   event: SessionEvent<'assistant/message'>,
   opts: MessageConvertOptions,
+  blockStart?: (index: number, blockType: string) => number | undefined,
 ): V1MessageEntry {
   const id = String(event.data.message.id)
-  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts)
+  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart)
   return {
     info: assistantMessageInfo(event.data.message, event.time, id, opts, event.data.usage),
     parts,
