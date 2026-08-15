@@ -308,7 +308,7 @@ curl -sN --max-time 120 "$BRIDGE/global/event" > "$APPROVAL_SSE" &
 APPROVAL_SSE_PID=$!
 sleep 2
 
-APPR_SESSION="$(curl -s -X POST "$BRIDGE/session" -H 'Content-Type: application/json' -d '{}' | jq -er .id)"
+APPR_SESSION="$(curl -s -X POST "$BRIDGE/session" -H 'Content-Type: application/json' -d '{"agent":"standard"}' | jq -er .id)"
 echo "  approval session: $APPR_SESSION"
 PROMPT_OUT="$(curl -s -X POST "$BRIDGE/session/$APPR_SESSION/message" -H 'Content-Type: application/json' \
   -d '{"parts":[{"type":"text","text":"e2e: trigger a bash tool call"}]}')"
