@@ -955,6 +955,13 @@ describe('bridge router: session routes', () => {
 
     const invalid = await request(server, 'GET', '/api/session/s1/message?cursor=not-a-cursor')
     expect(invalid.status).toBe(400)
+
+    const desc = await request(server, 'GET', '/api/session/s1/message?order=desc')
+    expect(desc.status).toBe(200)
+    expect((desc.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id)).toEqual([
+      'm2',
+      'm1',
+    ])
   })
 
   it('serves todo and diff from history/projections', async () => {

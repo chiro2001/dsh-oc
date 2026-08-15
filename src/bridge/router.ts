@@ -1671,17 +1671,18 @@ export function createBridgeRouter(
     const defaultModel = await defaultModelRef(ctx)
     const entries = history.events
     const oldest = oldestSurfaceSeq(entries)
+    const data = convertMessagesV2(
+      entries.map((entry) => entry.event),
+      {
+        sessionId: id,
+        cwd,
+        defaultModel,
+        onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
+      },
+      entries.map((entry) => entry.view),
+    )
     const response: SessionMessagesResponse = {
-      data: convertMessagesV2(
-        entries.map((entry) => entry.event),
-        {
-          sessionId: id,
-          cwd,
-          defaultModel,
-          onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
-        },
-        entries.map((entry) => entry.view),
-      ),
+      data: req.query.get('order') === 'desc' ? data.reverse() : data,
       cursor: {
         ...(history.hasMore && oldest !== undefined ? { previous: encodeMessageCursor(oldest) } : {}),
       },
