@@ -1,6 +1,8 @@
 export interface OcBridgeService {
   readonly url: string
   readonly port: number
+  /** Change the bridge working directory (attach `--dir` support). */
+  setCwd?(directory: string): void
 }
 
 export interface OpenCodeAsset {

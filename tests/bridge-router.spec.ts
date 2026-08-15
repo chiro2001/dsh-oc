@@ -134,6 +134,36 @@ describe('bridge router: startup GET routes', () => {
     expect((await request(server, 'GET', '/experimental/workspace/status')).body).toEqual([])
   })
 
+  it('setCwd changes /path and session create honors the directory query', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        create: async (request) => {
+          calls.push({ method: 'session.create', payload: request.payload })
+          return okRpc({ sessionId: 'created' as never })
+        },
+      },
+    }
+    const { server, router } = await boot(api, '/work')
+
+    let path = await request(server, 'GET', '/path')
+    expect((path.body as { directory: string }).directory).toBe('/work')
+
+    router.setCwd('/sub')
+    path = await request(server, 'GET', '/path')
+    expect((path.body as { directory: string }).directory).toBe('/sub')
+
+    const created = await request(server, 'POST', '/session?directory=/sub2', {})
+    expect(created.status).toBe(200)
+    expect(calls[0]).toMatchObject({
+      method: 'session.create',
+      payload: { cwd: '/sub2' },
+    })
+  })
+
   it('advertises the default build agent so the TUI prompt can submit', async () => {
     const base = fakeApi()
     const api = {

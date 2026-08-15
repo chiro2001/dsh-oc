@@ -18,6 +18,7 @@ import {
   prepareOpenCodeTuiState,
   requestExit,
   startOpenCodeTui,
+  tuiDirFromArgs,
   tuiTimestampsEnabled,
   type RunningTui,
   type TimerHandle,
@@ -132,6 +133,16 @@ describe('filterSupportedArgs', () => {
     const { pass, ignored } = filterSupportedArgs(['--log-level=DEBUG', '-s', 'id-1'])
     expect(pass).toEqual(['--log-level=DEBUG', '-s', 'id-1'])
     expect(ignored).toEqual([])
+  })
+})
+
+describe('tuiDirFromArgs', () => {
+  it('extracts --dir value forms and ignores missing values', () => {
+    expect(tuiDirFromArgs([])).toBeUndefined()
+    expect(tuiDirFromArgs(['--session', 'x'])).toBeUndefined()
+    expect(tuiDirFromArgs(['--dir', '/tmp/work'])).toBe('/tmp/work')
+    expect(tuiDirFromArgs(['--dir=/tmp/work'])).toBe('/tmp/work')
+    expect(tuiDirFromArgs(['--dir', '--mini'])).toBeUndefined()
   })
 })
 

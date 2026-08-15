@@ -2,6 +2,8 @@
 interface OcBridgeService {
   readonly url: string;
   readonly port: number;
+  /** Change the bridge working directory (attach `--dir` support). */
+  setCwd?(directory: string): void;
 }
 interface OpenCodeAsset {
   /** Platform facts derived from the asset key. */

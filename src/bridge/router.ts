@@ -98,6 +98,8 @@ export interface BridgeRouter {
   ctx: BridgeRouteContext
   match(method: string, pathname: string): Route | undefined
   startSse(req: BridgeRequest, res: ServerResponse): void
+  /** Change the bridge working directory (e.g. from an attach `--dir`). */
+  setCwd(directory: string): void
 }
 
 export interface RouterOptions {
@@ -959,7 +961,10 @@ async function createSession(
     id = await forkFromSource(ctx, parentID)
   } else {
     const location = body.location as { directory?: unknown } | undefined
-    const directory = typeof location?.directory === 'string' ? location.directory : ctx.cwd
+    const queryDirectory = req.query.get('directory')
+    const directory = typeof location?.directory === 'string'
+      ? location.directory
+      : queryDirectory ?? ctx.cwd
     const result = await rpc(ctx, 'session.create', {
       cwd: directory,
       ...(sessionIdInput === undefined ? {} : { sessionId: sid(sessionIdInput) }),
@@ -1115,7 +1120,7 @@ export function createBridgeRouter(
   api: BridgeApi,
   options: RouterOptions = {},
 ): BridgeRouter {
-  const cwd = options.cwd ?? process.cwd()
+  let cwd = options.cwd ?? process.cwd()
   const log = options.log ?? (() => {})
   const state = new InteractionState()
   const hub = new SseHub(log)
@@ -1133,13 +1138,7 @@ export function createBridgeRouter(
 
   // ---- v1 boot / catalog routes ----
   register('GET', '/path', 'json', async (_req, ctx) => {
-    let directory = ctx.cwd
-    try {
-      const describe = await rpc(ctx, 'host.describe', {})
-      if (describe.cwd) directory = describe.cwd
-    } catch (error) {
-      ctx.log(`[bridge] host.describe unavailable: ${error instanceof Error ? error.message : String(error)}`)
-    }
+    const directory = ctx.cwd
     return json(200, {
       home: directory,
       state: 'ready',
@@ -1620,6 +1619,10 @@ export function createBridgeRouter(
     ctx,
     match,
     startSse,
+    setCwd(directory: string) {
+      cwd = directory
+      ctx.cwd = directory
+    },
   }
 }
 

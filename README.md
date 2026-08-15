@@ -103,6 +103,9 @@ dsh --profile oc --session <session-id>
 dsh --profile oc --dir ~/project --mini
 ```
 
+`--dir` 不仅传给 `opencode attach`，还会写入 bridge 的工作目录：`/path`、
+新建会话和文件附件路径校验都以该目录为准。
+
 其它参数（例如 `--model X`）会被显式打印 `ignored unsupported arg` 警告并忽略，
 不会静默丢弃。
 
@@ -150,6 +153,7 @@ bash scripts/e2e-tui-offline.sh     # 代理不可达 + 清空缓存时 TUI 仍�
 bash scripts/e2e-tui-version-lock.sh  # 显式二进制版本不匹配时明确报错退出
 bash scripts/e2e-tui-help.sh        # dsh --profile oc --help 输出能力摘要并退出
 bash scripts/e2e-tui-brand.sh       # TUI 首页显示 DSH OC 品牌 logo（替换 OpenCode 字符画）
+bash scripts/e2e-tui-dir.sh         # attach --dir 切到指定工作目录
 pnpm run probe                     # 协议路由清单 + 二进制/SDK 版本校验
 ```
 

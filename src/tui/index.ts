@@ -6,7 +6,7 @@
 
 import { spawn } from 'node:child_process'
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-cmdline'
@@ -342,6 +342,20 @@ export function filterSupportedArgs(args: readonly string[]): { pass: string[]; 
   return { pass, ignored }
 }
 
+/** Extract the `--dir <path>` / `--dir=<path>` value from raw dsh args. */
+export function tuiDirFromArgs(args: readonly string[]): string | undefined {
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? ''
+    if (arg === '--dir') {
+      const value = args[index + 1]
+      if (value !== undefined && !value.startsWith('-')) return value
+      continue
+    }
+    if (arg.startsWith('--dir=')) return arg.slice('--dir='.length)
+  }
+  return undefined
+}
+
 /**
  * Build the child environment: inherit the parent and isolate opencode state
  * under `$DSH_HOME/opencode`. `OPENCODE_CONFIG_CONTENT` is intentionally
@@ -435,6 +449,15 @@ export class OcTuiService extends Service {
       process.stdout.write(ocHelp())
       requestExit(this.ctx, 0)
       return
+    }
+    const dirArg = tuiDirFromArgs(rawArgs)
+    if (dirArg !== undefined) {
+      try {
+        bridge.setCwd?.(resolve(dirArg))
+      } catch (error) {
+        this.fail(error)
+        return
+      }
     }
 
     let resolved: ResolvedBinary

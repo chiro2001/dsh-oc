@@ -213,6 +213,8 @@ declare function filterSupportedArgs(args: readonly string[]): {
   pass: string[];
   ignored: string[];
 };
+/** Extract the `--dir <path>` / `--dir=<path>` value from raw dsh args. */
+declare function tuiDirFromArgs(args: readonly string[]): string | undefined;
 /**
  * Build the child environment: inherit the parent and isolate opencode state
  * under `$DSH_HOME/opencode`. `OPENCODE_CONFIG_CONTENT` is intentionally
@@ -256,5 +258,5 @@ declare class OcTuiService extends Service {
   private fail;
 }
 //#endregion
-export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_BRANDING_PLUGIN, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, brandingSourceDir, buildChildEnv, filterSupportedArgs, helpRequested, installSignalForwarding, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiTimestampsEnabled };
+export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_BRANDING_PLUGIN, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, brandingSourceDir, buildChildEnv, filterSupportedArgs, helpRequested, installSignalForwarding, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiDirFromArgs, tuiTimestampsEnabled };
 //# sourceMappingURL=index.d.ts.map
