@@ -6,8 +6,10 @@ import {
   buildChildEnv,
   DSH_OC_TUI_TIMESTAMPS,
   filterSupportedArgs,
+  helpRequested,
   installSignalForwarding,
   OcTuiConfig,
+  ocHelp,
   OPENCODE_CONFIG_FILE,
   OPENCODE_NETWORK_SAFETY_ENV,
   prepareOpenCodeConfig,
@@ -128,6 +130,29 @@ describe('filterSupportedArgs', () => {
     const { pass, ignored } = filterSupportedArgs(['--log-level=DEBUG', '-s', 'id-1'])
     expect(pass).toEqual(['--log-level=DEBUG', '-s', 'id-1'])
     expect(ignored).toEqual([])
+  })
+})
+
+describe('ocHelp', () => {
+  it('includes version, attach args, capability summary and docs entry', () => {
+    const text = ocHelp('9.9.9')
+    expect(text).toContain('dsh-oc 9.9.9')
+    expect(text).toContain('opencode 1.18.18')
+    expect(text).toContain('--continue/-c')
+    expect(text).toContain('--session/-s')
+    expect(text).toContain('核心能力')
+    expect(text).toContain('docs/FEATURES.md')
+    expect(text).toContain('docs/PROTOCOL.md')
+  })
+})
+
+describe('helpRequested', () => {
+  it('recognizes --help and -h anywhere in the arg list', () => {
+    expect(helpRequested([])).toBe(false)
+    expect(helpRequested(['--session', 'x'])).toBe(false)
+    expect(helpRequested(['--help'])).toBe(true)
+    expect(helpRequested(['--session', 'x', '--help'])).toBe(true)
+    expect(helpRequested(['-h'])).toBe(true)
   })
 })
 

@@ -125,6 +125,10 @@ declare const OcTuiConfig: z.ZodDefault<z.ZodObject<{
   args: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>>;
 type OcTuiConfig = z.infer<typeof OcTuiConfig>;
+/** `dsh --profile oc --help` output; kept deliberately static for offline use. */
+declare function ocHelp(version?: string): string;
+/** Whether the raw dsh args request the dsh-oc help screen. */
+declare function helpRequested(args: readonly string[]): boolean;
 /** Minimal child-process surface used by the spawn helper (test friendly). */
 interface TuiChild {
   readonly killed: boolean;
@@ -235,5 +239,5 @@ declare class OcTuiService extends Service {
   private fail;
 }
 //#endregion
-export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, buildChildEnv, filterSupportedArgs, installSignalForwarding, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiTimestampsEnabled };
+export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, buildChildEnv, filterSupportedArgs, helpRequested, installSignalForwarding, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiTimestampsEnabled };
 //# sourceMappingURL=index.d.ts.map

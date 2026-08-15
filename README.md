@@ -89,6 +89,26 @@ dsh --profile oc --dir ~/project --mini
 其它参数（例如 `--model X`）会被显式打印 `ignored unsupported arg` 警告并忽略，
 不会静默丢弃。
 
+## 能力状态
+
+> 完整矩阵见 [docs/FEATURES.md](docs/FEATURES.md)，路由细节见
+> [docs/PROTOCOL.md](docs/PROTOCOL.md)。`dsh --profile oc --help` 展示同一摘要。
+
+| 能力 | 状态 |
+|---|---|
+| 会话列表/新建/续聊/fork/compact、SSE 流式消息 | ✅ |
+| 模型目录、reasoning effort、agent preset 切换 | ✅ |
+| 工具卡片（bash/read/write/edit）、diff 与 Modified Files | ✅ |
+| 权限/提问流、子代理会话树 | ✅ |
+| 自动更新关闭、二进制版本锁定 | ✅ |
+| 文本/data image 附件 | 🟡 |
+| `Allow always` 权限 | 🟡（降级为 once） |
+| MCP / LSP / formatter / skills / integration 等外围路由 | ❌（schema-valid stub） |
+
+网络与二进制策略：opencode 子进程不主动访问 `api.opencode.ai` / GitHub release
+（自动更新、模型目录抓取、LSP 下载均被关闭），版本锁定为 `opencode-version.json`
+中的 `1.18.18`；详见下文「网络与更新策略」。
+
 ## 数据隔离
 
 opencode 的配置、数据、状态与缓存全部隔离在 `$DSH_HOME/opencode` 下：
@@ -108,6 +128,7 @@ bash scripts/e2e-tui-turn.sh   # 真实 TUI 键盘输入完成一轮对话
 bash scripts/e2e-tui-timestamps.sh  # DSH_OC_TUI_TIMESTAMPS=1 下时间戳文本出现
 bash scripts/e2e-tui-offline.sh     # 代理不可达 + 清空缓存时 TUI 仍能启动
 bash scripts/e2e-tui-version-lock.sh  # 显式二进制版本不匹配时明确报错退出
+bash scripts/e2e-tui-help.sh        # dsh --profile oc --help 输出能力摘要并退出
 ```
 
 tarball 验证模式（用 npm tarball 而不是本地路径安装）：
