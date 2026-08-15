@@ -61,7 +61,6 @@ const CLIENT_FIXABLE = new Set<string>([
   'agent-preset-not-found',
   'agent-preset-invalid',
   'agent-preset-read-only',
-  'agent-preset-locked',
   'agent-preset-conflict',
   'settings-rejected',
   'settings-not-exposed',
@@ -90,6 +89,7 @@ const CONFLICT_CODES = new Set<string>([
   'subagent-not-resumable',
   'subagent-unauthorized',
   'subagent-delivery-unavailable',
+  'agent-preset-locked',
 ])
 
 /**

@@ -18,10 +18,19 @@ import type {
 export interface BridgeApi {
   sessions: Pick<
     ApiProxy['sessions'],
-    'list' | 'create' | 'fork' | 'history' | 'rename' | 'prompt' | 'cancel'
+    | 'list'
+    | 'create'
+    | 'fork'
+    | 'history'
+    | 'models'
+    | 'rename'
+    | 'prompt'
+    | 'cancel'
+    | 'selectModel'
   >
   host: Pick<ApiProxy['host'], 'describe'>
   llm: Pick<ApiProxy['llm'], 'models'>
+  agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>
   events: Pick<ApiProxy['events'], 'mux'>
   respond: ApiProxy['respond']
 }
@@ -40,6 +49,7 @@ export class RpcCallError extends Error {
 
 const DOMAIN_ALIASES: Record<string, string> = {
   session: 'sessions',
+  agentPreset: 'agentPresets',
 }
 
 function resolveMethod(

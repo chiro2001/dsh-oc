@@ -53,6 +53,44 @@ describe('convert/model', () => {
     })
   })
 
+  it('maps dsh reasoning efforts to v1 variants and v2 variant rows', () => {
+    const deepseekGroups: ModelProviderGroup[] = [
+      {
+        id: 'deepseek-official',
+        name: 'DeepSeek Official',
+        models: [{
+          id: 'deepseek-v4-flash',
+          name: 'DeepSeek V4 Flash',
+          reasoning: {
+            efforts: [
+              { id: 'off', name: 'Off' },
+              { id: 'high', name: 'High' },
+              { id: 'max', name: 'Max' },
+            ],
+            defaultEffort: 'high',
+          },
+        }],
+      },
+    ]
+    const provider = convertToV1Providers(deepseekGroups)[0]
+    expect((provider?.models['deepseek-v4-flash'] as unknown as {
+      variants?: Record<string, { reasoningEffort: string; name: string }>
+    }).variants).toEqual({
+      off: { reasoningEffort: 'off', name: 'Off' },
+      high: { reasoningEffort: 'high', name: 'High' },
+      max: { reasoningEffort: 'max', name: 'Max' },
+    })
+    const catalog = convertToProviderCatalog(deepseekGroups).all[0]
+    expect((catalog?.models['deepseek-v4-flash'] as unknown as {
+      variants?: Record<string, { reasoningEffort: string; name: string }>
+    }).variants?.max).toEqual({ reasoningEffort: 'max', name: 'Max' })
+    expect(convertToV2Models(deepseekGroups)[0]?.variants).toEqual([
+      { id: 'off', headers: {}, body: { reasoningEffort: 'off', name: 'Off' } },
+      { id: 'high', headers: {}, body: { reasoningEffort: 'high', name: 'High' } },
+      { id: 'max', headers: {}, body: { reasoningEffort: 'max', name: 'Max' } },
+    ])
+  })
+
 
   it('builds the v1 provider catalog wrapper', () => {
     const catalog = convertToProviderCatalog(groups)

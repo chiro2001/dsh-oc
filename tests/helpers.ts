@@ -39,13 +39,26 @@ export function fakeApi(overrides: Partial<BridgeApi> = {}): BridgeApi {
       create: async () => okRpc({ sessionId: 'new-session' as never }),
       fork: async () => okRpc({ sessionId: 'fork-session' as never }),
       history: async () => okRpc({ events: [], hasMore: false }),
+      models: async () => okRpc({
+        current: { provider: 'deepseek-official', model: 'mock-model' },
+        routable: true,
+        groups: [],
+        failures: [],
+      }),
       rename: async () => okRpc({ title: 'renamed', seq: 3 }),
       prompt: async () => okRpc({ accepted: true }),
       cancel: async () => okRpc({ accepted: true }),
+      selectModel: async () => okRpc({
+        selected: { provider: 'deepseek-official', model: 'mock-model', reasoningEffort: 'off' },
+      }),
     },
     host: {
       describe: async () =>
         okRpc({ version: '0.1.0-rc.6', cwd: '/work', attachedSessions: 0, canOpenPath: false }),
+    },
+    agentPresets: {
+      list: async () => okRpc({ presets: [], authorable: false, hasDocument: false }),
+      select: async () => okRpc({ agentPreset: 'minimal' }),
     },
     llm: {
       models: async () => okRpc({ groups: [], failures: [] }),

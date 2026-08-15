@@ -11,6 +11,12 @@ export interface SessionConvertOptions {
   cwd: string
   /** Fallback creation timestamp; dsh summaries do not expose header.createdAt. */
   createdAt?: number
+  /** Current dsh model selection, mapped to the opencode-facing provider. */
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
 }
 
 export function sessionTitleFrom(summary: SessionSummary): string {
@@ -38,6 +44,7 @@ export function convertSessionSummary(
     parentID: summary.parentSessionId === undefined ? undefined : String(summary.parentSessionId),
     title,
     agent: summary.agentPreset ?? DEFAULT_AGENT,
+    ...(options.model === undefined ? {} : { model: options.model }),
     version: OPENCODE_VERSION,
     time: {
       created: createdAt,
@@ -58,6 +65,7 @@ export function convertSessionSummaryV2(
     parentID: summary.parentSessionId === undefined ? undefined : String(summary.parentSessionId),
     projectID: projectIdFor(directory),
     agent: summary.agentPreset ?? DEFAULT_AGENT,
+    ...(options.model === undefined ? {} : { model: options.model }),
     cost: 0,
     tokens: {
       input: 0,

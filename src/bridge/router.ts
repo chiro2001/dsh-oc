@@ -8,8 +8,12 @@ import type {
   RpcMethodMap,
   SessionSummary,
 } from '@deepseek-ai/dsh-host-apiproxy/api'
-import type { FileDiff as V1FileDiff } from '@opencode-ai/sdk/client'
 import type {
+  Command as V1Command,
+  FileDiff as V1FileDiff,
+} from '@opencode-ai/sdk/client'
+import type {
+  CommandV2Info,
   LocationInfo,
   Session as V2Session,
   SessionMessagesResponse,
@@ -42,7 +46,7 @@ import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertTodos } from './convert/todo.js'
 import { convertProducedFiles } from './events.js'
-import { externalProviderId, projectIdFor } from './convert/common.js'
+import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { InteractionState } from './state.js'
 import { SseHub } from './sse.js'
 import { MuxEventTranslator } from './events.js'
@@ -132,6 +136,7 @@ interface SessionView {
   summary?: SessionSummary
   events: HistoryEntry[]
   createdAt?: number
+  model?: { id: string; providerID: string; variant?: string }
 }
 
 async function sessionView(ctx: BridgeRouteContext, id: string): Promise<SessionView> {
@@ -139,23 +144,45 @@ async function sessionView(ctx: BridgeRouteContext, id: string): Promise<Session
   const summary = list.items.find((item) => String(item.sessionId) === id)
   const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
   if (summary?.cwd) ctx.state.sessionDirectories.set(id, summary.cwd)
+  let model: SessionView['model']
+  try {
+    const selection = await rpc(ctx, 'session.models', { sessionId: sid(id) })
+    model = {
+      id: selection.current.model,
+      providerID: externalProviderId(selection.current.provider),
+      ...(selection.current.reasoningEffort === undefined
+        ? {}
+        : { variant: selection.current.reasoningEffort }),
+    }
+  } catch (error) {
+    ctx.log(`[bridge/session] model selection unavailable for ${id}: ${error instanceof Error ? error.message : String(error)}`)
+  }
   return {
     summary,
     events: history.events,
     createdAt: history.events[0]?.event.time,
+    ...(model === undefined ? {} : { model }),
   }
 }
 
 function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
   if (view.summary) {
-    return convertSessionSummary(view.summary, { cwd: ctx.cwd, createdAt: view.createdAt })
+    return convertSessionSummary(view.summary, {
+      cwd: ctx.cwd,
+      createdAt: view.createdAt,
+      ...(view.model === undefined ? {} : { model: view.model }),
+    })
   }
   return minimalSession(id, { cwd: ctx.cwd, createdAt: view.createdAt })
 }
 
 function toV2Session(view: SessionView, id: string, ctx: BridgeRouteContext): SessionV2Info {
   if (view.summary) {
-    return convertSessionSummaryV2(view.summary, { cwd: ctx.cwd, createdAt: view.createdAt })
+    return convertSessionSummaryV2(view.summary, {
+      cwd: ctx.cwd,
+      createdAt: view.createdAt,
+      ...(view.model === undefined ? {} : { model: view.model }),
+    })
   }
   return minimalSessionV2(id, { cwd: ctx.cwd, createdAt: view.createdAt })
 }
@@ -200,32 +227,58 @@ function parsePromptParts(raw: unknown): PromptContentPart[] {
   return parts
 }
 
-function pendingAssistantPlaceholder(sessionID: string, cwd: string): V1MessageEntry {
-  return {
-    info: {
-      id: `pending:${randomUUID()}`,
-      sessionID,
-      role: 'assistant',
-      time: { created: Date.now() },
-      parentID: `pending:${randomUUID()}`,
-      modelID: 'deepseek-chat',
-      providerID: 'deepseek',
-      mode: 'build',
-      path: { cwd, root: cwd },
-      cost: 0,
-      tokens: {
-        input: 0,
-        output: 0,
-        reasoning: 0,
-        cache: { read: 0, write: 0 },
-      },
+function pendingAssistantPlaceholder(
+  sessionID: string,
+  cwd: string,
+  text?: string,
+): V1MessageEntry {
+  const info: V1MessageEntry['info'] = {
+    id: `pending:${randomUUID()}`,
+    sessionID,
+    role: 'assistant',
+    time: { created: Date.now() },
+    parentID: `pending:${randomUUID()}`,
+    modelID: 'deepseek-chat',
+    providerID: 'deepseek',
+    mode: 'build',
+    path: { cwd, root: cwd },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
     },
-    parts: [],
+  }
+  return {
+    info,
+    parts: text === undefined
+      ? []
+      : [{
+          id: `pending:${randomUUID()}`,
+          sessionID,
+          messageID: info.id,
+          type: 'text',
+          text,
+          time: { start: Date.now() },
+        }],
   }
 }
 
 /** The dsh-oc bridge exposes one primary agent so the TUI prompt stays usable. */
 const DEFAULT_AGENT_NAME = 'build'
+
+const PRESET_COMMAND_V1: V1Command = {
+  name: 'preset',
+  description: 'List or switch the session dsh agent preset',
+  template: 'preset',
+}
+
+const PRESET_COMMAND_V2: CommandV2Info = {
+  name: 'preset',
+  template: 'preset',
+  description: 'List or switch the session dsh agent preset',
+}
 
 async function defaultAgents(ctx: BridgeRouteContext): Promise<{
   providerID: string
@@ -274,6 +327,126 @@ async function v2DefaultAgent(ctx: BridgeRouteContext): Promise<AgentV2Info> {
   }
 }
 
+async function presetRoster(ctx: BridgeRouteContext) {
+  const roster = await rpc(ctx, 'agentPreset.list', {})
+  return roster.presets.filter((preset) => preset.broken === undefined)
+}
+
+async function defaultPresetId(ctx: BridgeRouteContext): Promise<string | undefined> {
+  try {
+    const presets = await presetRoster(ctx)
+    return presets.find((preset) => preset.isDefault)?.id
+  } catch (error) {
+    ctx.log(`[bridge] agent preset roster unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+}
+
+async function presetIdForAgent(
+  ctx: BridgeRouteContext,
+  agentName: string,
+): Promise<string | undefined> {
+  if (agentName === DEFAULT_AGENT_NAME) return defaultPresetId(ctx)
+  try {
+    const presets = await presetRoster(ctx)
+    return presets.find((preset) => preset.id === agentName)?.id
+  } catch (error) {
+    ctx.log(`[bridge] agent preset roster unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+}
+
+async function switchAgentPreset(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  agentName: string,
+): Promise<void> {
+  const presetId = await presetIdForAgent(ctx, agentName)
+  if (presetId === undefined) {
+    if (agentName === DEFAULT_AGENT_NAME) return
+    throw badRequest(`agent "${agentName}" is not a switchable dsh preset`)
+  }
+  await rpc(ctx, 'agentPreset.select', {
+    sessionId: sid(sessionId),
+    agentPreset: presetId,
+  })
+}
+
+async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
+  try {
+    return (await presetRoster(ctx))
+      .filter((preset) => preset.id !== DEFAULT_AGENT_NAME)
+      .map((preset) => ({
+        name: preset.id,
+        description: preset.name ?? preset.description,
+        mode: 'primary' as const,
+        permission: [],
+        options: {},
+      }))
+  } catch (error) {
+    ctx.log(`[bridge] agent preset roster unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    return []
+  }
+}
+
+async function dshPresetAgentsV2(ctx: BridgeRouteContext): Promise<AgentV2Info[]> {
+  try {
+    return (await presetRoster(ctx))
+      .filter((preset) => preset.id !== DEFAULT_AGENT_NAME)
+      .map((preset) => ({
+        id: preset.id,
+        description: preset.name ?? preset.description,
+        mode: 'primary' as const,
+        hidden: false,
+        request: { headers: {}, body: {} },
+        permissions: [],
+      }))
+  } catch (error) {
+    ctx.log(`[bridge] agent preset roster unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    return []
+  }
+}
+
+interface ModelInput {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+
+function modelInputFromBody(body: unknown): ModelInput | undefined {
+  const record = bodyAsRecord(body)
+  const raw = record.model !== undefined && bodyAsRecord(record.model) ? record.model : body
+  const input = bodyAsRecord(raw)
+  const providerID = typeof input.providerID === 'string' ? input.providerID : undefined
+  const modelID = typeof input.modelID === 'string'
+    ? input.modelID
+    : typeof input.id === 'string'
+      ? input.id
+      : undefined
+  if (providerID === undefined || modelID === undefined) return undefined
+  const variant = typeof input.variant === 'string' ? input.variant : undefined
+  return {
+    providerID,
+    modelID,
+    ...(variant === undefined || variant === 'default' ? {} : { variant }),
+  }
+}
+
+async function applyModelSelection(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  body: unknown,
+): Promise<void> {
+  const input = modelInputFromBody(body)
+  if (input === undefined) return
+  await rpc(ctx, 'session.selectModel', {
+    sessionId: sid(sessionId),
+    provider: dshProviderId(input.providerID),
+    model: input.modelID,
+    ...(input.variant === undefined ? {} : { reasoningEffort: input.variant }),
+  })
+}
+
 async function createSession(
   req: BridgeRequest,
   ctx: BridgeRouteContext,
@@ -283,6 +456,8 @@ async function createSession(
   const parentID = typeof body.parentID === 'string' ? body.parentID : undefined
   const sessionIdInput = typeof body.id === 'string' ? body.id : undefined
   const title = typeof body.title === 'string' ? body.title : undefined
+  const agentName = typeof body.agent === 'string' ? body.agent : undefined
+  const agentPreset = agentName === undefined ? undefined : await presetIdForAgent(ctx, agentName)
   let id: string
   if (parentID) {
     const result = await rpc(ctx, 'session.fork', { sessionId: sid(parentID) })
@@ -293,8 +468,12 @@ async function createSession(
     const result = await rpc(ctx, 'session.create', {
       cwd: directory,
       ...(sessionIdInput === undefined ? {} : { sessionId: sid(sessionIdInput) }),
+      ...(agentPreset === undefined ? {} : { agentPreset }),
     })
     id = String(result.sessionId)
+  }
+  if (body.model !== undefined) {
+    await applyModelSelection(ctx, id, body)
   }
   if (title) {
     try {
@@ -439,8 +618,12 @@ export function createBridgeRouter(
 
   register('GET', '/provider/auth', 'json', async () => json(200, {}))
 
-  register('GET', '/agent', 'json', async (_req, ctx) => json(200, [await v1DefaultAgent(ctx)]))
-  for (const bare of ['/command', '/skill', '/reference', '/integration']) {
+  register('GET', '/agent', 'json', async (_req, ctx) => json(200, [
+    await v1DefaultAgent(ctx),
+    ...(await dshPresetAgents(ctx)),
+  ]))
+  register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1]))
+  for (const bare of ['/skill', '/reference', '/integration']) {
     register('GET', bare, 'json', async () => json(200, []))
   }
 
@@ -449,10 +632,14 @@ export function createBridgeRouter(
 
   register('GET', '/api/agent', 'json', async (_req, ctx) => json(200, {
     location: locationInfo(ctx),
-    data: [await v2DefaultAgent(ctx)],
+    data: [await v2DefaultAgent(ctx), ...(await dshPresetAgentsV2(ctx))],
   }))
 
-  for (const bare of ['/api/command', '/api/skill', '/api/reference', '/api/integration']) {
+  register('GET', '/api/command', 'json', async (_req, ctx) => json(200, {
+    location: locationInfo(ctx),
+    data: [PRESET_COMMAND_V2],
+  }))
+  for (const bare of ['/api/skill', '/api/reference', '/api/integration']) {
     register('GET', bare, 'json', async (_req, ctx) => json(200, v2LocationBody(ctx)))
   }
 
@@ -523,6 +710,7 @@ export function createBridgeRouter(
   register('POST', '/session/:id/message', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
     return json(200, pendingAssistantPlaceholder(id, cwd))
   })
@@ -532,6 +720,7 @@ export function createBridgeRouter(
   register('POST', '/session/:id/prompt', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
     return json(200, pendingAssistantPlaceholder(id, cwd))
   })
@@ -540,6 +729,24 @@ export function createBridgeRouter(
     const id = req.params.id as string
     await rpc(ctx, 'session.cancel', { sessionId: sid(id) })
     return json(200, true)
+  })
+
+  register('POST', '/session/:id/command', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    const body = bodyAsRecord(req.body)
+    const command = typeof body.command === 'string' ? body.command : ''
+    const argumentsRaw = typeof body.arguments === 'string' ? body.arguments : ''
+    if (command !== 'preset') throw badRequest(`unsupported command "${command}"`)
+    const argument = argumentsRaw.trim()
+    if (argument === '') {
+      const roster = await presetRoster(ctx)
+      const text = roster.length === 0
+        ? 'No switchable dsh agent presets'
+        : roster.map((preset) => `${preset.id}${preset.isDefault ? ' (default)' : ''}`).join('\n')
+      return json(200, pendingAssistantPlaceholder(id, cwd, text))
+    }
+    await switchAgentPreset(ctx, id, argument)
+    return json(200, pendingAssistantPlaceholder(id, cwd, `Switched dsh agent preset to ${argument}`))
   })
 
   register('GET', '/session/:id/todo', 'json', async (req, ctx) => {
@@ -611,6 +818,7 @@ export function createBridgeRouter(
   register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
     return json(200, {
       data: {
@@ -628,6 +836,22 @@ export function createBridgeRouter(
     const id = req.params.sessionID as string
     const view = await sessionView(ctx, id)
     return json(200, { data: toV2Session(view, id, ctx) })
+  })
+
+  register('POST', '/api/session/:sessionID/model', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    await applyModelSelection(ctx, id, req.body)
+    return json(204)
+  })
+
+  register('POST', '/api/session/:sessionID/agent', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    const agent = typeof bodyAsRecord(req.body).agent === 'string'
+      ? (bodyAsRecord(req.body).agent as string)
+      : ''
+    if (agent === '') throw badRequest('agent switch requires a string agent')
+    await switchAgentPreset(ctx, id, agent)
+    return json(204)
   })
 
   register('GET', '/api/session/:sessionID/message', 'json', async (req, ctx) => {

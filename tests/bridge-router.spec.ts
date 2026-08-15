@@ -402,6 +402,310 @@ describe('bridge router: catalog routes', () => {
   })
 })
 
+describe('bridge router: model variants, agent presets and /preset', () => {
+  const groups = [
+    {
+      id: 'deepseek-official',
+      name: 'DeepSeek Official',
+      models: [{
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        reasoning: {
+          efforts: [
+            { id: 'off', name: 'Off' },
+            { id: 'max', name: 'Max' },
+          ],
+          defaultEffort: 'off',
+        },
+      }],
+    },
+  ]
+
+  it('advertises variants, dsh presets as agents, and /preset', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      llm: { ...base.llm, models: async () => okRpc({ groups, failures: [] }) },
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => okRpc({ agentPreset: 'minimal' }),
+      },
+    }
+    const { server } = await boot(api)
+
+    const providers = await request(server, 'GET', '/config/providers')
+    expect((providers.body as {
+      providers: Array<{ models: Record<string, { variants?: Record<string, unknown> }> }>
+    }).providers[0]?.models['deepseek-v4-flash']?.variants).toEqual({
+      off: { reasoningEffort: 'off', name: 'Off' },
+      max: { reasoningEffort: 'max', name: 'Max' },
+    })
+
+    const v1Agents = await request(server, 'GET', '/agent')
+    expect((v1Agents.body as Array<{ name: string }>).map((agent) => agent.name)).toEqual([
+      'build',
+      'minimal',
+      'standard',
+    ])
+    const v2Agents = await request(server, 'GET', '/api/agent')
+    expect((v2Agents.body as { data: Array<{ id: string }> }).data.map((agent) => agent.id)).toEqual([
+      'build',
+      'minimal',
+      'standard',
+    ])
+
+    const v1Commands = await request(server, 'GET', '/command')
+    expect(v1Commands.body).toMatchObject([{ name: 'preset', template: 'preset' }])
+    const v2Commands = await request(server, 'GET', '/api/command')
+    expect(v2Commands.body).toMatchObject({
+      data: [{ name: 'preset', template: 'preset' }],
+    })
+  })
+
+  it('selects a model through the v2 route and reflects it on the session', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const item = {
+      sessionId: 's1' as never,
+      updatedAt: 2000,
+      running: false,
+      blank: true,
+      cwd: '/work',
+      agentPreset: 'minimal',
+      projections: { asOfSeq: 0, values: { title: 'Model Session' } as never },
+    }
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [item] }),
+        history: async () => okRpc({ events: [], hasMore: false }),
+        models: async () => okRpc({
+          current: { provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'max' },
+          routable: true,
+          groups: [],
+          failures: [],
+        }),
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request.payload })
+          return okRpc({
+            selected: {
+              provider: 'deepseek-official',
+              model: 'deepseek-v4-flash',
+              reasoningEffort: 'max',
+            },
+          })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const switched = await request(server, 'POST', '/api/session/s1/model', {
+      model: { providerID: 'deepseek', id: 'deepseek-v4-flash', variant: 'max' },
+    })
+    expect(switched.status).toBe(204)
+    expect(calls[0]).toMatchObject({
+      method: 'session.selectModel',
+      payload: {
+        sessionId: 's1',
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-flash',
+        reasoningEffort: 'max',
+      },
+    })
+    const session = await request(server, 'GET', '/api/session/s1')
+    expect(session.body).toMatchObject({
+      data: {
+        model: { id: 'deepseek-v4-flash', providerID: 'deepseek', variant: 'max' },
+        agent: 'minimal',
+      },
+    })
+  })
+
+  it('passes agentPreset into session.create and selects the create model', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [{ id: 'minimal', trust: 'system', isDefault: true }],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => okRpc({ agentPreset: 'minimal' }),
+      },
+      sessions: {
+        ...base.sessions,
+        create: async (request) => {
+          calls.push({ method: 'session.create', payload: request.payload })
+          return okRpc({ sessionId: 'new-session' as never })
+        },
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request.payload })
+          return okRpc({
+            selected: {
+              provider: 'deepseek-official',
+              model: 'mock-model',
+              reasoningEffort: 'max',
+            },
+          })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const created = await request(server, 'POST', '/session', {
+      title: 'With Preset',
+      agent: 'minimal',
+      model: { providerID: 'deepseek', id: 'mock-model', variant: 'max' },
+    })
+    expect(created.status).toBe(200)
+    expect(calls[0]).toMatchObject({
+      method: 'session.create',
+      payload: { cwd: '/work', agentPreset: 'minimal' },
+    })
+    expect(calls[1]).toMatchObject({
+      method: 'session.selectModel',
+      payload: {
+        sessionId: 'new-session',
+        provider: 'deepseek-official',
+        model: 'mock-model',
+        reasoningEffort: 'max',
+      },
+    })
+  })
+
+  it('applies the model carried by an existing-session prompt body', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request.payload })
+          return okRpc({
+            selected: {
+              provider: 'deepseek-official',
+              model: 'mock-model',
+              reasoningEffort: 'off',
+            },
+          })
+        },
+        prompt: async (request) => {
+          calls.push({ method: 'session.prompt', payload: request.payload })
+          return okRpc({ accepted: true })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const prompted = await request(server, 'POST', '/session/s1/message', {
+      model: { providerID: 'deepseek', modelID: 'mock-model', variant: 'off' },
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(prompted.status).toBe(200)
+    expect(calls[0]).toMatchObject({
+      method: 'session.selectModel',
+      payload: {
+        sessionId: 's1',
+        provider: 'deepseek-official',
+        model: 'mock-model',
+        reasoningEffort: 'off',
+      },
+    })
+    expect(calls[1]).toMatchObject({
+      method: 'session.prompt',
+      payload: { sessionId: 's1', mode: 'queue' },
+    })
+  })
+
+  it('switches blank-session agents and maps agent-preset-locked to 409', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: false },
+            { id: 'standard', trust: 'system', isDefault: true },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async (request) => {
+          calls.push({ method: 'agentPreset.select', payload: request.payload })
+          const payload = request.payload as { agentPreset?: string }
+          if (payload.agentPreset === 'standard') {
+            return errRpc('agent-preset-locked', 'session has already produced turns')
+          }
+          return okRpc({ agentPreset: 'minimal' })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const switched = await request(server, 'POST', '/api/session/s1/agent', { agent: 'minimal' })
+    expect(switched.status).toBe(204)
+    expect(calls[0]).toMatchObject({
+      method: 'agentPreset.select',
+      payload: { sessionId: 's1', agentPreset: 'minimal' },
+    })
+
+    const locked = await request(server, 'POST', '/api/session/s1/agent', { agent: 'standard' })
+    expect(locked.status).toBe(409)
+    expect(locked.body).toMatchObject({ name: 'ConflictError' })
+  })
+
+  it('serves /preset list and switch through the command route', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: false },
+            { id: 'standard', trust: 'system', isDefault: true },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async (request) => {
+          calls.push({ method: 'agentPreset.select', payload: request.payload })
+          return okRpc({ agentPreset: 'minimal' })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const listed = await request(server, 'POST', '/session/s1/command', {
+      command: 'preset',
+      arguments: '',
+    })
+    expect(listed.status).toBe(200)
+    expect((listed.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('standard')
+    expect((listed.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('(default)')
+
+    const switched = await request(server, 'POST', '/session/s1/command', {
+      command: 'preset',
+      arguments: 'minimal',
+    })
+    expect(switched.status).toBe(200)
+    expect((switched.body as { parts: Array<{ text: string }> }).parts[0]?.text).toBe(
+      'Switched dsh agent preset to minimal',
+    )
+    expect(calls[0]).toMatchObject({
+      method: 'agentPreset.select',
+      payload: { sessionId: 's1', agentPreset: 'minimal' },
+    })
+  })
+})
+
 describe('bridge router: error mapping', () => {
   it('maps session-not-found to 404 NotFoundError', async () => {
     const base = fakeApi()

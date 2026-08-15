@@ -101,6 +101,20 @@ curl -s "$BRIDGE/api/model" | jq -e '(.data | type) == "array" and ([.data[].id]
 echo "  /api/model.data array with mock-model"
 curl -s "$BRIDGE/api/provider" | jq -e '(.data | type) == "array" and ([.data[].id] | index("deepseek") != null)' >/dev/null
 echo "  /api/provider.data array with deepseek provider"
+curl -s "$BRIDGE/api/model" | jq -e '(.data[] | select(.id == "mock-model") | .variants | length) > 0' >/dev/null
+echo "  /api/model mock-model advertises reasoning variants"
+curl -s "$BRIDGE/command" | jq -e '([.[].name] | index("preset") != null)' >/dev/null
+echo "  /command advertises /preset"
+curl -s "$BRIDGE/api/command" | jq -e '([.data[].name] | index("preset") != null)' >/dev/null
+echo "  /api/command advertises /preset"
+
+AGENT_IDS="$(curl -s "$BRIDGE/api/agent" | jq -r '[.data[].id] | join(",")')"
+echo "  /api/agent ids: $AGENT_IDS"
+if [[ "$AGENT_IDS" == *minimal* ]]; then
+  echo "  /api/agent contains minimal"
+else
+  echo "  /api/agent has no minimal preset in this isolated profile (skipping preset switch)"
+fi
 
 echo "== SSE event sequence =="
 SSE_FILE="$E2E_RUN/sse-events.txt"
@@ -113,6 +127,35 @@ SESSION_V1="$(curl -s -X POST "$BRIDGE/session" -H 'Content-Type: application/js
 echo "  v1 session: $SESSION_V1"
 SESSION_V2="$(curl -s -X POST "$BRIDGE/api/session" -H 'Content-Type: application/json' -d '{}' | jq -er .data.id)"
 echo "  v2 session: $SESSION_V2"
+
+MODEL_SWITCH_CODE="$(curl -s -o "$E2E_RUN/model-switch.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/model" \
+  -H 'Content-Type: application/json' -d '{"model":{"providerID":"deepseek","id":"mock-model","variant":"off"}}')"
+[[ "$MODEL_SWITCH_CODE" == "204" ]]
+echo "  POST /api/session/$SESSION_V2/model -> 204"
+curl -s "$BRIDGE/api/session/$SESSION_V2" | jq -e --arg s "$SESSION_V2" \
+  '.data.id == $s and .data.model.id == "mock-model" and .data.model.providerID == "deepseek" and .data.model.variant == "off"' >/dev/null
+echo "  session model selection reflected with variant off"
+
+PRESET_LIST_CODE="$(curl -s -o "$E2E_RUN/preset-list.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V2/command" \
+  -H 'Content-Type: application/json' -d '{"command":"preset","arguments":""}')"
+[[ "$PRESET_LIST_CODE" == "200" ]]
+jq -e '.parts[0].text | type == "string"' "$E2E_RUN/preset-list.json" >/dev/null
+echo "  POST /session/$SESSION_V2/command /preset list -> 200"
+
+if [[ "$AGENT_IDS" == *minimal* ]]; then
+  AGENT_SWITCH_CODE="$(curl -s -o "$E2E_RUN/agent-switch.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/agent" \
+    -H 'Content-Type: application/json' -d '{"agent":"minimal"}')"
+  [[ "$AGENT_SWITCH_CODE" == "204" ]]
+  echo "  POST /api/session/$SESSION_V2/agent minimal -> 204"
+  curl -s "$BRIDGE/api/session/$SESSION_V2" | jq -e '.data.agent == "minimal"' >/dev/null
+  echo "  session agent preset reflected as minimal"
+  PRESET_COMMAND_CODE="$(curl -s -o "$E2E_RUN/preset-command.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V2/command" \
+    -H 'Content-Type: application/json' -d '{"command":"preset","arguments":"minimal"}')"
+  [[ "$PRESET_COMMAND_CODE" == "200" ]]
+  echo "  POST /session/$SESSION_V2/command /preset minimal -> 200"
+else
+  echo "  skipping agent switch assertions (no minimal preset)"
+fi
 
 PATCH_BODY="$(curl -s -X PATCH "$BRIDGE/session/$SESSION_V1" -H 'Content-Type: application/json' -d '{"title":"e2e renamed"}' | jq -er '.id == "'"$SESSION_V1"'" and .title == "e2e renamed"')"
 [[ "$PATCH_BODY" == true ]]

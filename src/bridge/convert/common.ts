@@ -17,6 +17,11 @@ export function externalProviderName(providerId: string, displayName?: string): 
   return displayName ?? providerId
 }
 
+/** Reverse of `externalProviderId`: opencode-facing id → dsh route id. */
+export function dshProviderId(providerId: string): string {
+  return providerId === 'deepseek' ? 'deepseek-official' : providerId
+}
+
 /** Stable short hash used as the opencode project id. */
 export function projectIdFor(directory: string): string {
   return createHash('sha256').update(directory).digest('hex').slice(0, 16)

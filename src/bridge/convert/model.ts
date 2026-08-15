@@ -1,4 +1,7 @@
-import type { ModelProviderGroup } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type {
+  ModelCatalogModel,
+  ModelProviderGroup,
+} from '@deepseek-ai/dsh-host-apiproxy/api'
 import type {
   Model as V1Model,
   Provider as V1Provider,
@@ -15,6 +18,14 @@ import {
 
 const DEFAULT_CONTEXT = 128000
 const DEFAULT_OUTPUT = 8192
+
+type V1ModelWithVariants = V1Model & {
+  variants?: Record<string, Record<string, unknown>>
+}
+
+type CatalogModelWithVariants = ProviderListResponse['all'][number]['models'][string] & {
+  variants?: Record<string, Record<string, unknown>>
+}
 
 /** Known dsh-official model capacities, matching dsh-llm-deepseek defaults. */
 const DEEPSEEK_LIMITS: Record<string, { context: number; output: number }> = {
@@ -39,14 +50,34 @@ function modelNameFor(groupId: string, modelId: string, modelName?: string) {
   return modelName ?? modelId
 }
 
-function v1Model(group: ModelProviderGroup, modelId: string, modelName?: string): V1Model {
+function variantsFor(model: ModelCatalogModel): Record<string, Record<string, unknown>> | undefined {
+  const efforts = model.reasoning?.efforts
+  if (!efforts?.length) return undefined
+  return Object.fromEntries(
+    efforts.map((effort) => [
+      effort.id,
+      { reasoningEffort: effort.id, name: effort.name },
+    ]),
+  )
+}
+
+function v2VariantsFor(model: ModelCatalogModel): ModelV2Info['variants'] {
+  return (model.reasoning?.efforts ?? []).map((effort) => ({
+    id: effort.id,
+    headers: {},
+    body: { reasoningEffort: effort.id, name: effort.name },
+  }))
+}
+
+function v1Model(group: ModelProviderGroup, model: ModelCatalogModel): V1ModelWithVariants {
+  const modelId = model.id
   const providerId = externalProviderId(group.id)
-  const limit = limitFor(group.id, modelId)
+  const limit = limitFor(group.id, model.id)
   return {
     id: modelId,
     providerID: providerId,
     api: { id: providerId, url: '', npm: '@deepseek-ai/dsh' },
-    name: modelNameFor(group.id, modelId, modelName),
+    name: modelNameFor(group.id, model.id, model.name),
     capabilities: {
       temperature: false,
       reasoning: true,
@@ -76,6 +107,7 @@ function v1Model(group: ModelProviderGroup, modelId: string, modelName?: string)
     status: 'active',
     options: {},
     headers: {},
+    ...(variantsFor(model) === undefined ? {} : { variants: variantsFor(model) }),
   }
 }
 
@@ -83,9 +115,7 @@ function v1Model(group: ModelProviderGroup, modelId: string, modelName?: string)
 export function convertToV1Providers(groups: readonly ModelProviderGroup[]): V1Provider[] {
   return groups.map((group) => {
     const models: Record<string, V1Model> = {}
-    for (const model of group.models) {
-      models[model.id] = v1Model(group, model.id, model.name)
-    }
+    for (const model of group.models) models[model.id] = v1Model(group, model)
     return {
       id: externalProviderId(group.id),
       name: externalProviderName(group.id, group.name),
@@ -104,7 +134,7 @@ export function convertToProviderCatalog(
   return {
     all: groups.map((group) => {
       const providerId = externalProviderId(group.id)
-      const models: Record<string, ProviderListResponse['all'][number]['models'][string]> = {}
+      const models: Record<string, CatalogModelWithVariants> = {}
       for (const model of group.models) {
         const limit = limitFor(group.id, model.id)
         models[model.id] = {
@@ -119,6 +149,7 @@ export function convertToProviderCatalog(
           options: {},
           status: 'active',
           provider: { npm: '@deepseek-ai/dsh' },
+          ...(variantsFor(model) === undefined ? {} : { variants: variantsFor(model) }),
         }
       }
       return {
@@ -157,7 +188,7 @@ export function convertToV2Models(groups: readonly ModelProviderGroup[]): ModelV
           output: ['text'],
         },
         request: { headers: {}, body: {} },
-        variants: [],
+        variants: v2VariantsFor(model),
         time: { released: 0 },
         cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
         status: 'active',
