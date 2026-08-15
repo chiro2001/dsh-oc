@@ -64,6 +64,8 @@ for path in \
   "/session?start=$(( $(date +%s%3N) - 2592000000 ))&path=.&scope=project" \
   "/experimental/session" \
   "/api/location" \
+  "/api/health" \
+  "/api/session/active" \
   "/api/agent" \
   "/api/integration" \
   "/api/model" \
@@ -99,6 +101,10 @@ curl -s "$BRIDGE/provider" | jq -e '(.all | type) == "array" and (.all | map(.id
 echo "  /provider.all array with deepseek provider and mock-model"
 curl -s "$BRIDGE/api/location" | jq -e --arg w "$E2E_WORKDIR" '.directory == $w' >/dev/null
 echo "  /api/location.directory == workdir"
+curl -s "$BRIDGE/api/health" | jq -e '.healthy == true' >/dev/null
+echo "  /api/health healthy"
+curl -s "$BRIDGE/api/session/active" | jq -e '.data | type == "object"' >/dev/null
+echo "  /api/session/active data object"
 curl -s "$BRIDGE/api/model" | jq -e '(.data | type) == "array" and ([.data[].id] | index("mock-model") != null)' >/dev/null
 echo "  /api/model.data array with mock-model"
 curl -s "$BRIDGE/api/provider" | jq -e '(.data | type) == "array" and ([.data[].id] | index("deepseek") != null)' >/dev/null
