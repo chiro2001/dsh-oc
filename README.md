@@ -161,6 +161,7 @@ bash scripts/e2e-tui-skill.sh      # 技能斜杠命令（DSH_OC_E2E_FAKE_SKILLS
 pnpm run probe                     # 协议路由清单 + 二进制/SDK 版本校验
 bash scripts/check-all.sh          # 一键自测：typecheck+单测+探针+性能冒烟
 bash scripts/check-all.sh --e2e    # 再加全量 TUI/API e2e
+bash scripts/check-all.sh --scale 5000  # 再加 5000 sessions 性能压测
 ```
 
 tarball 验证模式（用 npm tarball 而不是本地路径安装）：
