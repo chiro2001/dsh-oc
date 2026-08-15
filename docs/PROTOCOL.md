@@ -123,14 +123,14 @@ GET /api/integration?location[directory]=...
 | `GET /provider` | MAP | `apiProxy.llm.models` |
 | `GET /provider/auth` | STUB | `{}` |
 | `GET /agent` | STUB/MAP | 首版 `[]` |
-| `GET /command` | MAP | 注册 `/preset`、`/goal`（TUI slash 弹层） |
+| `GET /command` | MAP | 注册 `/preset`、`/goal`、`/help`（TUI slash 弹层） |
 | `GET /session` | MAP | `apiProxy.sessions.list` |
 | `GET /session/status` | MAP | list 的 running 状态 |
 | `POST /session` | MAP | `apiProxy.sessions.create` |
 | `POST /session/{id}/fork` | MAP | `apiProxy.sessions.fork`（opencode `messageID` 换算为 dsh `atSeq`） |
 | `POST /session/{id}/summarize` | MAP | dsh `/compact` command registry（TUI `/compact` 实际调用此路由） |
 | `POST /session/{id}/compact` | MAP | 同上（v1 兼容别名） |
-| `POST /session/{id}/command` | MAP | `/preset`、`/goal`（dsh command registry） |
+| `POST /session/{id}/command` | MAP | `/preset`、`/goal`（dsh command registry）、`/help`（bridge 本地） |
 | `GET /session/{id}` | MAP | history + summary |
 | `PATCH /session/{id}` | MAP | `apiProxy.sessions.rename` |
 | `GET /session/{id}/message` | MAP | `apiProxy.sessions.history` |
@@ -165,13 +165,13 @@ GET /api/integration?location[directory]=...
 | `GET /api/model` | MAP | `apiProxy.llm.models` |
 | `GET /api/provider` | MAP | `apiProxy.llm.models/providers` |
 | `GET /api/reference` | STUB | `[]` |
-| `GET /api/command` | MAP | 注册 `/preset`、`/goal` |
+| `GET /api/command` | MAP | 注册 `/preset`、`/goal`、`/help` |
 | `GET /api/skill` | STUB/LATER | `[]` |
 | `GET /api/session` | MAP | 同 v1 |
 | `POST /api/session` | MAP | 同 v1 |
 | `POST /api/session/{id}/fork` | MAP | 同 v1 fork，返回 v2 信封 |
 | `POST /api/session/{id}/compact` | MAP | 同 v1 summarize/compact（SDK v2 路由，204） |
-| `POST /session/{id}/command` | MAP | `/preset`、`/goal` 经 dsh command registry 执行并广播 busy/idle |
+| `POST /session/{id}/command` | MAP | `/preset`、`/goal` 经 dsh command registry 执行并广播 busy/idle；`/help` 本地返回能力摘要 |
 | `GET /api/session/{id}` | MAP | 同 v1 |
 | `GET /api/session/{id}/message` | MAP | 同 v1 |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
@@ -196,8 +196,9 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 | `session/event: turn/end` | `session.status`（idle） + `session.idle` |
 | `session/event: user/message` | 重建 Session 后发 `message.updated` |
 | `session/event: assistant/message` | `message.updated` + `message.part.updated` |
-| `session/event: tool/call` | `message.part.updated`（ToolPart pending） |
-| `session/event: tool/result` | `message.part.updated`（ToolPart completed/error） |
+| `session/event: assistant/chunk (tool-call-delta)` | `session.next.tool.input.started/delta/ended` + v1 ToolPart 增量（节流合并） |
+| `session/event: tool/call` | `session.next.tool.called` + `progress` + `message.part.updated`（ToolPart pending） |
+| `session/event: tool/result` | `session.next.tool.success/failed` + `message.part.updated`（ToolPart completed/error） |
 | `session/event: todo/write` | `todo.updated` |
 | `session/event: goal/change` | `todo.updated`（合并 goal 为首条） |
 | `session/event: approval/asked` | `permission.asked` |
