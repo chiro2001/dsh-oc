@@ -3,6 +3,7 @@
 DeepSeek Harness 的 OpenCode TUI 前端。
 
 [![CI](https://github.com/chiro2001/dsh-oc/actions/workflows/ci.yml/badge.svg)](https://github.com/chiro2001/dsh-oc/actions/workflows/ci.yml)
+[![e2e](https://github.com/chiro2001/dsh-oc/actions/workflows/e2e.yml/badge.svg)](https://github.com/chiro2001/dsh-oc/actions/workflows/e2e.yml)
 
 GitHub Actions 手动触发的 `e2e` 工作流运行 API e2e（`e2e-api.sh` +
 `e2e-api-goal.sh`）与可选压测；完整 TUI e2e 因 CI 终端时序限制保留在本地
