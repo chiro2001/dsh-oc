@@ -41,6 +41,18 @@ E2E_FAKE_LOG=""
 E2E_BRIDGE_URL=""
 E2E_TUI_SESSION="dsh-oc-${E2E_BRANCH//[^A-Za-z0-9_-]/_}"
 
+# curl with retries for transient connect failures (CI/timing robustness).
+e2e_curl() {
+  local tries="${E2E_CURL_TRIES:-3}"
+  local rc=0
+  for _ in $(seq 1 "$tries"); do
+    curl "$@" && return 0
+    rc=$?
+    sleep 1
+  done
+  return "$rc"
+}
+
 e2e_new_run() {
   local label="$1"
   local permission="$2"

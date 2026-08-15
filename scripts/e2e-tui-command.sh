@@ -86,7 +86,7 @@ echo "  seeded content visible: \"$SEED_HINT\""
 
 echo "== /preset Enter + Enter =="
 e2e_tui_capture "$E2E_RUN_DIR/tui-before-preset.txt"
-USER_COUNT_BEFORE="$(curl -s "$TUI_URL/session/$SESSION/message" | jq '[.[] | select(.info.role == "user")] | length')"
+USER_COUNT_BEFORE="$(e2e_curl -s "$TUI_URL/session/$SESSION/message" | jq '[.[] | select(.info.role == "user")] | length')"
 tmux send-keys -t "$E2E_TUI_SESSION" "/preset" Enter
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 
@@ -118,7 +118,7 @@ if [[ -z "$PRESET_HINT" ]]; then
 fi
 echo "  /preset result visible: $PRESET_HINT"
 
-USER_COUNT_AFTER="$(curl -s "$TUI_URL/session/$SESSION/message" | jq '[.[] | select(.info.role == "user")] | length')"
+USER_COUNT_AFTER="$(e2e_curl -s "$TUI_URL/session/$SESSION/message" | jq '[.[] | select(.info.role == "user")] | length')"
 if [[ "$USER_COUNT_AFTER" != "$USER_COUNT_BEFORE" ]]; then
   echo "e2e: /preset triggered a model turn (user messages $USER_COUNT_BEFORE -> $USER_COUNT_AFTER)" >&2
   exit 1
