@@ -298,6 +298,38 @@ describe('bridge router: session routes', () => {
     ])
   })
 
+  it('paginates the v2 session list with an opaque cursor', async () => {
+    const base = fakeApi()
+    const s2 = { ...item, sessionId: 's2' as never }
+    const s3 = { ...item, sessionId: 's3' as never }
+    const api = {
+      ...base,
+      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, s2, s3] }) },
+    }
+    const { server } = await boot(api)
+
+    const first = await request(server, 'GET', '/api/session?limit=2')
+    expect((first.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id)).toEqual([
+      's1',
+      's2',
+    ])
+    const next = (first.body as { cursor: { next?: string } }).cursor.next
+    expect(next).toBeTypeOf('string')
+
+    const second = await request(
+      server,
+      'GET',
+      `/api/session?limit=2&cursor=${encodeURIComponent(next ?? '')}`,
+    )
+    expect(second.status).toBe(200)
+    expect((second.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id)).toEqual(['s3'])
+    expect((second.body as { cursor: { next?: string; previous?: string } }).cursor.next).toBeUndefined()
+    expect((second.body as { cursor: { previous?: string } }).cursor.previous).toBeTypeOf('string')
+
+    const invalid = await request(server, 'GET', '/api/session?cursor=bad')
+    expect(invalid.status).toBe(400)
+  })
+
   it('lists child sessions with parentID and inherits the parent cwd', async () => {
     const base = fakeApi()
     const parent = {

@@ -261,6 +261,27 @@ function decodeMessageCursor(raw: string): number {
   throw badRequest('invalid message cursor')
 }
 
+/** Encode an opaque v2 session-list cursor for the next page offset. */
+function encodeSessionCursor(offset: number): string {
+  return Buffer.from(JSON.stringify({ v: 1, offset }), 'utf8').toString('base64url')
+}
+
+/** Decode an opaque v2 session-list cursor produced by {@link encodeSessionCursor}. */
+function decodeSessionCursor(raw: string): number {
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      v?: unknown
+      offset?: unknown
+    }
+    if (parsed.v === 1 && typeof parsed.offset === 'number' && Number.isFinite(parsed.offset) && parsed.offset >= 0) {
+      return parsed.offset
+    }
+  } catch {
+    // fall through to the invalid-cursor error
+  }
+  throw badRequest('invalid session cursor')
+}
+
 /** Oldest surface-message seq in a history page (pagination anchor). */
 function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
   let oldest: number | undefined
@@ -1507,15 +1528,21 @@ export function createBridgeRouter(
     }
     const filtered = filterSessionsByDirectory(all, req.query.get('directory') ?? undefined)
     const limitRaw = req.query.get('limit')
-    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
-    const items = limit === undefined ? filtered : filtered.slice(0, limit)
-    const ordered = req.query.get('order') === 'asc' ? [...items].reverse() : items
-    recordSessionSummaries(ctx, ordered)
+    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
+    const cursorRaw = req.query.get('cursor')
+    const offset = cursorRaw === null ? 0 : decodeSessionCursor(cursorRaw)
+    const ordered = req.query.get('order') === 'asc' ? [...filtered].reverse() : filtered
+    const page = ordered.slice(offset, offset + limit)
+    const nextOffset = offset + page.length
+    recordSessionSummaries(ctx, page)
     return json(200, {
-      data: ordered.map((item) => convertSessionSummaryV2(item, {
+      data: page.map((item) => convertSessionSummaryV2(item, {
         cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
       })),
-      cursor: {},
+      cursor: {
+        ...(nextOffset < filtered.length ? { next: encodeSessionCursor(nextOffset) } : {}),
+        ...(offset > 0 ? { previous: encodeSessionCursor(Math.max(0, offset - limit)) } : {}),
+      },
     })
   })
 
