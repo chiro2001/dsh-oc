@@ -60,16 +60,43 @@ describe('convert/session', () => {
     expect(v2.title).toBe('My Session')
   })
 
+  it('maps fork lineage and subagent origin onto both session shapes', () => {
+    const child = summary({
+      parentSessionId: 'session-parent' as never,
+      origin: 'subagent' as const,
+      cwd: undefined,
+      projections: undefined,
+    })
+    const v1 = convertSessionSummary(child, { cwd: '/parent' })
+    expect(v1.parentID).toBe('session-parent')
+    expect(v1.metadata).toEqual({ origin: 'subagent' })
+    expect(v1.title).toBe('Subagent session')
+    expect(v1.directory).toBe('/parent')
+
+    const v2 = convertSessionSummaryV2(child, { cwd: '/parent' })
+    expect(v2.parentID).toBe('session-parent')
+    expect(v2.title).toBe('Subagent session')
+  })
+
   it('reads the title projection', () => {
     expect(sessionTitleFrom(summary())).toBe('My Session')
     expect(sessionTitleFrom(summary({ projections: undefined }))).toBe('')
+    expect(sessionTitleFrom(summary({ projections: undefined, origin: 'subagent' as const }))).toBe('Subagent session')
   })
 
   it('builds a minimal session for SSE', () => {
-    const session = minimalSession('s-9', { cwd: '/work', title: 'T', createdAt: 42 })
+    const session = minimalSession('s-9', {
+      cwd: '/work',
+      title: 'T',
+      createdAt: 42,
+      parentID: 's-parent',
+      metadata: { origin: 'subagent' },
+    })
     expect(session.id).toBe('s-9')
     expect(session.directory).toBe('/work')
     expect(session.title).toBe('T')
     expect(session.time.created).toBe(42)
+    expect(session.parentID).toBe('s-parent')
+    expect(session.metadata).toEqual({ origin: 'subagent' })
   })
 })

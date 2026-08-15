@@ -4,10 +4,17 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
 import {
   assistantMessageFromEvent,
+  isAutoCompactCheckpoint,
+  isCompactCheckpoint,
   userMessageFromEvent,
   type MessageConvertOptions,
 } from './convert/message.js'
-import { projectIdFor, provisionalMessageId, provisionalPartId } from './convert/common.js'
+import {
+  projectIdFor,
+  provisionalMessageId,
+  provisionalPartId,
+  textFromBlocks,
+} from './convert/common.js'
 import { toPermissionRequest } from './convert/permission.js'
 import { toQuestionRequest } from './convert/question.js'
 import { convertTodos } from './convert/todo.js'
@@ -378,6 +385,25 @@ export class MuxEventTranslator {
             parts: entry.parts as unknown as Array<Record<string, unknown>>,
           }
         })
+        if (isCompactCheckpoint(event)) {
+          events.push(
+            makeEvent(
+              directory,
+              'session.next.compaction.ended',
+              {
+                timestamp: event.time,
+                sessionID: sessionId,
+                messageID: String(event.data.id),
+                reason: isAutoCompactCheckpoint(event) ? 'auto' : 'manual',
+                text: textFromBlocks(
+                  event.data.content as readonly { type: string; text?: unknown }[],
+                ),
+                recent: '',
+              },
+              project,
+            ),
+          )
+        }
         this.streamState(sessionId).lastUserMessageId = String(event.data.id)
         return events
       }
@@ -547,10 +573,15 @@ export class MuxEventTranslator {
         const type = event.type as string
         const data = (event as unknown as { data: { time?: number; title?: unknown; text?: unknown } }).data
         if (type === 'session/created') {
+          const parentID = this.deps.state.sessionParents.get(sessionId)
           return [
             makeEvent(directory, 'session.updated', {
               sessionID: sessionId,
-              info: minimalSession(sessionId, { cwd: directory, createdAt: data.time }),
+              info: minimalSession(sessionId, {
+                cwd: directory,
+                createdAt: data.time,
+                ...(parentID === undefined ? {} : { parentID }),
+              }),
             }, project),
           ]
         }
@@ -558,10 +589,16 @@ export class MuxEventTranslator {
           const title = typeof data.title === 'string' ? data.title
             : typeof data.text === 'string' ? data.text
               : ''
+          const parentID = this.deps.state.sessionParents.get(sessionId)
           return [
             makeEvent(directory, 'session.updated', {
               sessionID: sessionId,
-              info: minimalSession(sessionId, { cwd: directory, title, createdAt: data.time }),
+              info: minimalSession(sessionId, {
+                cwd: directory,
+                title,
+                createdAt: data.time,
+                ...(parentID === undefined ? {} : { parentID }),
+              }),
             }, project),
           ]
         }

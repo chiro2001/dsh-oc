@@ -72,6 +72,32 @@ interface StreamChunkRowEvent {
   }
 }
 
+/** Dsh checkpoint rows written by compaction have a plugin `compact` source. */
+export function isCompactCheckpoint(event: SessionEvent<'user/message'>): boolean {
+  const source = event.data.source as { kind?: string; plugin?: string } | undefined
+  return source?.kind === 'plugin' && source.plugin === 'compact'
+}
+
+/** Manual `/compact` records a sourceCommandId; automatic compaction omits it. */
+export function isAutoCompactCheckpoint(event: SessionEvent<'user/message'>): boolean {
+  const source = event.data.source as { sourceCommandId?: unknown } | undefined
+  return source?.sourceCommandId === undefined
+}
+
+function compactionPart(
+  messageId: string,
+  opts: MessageConvertOptions,
+  auto: boolean,
+): Part {
+  return {
+    id: `${messageId}:compaction`,
+    sessionID: opts.sessionId,
+    messageID: messageId,
+    type: 'compaction',
+    auto,
+  }
+}
+
 const ZERO_TOKENS = {
   input: 0,
   output: 0,
@@ -419,9 +445,12 @@ export function convertMessagesV1(
       case 'user/message': {
         const data = event.data
         const id = String(data.id)
+        const compact = isCompactCheckpoint(event)
         entries.push({
           info: userMessageInfo(id, event.time, opts),
-          parts: userPartsFromMessage(id, data.content, event.time, opts),
+          parts: compact
+            ? [compactionPart(id, opts, isAutoCompactCheckpoint(event))]
+            : userPartsFromMessage(id, data.content, event.time, opts),
         })
         lastMessageId = id
         break
@@ -565,7 +594,9 @@ export function userMessageFromEvent(
   const id = String(event.data.id)
   return {
     info: userMessageInfo(id, event.time, opts),
-    parts: userPartsFromMessage(id, event.data.content, event.time, opts),
+    parts: isCompactCheckpoint(event)
+      ? [compactionPart(id, opts, isAutoCompactCheckpoint(event))]
+      : userPartsFromMessage(id, event.data.content, event.time, opts),
   }
 }
 
@@ -811,10 +842,13 @@ export function convertMessagesV2(
       }
       case 'user/message': {
         const data = event.data
+        const compact = isCompactCheckpoint(event)
         const message: SessionMessageUser = {
           id: String(data.id),
           time: { created: event.time },
-          text: textFromBlocks(data.content as readonly { type: string; text?: unknown }[]),
+          text: compact
+            ? ''
+            : textFromBlocks(data.content as readonly { type: string; text?: unknown }[]),
           type: 'user',
         }
         messages.push(message)

@@ -16,7 +16,14 @@ export interface SessionConvertOptions {
 export function sessionTitleFrom(summary: SessionSummary): string {
   const values = summary.projections?.values as Partial<Record<string, unknown>> | undefined
   const title = values?.title
-  return typeof title === 'string' ? title : ''
+  if (typeof title === 'string' && title.length > 0) return title
+  return summary.origin === 'subagent' ? 'Subagent session' : ''
+}
+
+/** Metadata marker opencode surfaces use to identify dsh subagent children. */
+export function sessionMetadataFrom(summary: SessionSummary): Record<string, unknown> | undefined {
+  if (summary.origin !== 'subagent') return undefined
+  return { origin: 'subagent' }
 }
 
 /**
@@ -39,6 +46,9 @@ export function convertSessionSummary(
     title,
     agent: summary.agentPreset ?? DEFAULT_AGENT,
     version: OPENCODE_VERSION,
+    ...(sessionMetadataFrom(summary) === undefined
+      ? {}
+      : { metadata: sessionMetadataFrom(summary) }),
     time: {
       created: createdAt,
       updated: summary.updatedAt,
@@ -79,7 +89,12 @@ export function convertSessionSummaryV2(
 /** Minimal session view used by SSE when only the session id is known. */
 export function minimalSession(
   sessionId: string,
-  options: SessionConvertOptions & { title?: string; createdAt?: number },
+  options: SessionConvertOptions & {
+    title?: string
+    createdAt?: number
+    parentID?: string
+    metadata?: Record<string, unknown>
+  },
 ): Session {
   const directory = options.cwd
   const created = options.createdAt ?? Date.now()
@@ -91,6 +106,8 @@ export function minimalSession(
     title: options.title ?? '',
     agent: DEFAULT_AGENT,
     version: OPENCODE_VERSION,
+    ...(options.parentID === undefined ? {} : { parentID: options.parentID }),
+    ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
     time: { created, updated: Date.now() },
   }
 }
@@ -98,12 +115,17 @@ export function minimalSession(
 /** Minimal v2 session view used when only the session id is known. */
 export function minimalSessionV2(
   sessionId: string,
-  options: SessionConvertOptions & { title?: string; createdAt?: number },
+  options: SessionConvertOptions & {
+    title?: string
+    createdAt?: number
+    parentID?: string
+  },
 ): SessionV2Info {
   const directory = options.cwd
   const created = options.createdAt ?? Date.now()
   return {
     id: sessionId,
+    ...(options.parentID === undefined ? {} : { parentID: options.parentID }),
     projectID: projectIdFor(directory),
     cost: 0,
     tokens: {

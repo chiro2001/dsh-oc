@@ -1,7 +1,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { startBridgeServer, type BridgeServerHandle } from './http.js'
 import { createBridgeRouter } from './router.js'
-import type { BridgeApi } from './rpc.js'
+import type { BridgeAgents, BridgeApi, BridgeCommands } from './rpc.js'
 
 export const name = '@deepseek-ai/dsh-oc/bridge'
 export const inject = ['apiProxy'] as const
@@ -29,7 +29,14 @@ export class OcBridgeService extends Service implements OcBridgeValue {
   }
 
   async *[Service.init](): AsyncGenerator<() => Promise<void>> {
-    const api = (this.ctx as unknown as { apiProxy: BridgeApi }).apiProxy
+    const apiProxy = (this.ctx as unknown as { apiProxy: BridgeApi }).apiProxy
+    const commands = this.ctx.get('commands') as BridgeCommands | undefined
+    const agents = this.ctx.get('agents') as BridgeAgents | undefined
+    const api: BridgeApi = {
+      ...apiProxy,
+      ...(commands === undefined ? {} : { commands }),
+      ...(agents === undefined ? {} : { agents }),
+    }
     const router = createBridgeRouter(api, { log: this.logger })
     const handle = await startBridgeServer(router)
     this.handle = handle

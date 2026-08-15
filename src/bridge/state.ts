@@ -13,6 +13,7 @@ export class InteractionState {
   readonly byApprovalId = new Map<string, string>()
   readonly byQuestionRpcId = new Map<string, string>()
   readonly sessionDirectories = new Map<string, string>()
+  readonly sessionParents = new Map<string, string>()
 
   registerApproval(entry: PermissionEntry): PermissionEntry {
     this.permissions.set(entry.opencodeId, entry)

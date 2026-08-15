@@ -179,6 +179,51 @@ describe('bridge router: session routes', () => {
     expect(v2.body).toMatchObject({ data: [{ id: 's1', title: 'Session One' }], cursor: {} })
   })
 
+  it('lists child sessions with parentID and inherits the parent cwd', async () => {
+    const base = fakeApi()
+    const parent = {
+      sessionId: 'parent-1' as never,
+      updatedAt: 3000,
+      running: false,
+      blank: false,
+      cwd: '/work',
+    }
+    const child = {
+      sessionId: 'child-1' as never,
+      updatedAt: 2000,
+      running: true,
+      blank: false,
+      parentSessionId: 'parent-1' as never,
+      origin: 'subagent' as const,
+      cwd: undefined,
+      projections: undefined,
+    }
+    const api = {
+      ...base,
+      sessions: { ...base.sessions, list: async () => okRpc({ items: [child, parent] }) },
+    }
+    const { server, router } = await boot(api)
+    const v1 = await request(server, 'GET', '/session')
+    expect(v1.status).toBe(200)
+    expect((v1.body as Array<{ id: string; parentID?: string; metadata?: unknown; directory: string }>)[0])
+      .toMatchObject({
+        id: 'child-1',
+        parentID: 'parent-1',
+        metadata: { origin: 'subagent' },
+        directory: '/work',
+      })
+    expect(router.ctx.state.sessionDirectories.get('child-1')).toBe('/work')
+    expect(router.ctx.state.sessionParents.get('child-1')).toBe('parent-1')
+    const v2 = await request(server, 'GET', '/api/session')
+    expect(v2.status).toBe(200)
+    expect(v2.body).toMatchObject({
+      data: [
+        { id: 'child-1', parentID: 'parent-1', location: { directory: '/work' } },
+        { id: 'parent-1' },
+      ],
+    })
+  })
+
   it('gets a session and its messages for v1 and v2', async () => {
     const base = fakeApi()
     const history = [makeUserEvent('hello'), makeAssistantEvent([{ type: 'text', text: 'hi back' }])]
@@ -265,6 +310,104 @@ describe('bridge router: session routes', () => {
     expect(calls[2]).toMatchObject({ method: 'session.create', payload: { cwd: '/tmp', sessionId: 'x1' } })
   })
 
+  it('forks through the opencode route and maps messageID to the dsh atSeq', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const child = {
+      sessionId: 'fork-session' as never,
+      updatedAt: 3000,
+      running: false,
+      blank: false,
+      parentSessionId: 's1' as never,
+      cwd: '/work',
+    }
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        fork: async (request) => {
+          calls.push({ method: 'session.fork', payload: request.payload })
+          return okRpc({ sessionId: 'fork-session' as never })
+        },
+        list: async () => okRpc({ items: [child] }),
+        history: async () => okRpc({
+          events: [{ event: makeUserEvent('hello', 'msg-user-1', 1000) }],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const noMessage = await request(server, 'POST', '/session/s1/fork')
+    expect(noMessage.status).toBe(200)
+    expect((noMessage.body as { id: string; parentID?: string }).id).toBe('fork-session')
+    expect((noMessage.body as { parentID?: string }).parentID).toBe('s1')
+    expect(calls[0]).toMatchObject({ method: 'session.fork', payload: { sessionId: 's1' } })
+
+    const withMessage = await request(server, 'POST', '/session/s1/fork', {
+      messageID: 'msg-user-1',
+    })
+    expect(withMessage.status).toBe(200)
+    expect(calls[1]).toMatchObject({
+      method: 'session.fork',
+      payload: { sessionId: 's1', atSeq: 2 },
+    })
+
+    const v2 = await request(server, 'POST', '/api/session/s1/fork', {})
+    expect(v2.status).toBe(200)
+    expect(v2.body).toMatchObject({ data: { id: 'fork-session', parentID: 's1' } })
+    expect(calls[2]).toMatchObject({ method: 'session.fork', payload: { sessionId: 's1' } })
+  })
+
+  it('runs /compact through the dsh command registry for summarize and compact routes', async () => {
+    const base = fakeApi()
+    const lines: string[] = []
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: (sessionId) => sessionId === 's1' ? { id: sessionId } : undefined,
+      },
+      commands: {
+        execute: async (_agent, line) => {
+          lines.push(line)
+          return { commandId: 'cmd-1', result: { kind: 'success', text: 'Compacted 3 history items' } }
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const summarize = await request(server, 'POST', '/session/s1/summarize', {
+      providerID: 'deepseek',
+      modelID: 'mock-model',
+    })
+    expect(summarize.status).toBe(200)
+    expect(summarize.body).toBe(true)
+
+    const alias = await request(server, 'POST', '/session/s1/compact')
+    expect(alias.status).toBe(200)
+    expect(alias.body).toBe(true)
+
+    const v2 = await request(server, 'POST', '/api/session/s1/compact')
+    expect(v2.status).toBe(204)
+    expect(v2.body).toBe('')
+    expect(lines).toEqual(['/compact', '/compact', '/compact'])
+  })
+
+  it('rejects compact when the session agent or command registry is missing', async () => {
+    const base = fakeApi()
+    const { server } = await boot(base)
+    const noAgent = await request(server, 'POST', '/session/s1/summarize', {
+      providerID: 'deepseek',
+      modelID: 'mock-model',
+    })
+    expect(noAgent.status).toBe(409)
+
+    const withAgent = await boot({
+      ...base,
+      agents: { get: () => ({ id: 's1' }) },
+    })
+    const noRegistry = await request(withAgent.server, 'POST', '/session/s1/summarize', {})
+    expect(noRegistry.status).toBe(500)
+  })
+
   it('renames, prompts, and aborts sessions', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []
@@ -324,10 +467,23 @@ describe('bridge router: session routes', () => {
       payload: { sessionId: 's1', mode: 'queue', content: [{ type: 'text', text: 'via v2' }] },
     })
 
+    const slashPrompt = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: '/compact' }],
+    })
+    expect(slashPrompt.status).toBe(200)
+    expect(calls[4]).toMatchObject({
+      method: 'session.prompt',
+      payload: {
+        sessionId: 's1',
+        mode: 'queue',
+        content: [{ type: 'text', text: '/compact' }],
+      },
+    })
+
     const aborted = await request(server, 'POST', '/session/s1/abort')
     expect(aborted.status).toBe(200)
     expect(aborted.body).toBe(true)
-    expect(calls[4]).toMatchObject({ method: 'session.cancel', payload: { sessionId: 's1' } })
+    expect(calls[5]).toMatchObject({ method: 'session.cancel', payload: { sessionId: 's1' } })
   })
 
   it('rejects unsupported prompt parts with 400', async () => {
@@ -445,7 +601,7 @@ describe('bridge router: error mapping', () => {
 
   it('answers unlisted routes with 501 NotFoundError', async () => {
     const { server } = await boot(fakeApi())
-    for (const path of ['/nope', '/api/event', '/session/s1/fork']) {
+    for (const path of ['/nope', '/api/event', '/session/s1/forkx']) {
       const result = await request(server, 'GET', path)
       expect(result.status, path).toBe(501)
       expect(result.body, path).toMatchObject({ name: 'NotFoundError' })

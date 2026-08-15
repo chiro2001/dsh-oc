@@ -81,6 +81,35 @@ describe('bridge events: session event mapping', () => {
     }
   })
 
+  it('translates compaction checkpoints into message parts and compaction events', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('user/message', {
+          id: 'checkpoint-1' as never,
+          content: [{ type: 'text', text: '<compacted-summary>done</compacted-summary>' }],
+          source: { kind: 'plugin', plugin: 'compact', sourceCommandId: 'cmd-1' },
+        }, 2, 1000),
+      }),
+    ])
+    expect(events.map((event) => event.payload.type)).toEqual([
+      'message.updated',
+      'message.part.updated',
+      'session.next.compaction.ended',
+    ])
+    const part = events[1]?.payload.properties.part as { type?: string; messageID?: string }
+    expect(part).toMatchObject({ type: 'compaction', messageID: 'checkpoint-1' })
+    expect(events[2]?.payload.properties).toMatchObject({
+      timestamp: 1000,
+      sessionID: 's1',
+      messageID: 'checkpoint-1',
+      reason: 'manual',
+      text: '<compacted-summary>done</compacted-summary>',
+    })
+  })
+
   it('streams text chunks through a provisional message and reports real duration', () => {
     const { translate } = translator()
     const events = translate([
