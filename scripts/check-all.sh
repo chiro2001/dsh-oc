@@ -40,11 +40,17 @@ if [[ "$E2E" == "1" ]]; then
     e2e-tui-dir.sh e2e-tui-fork.sh e2e-tui-offline.sh e2e-tui-version-lock.sh \
     e2e-tui-help.sh e2e-tui-print-logs.sh e2e-tui-timestamps.sh \
     e2e-tui-mini.sh e2e-tui-skill.sh e2e-tui-continue.sh; do
-    out="$(bash "scripts/$s" 2>&1 | tail -1)"
-    if [[ "$out" == *PASSED* ]]; then
+    log="/tmp/check-all-$s.log"
+    set +e
+    bash "scripts/$s" > "$log" 2>&1
+    rc=$?
+    set -e
+    out="$(tail -1 "$log")"
+    if [[ "$rc" == "0" && "$out" == *PASSED* ]]; then
       echo "PASS $s"
     else
-      echo "FAIL $s :: $out"
+      echo "FAIL $s (rc=$rc) :: $out"
+      tail -40 "$log" >&2
       FAILED=1
     fi
   done
