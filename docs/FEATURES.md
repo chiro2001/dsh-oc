@@ -147,7 +147,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`9457a1b`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`396b49b`（2026-08-16）。
 
 ### 路由注册表
 
@@ -171,7 +171,7 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 38 | b6e334c fix(bridge): close reasoning parts when text starts or on interrupt |
+| `tests/bridge-events.spec.ts` | 40 | 17340f2 fix(bridge): render agent errors visibly; refresh asciinema demo |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/bridge-router.spec.ts` | 79 | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
@@ -205,11 +205,11 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | b6e334c fix(bridge): close reasoning parts when text starts or on interrupt |
+| `src/bridge/events.ts` | 17340f2 fix(bridge): render agent errors visibly; refresh asciinema demo |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
+| `src/bridge/router.ts` | 17340f2 fix(bridge): render agent errors visibly; refresh asciinema demo |
 | `src/bridge/routes.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/boot.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/permission.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
@@ -227,7 +227,7 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `scripts/check-all.sh` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
+| `scripts/check-all.sh` | 396b49b test(e2e): add real TUI permission and question dialog coverage |
 | `scripts/cleanup-merged-branches.sh` | 2848dc8 fix(scripts): accept --apply/--remote flags before the target branch |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
@@ -243,6 +243,7 @@
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `scripts/e2e-tui-mini.sh` | ebc3ffc fix(bridge): reuse streamed part ids so --mini renders one reply |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
+| `scripts/e2e-tui-permission.sh` | 396b49b test(e2e): add real TUI permission and question dialog coverage |
 | `scripts/e2e-tui-print-logs.sh` | 071dfdc test(e2e): assert --print-logs forwarding through the fake opencode child |
 | `scripts/e2e-tui-skill.sh` | 360a21d test(e2e): verify skill slash command with Enter+Enter submission |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
@@ -257,6 +258,8 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
+
 
 
 

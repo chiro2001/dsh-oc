@@ -9,12 +9,16 @@ source tests/e2e/common.sh
 SCRIPT_START=$SECONDS
 MOCK_PID=""
 MOCK_ERR=""
+V2_SSE_PID=""
 
 cleanup() {
   local code=$?
   tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
   if [[ -n "$MOCK_PID" ]]; then
     kill "$MOCK_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$V2_SSE_PID" ]]; then
+    kill "$V2_SSE_PID" 2>/dev/null || true
   fi
   if [[ -n "$E2E_RUNID" ]]; then
     node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null 2>&1 || true
@@ -139,6 +143,62 @@ e2e_tui_capture "$E2E_RUN_DIR/tui-abort.txt"
 if rg -qa 'interrupting|Interrupt' "$E2E_RUN_DIR/tui-abort.txt"; then
   echo "  TUI shows interrupt notice"
 fi
+
+echo "== v2 interrupt alias =="
+BEFORE_V2="$(wc -l < "$MOCK_ERR")"
+curl -sN --max-time 60 "$E2E_BRIDGE_URL/global/event" > "$E2E_RUN_DIR/v2-sse.log" 2>/dev/null &
+V2_SSE_PID=$!
+curl -s -X POST "$E2E_BRIDGE_URL/session/$SESSION_ID/message" -H 'Content-Type: application/json' \
+  -d '{"parts":[{"type":"text","text":"interrupt via v2 api"}]}' >/dev/null
+deadline=$((SECONDS + 20))
+while (( SECONDS < deadline )); do
+  if grep -qa '"type":"message.part.delta"' "$E2E_RUN_DIR/v2-sse.log"; then
+    break
+  fi
+  sleep 1
+done
+if ! grep -qa '"type":"message.part.delta"' "$E2E_RUN_DIR/v2-sse.log"; then
+  echo "e2e: v2 stream did not start before interrupt" >&2
+  tail -20 "$E2E_RUN_DIR/v2-sse.log" >&2 || true
+  exit 1
+fi
+kill "$V2_SSE_PID" 2>/dev/null || true
+V2_SSE_PID=""
+V2_CODE=""
+V2_CLOSED=""
+for _ in 1 2 3; do
+  V2_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$E2E_BRIDGE_URL/api/session/$SESSION_ID/interrupt")"
+  if [[ "$V2_CODE" != "204" ]]; then
+    break
+  fi
+  deadline=$((SECONDS + 8))
+  while (( SECONDS < deadline )); do
+    if (( $(wc -l < "$MOCK_ERR") > BEFORE_V2 )) && tail -1 "$MOCK_ERR" | rg -q 'client_closed'; then
+      V2_CLOSED="1"
+      break
+    fi
+    sleep 1
+  done
+  if [[ -n "$V2_CLOSED" ]]; then
+    break
+  fi
+  sleep 1
+done
+if [[ "$V2_CODE" != "204" ]]; then
+  echo "e2e: v2 interrupt returned $V2_CODE (expected 204)" >&2
+  exit 1
+fi
+if [[ -z "$V2_CLOSED" ]]; then
+  echo "e2e: v2 interrupt did not close the mock stream" >&2
+  tail -5 "$MOCK_ERR" >&2 || true
+  exit 1
+fi
+V2_CHUNKS="$(tail -1 "$MOCK_ERR" | sed -E 's/.* ([0-9]+)$/\1/')"
+if [[ "${V2_CHUNKS:-999}" -ge 200 ]]; then
+  echo "e2e: v2 interrupt closed too late (chunks=$V2_CHUNKS)" >&2
+  exit 1
+fi
+echo "  v2 interrupt returned 204 and closed the mock stream"
 
 echo "== mini single-Esc interrupt =="
 tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null

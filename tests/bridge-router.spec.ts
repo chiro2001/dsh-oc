@@ -1188,6 +1188,10 @@ describe('bridge router: session routes', () => {
     expect(aborted.status).toBe(200)
     expect(aborted.body).toBe(true)
     expect(calls[5]).toMatchObject({ method: 'session.cancel', payload: { sessionId: 's1' } })
+
+    const interrupted = await request(server, 'POST', '/api/session/s1/interrupt')
+    expect(interrupted.status).toBe(204)
+    expect(calls[6]).toMatchObject({ method: 'session.cancel', payload: { sessionId: 's1' } })
   })
 
   it('rejects unsupported prompt parts with 400', async () => {

@@ -60,8 +60,8 @@ export interface TranslateDeps {
   state: InteractionState
   defaultModel?: { providerID: string; modelID: string }
   log(message: string): void
-  /** Per-SSE-connection replay guard for approval/question frames. */
-  replayGuard?: { approvals: Set<string>; questions: Set<string> }
+  /** Per-SSE-connection replay guard for approval/question/chunk frames. */
+  replayGuard?: { approvals: Set<string>; questions: Set<string>; chunks?: Set<string> }
   /** Per-SSE-connection projection state surviving translator rebuilds. */
   sharedState?: { todos: Map<string, unknown>; goals: Map<string, unknown> }
   /** Coalescing window for `tool-call-delta` events before flushing (ms). */
@@ -925,6 +925,9 @@ export class MuxEventTranslator {
           project,
         )
       case 'assistant/chunk': {
+        const chunkSeqKey = `${sessionId}:${event.seq}`
+        if (this.deps.replayGuard?.chunks?.has(chunkSeqKey)) return []
+        this.deps.replayGuard?.chunks?.add(chunkSeqKey)
         const chunk = event.data.chunk
         if (chunk.type === 'block-start') {
           this.streamState(sessionId).blockStarts.set(
@@ -977,6 +980,11 @@ export class MuxEventTranslator {
       }
       case 'text-chunks' as SessionEvent['type']:
       case 'reasoning-chunks' as SessionEvent['type']:
+        {
+          const chunkSeqKey = `${sessionId}:${event.seq}`
+          if (this.deps.replayGuard?.chunks?.has(chunkSeqKey)) return []
+          this.deps.replayGuard?.chunks?.add(chunkSeqKey)
+        }
         return this.translateStreamChunks(
           sessionId,
           event as unknown as StreamChunkRowEvent,

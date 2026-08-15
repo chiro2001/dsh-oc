@@ -171,6 +171,7 @@ GET /api/integration?location[directory]=...
 | `POST /api/session` | MAP | 同 v1 |
 | `POST /api/session/{id}/fork` | MAP | 同 v1 fork，返回 v2 信封 |
 | `POST /api/session/{id}/compact` | MAP | 同 v1 summarize/compact（SDK v2 路由，204） |
+| `POST /api/session/{id}/interrupt` | MAP | 同 v1 abort：`apiProxy.sessions.cancel`（SDK v2 打断入口，204） |
 | `POST /session/{id}/command` | MAP | `/preset`、`/goal` 经 dsh command registry 执行并广播 busy/idle；`/help` 本地返回能力摘要 |
 | `GET /api/session/{id}` | MAP | 同 v1 |
 | `GET /api/session/{id}/message` | MAP | 同 v1 |

@@ -1433,6 +1433,43 @@ describe('bridge events: projection and control frames', () => {
     expect(state.questions.size).toBe(1)
   })
 
+  it('dedupes replayed text-chunks and assistant/chunk frames per SSE connection', () => {
+    const state = new InteractionState()
+    const guard = {
+      approvals: new Set<string>(),
+      questions: new Set<string>(),
+      chunks: new Set<string>(),
+    }
+    const instance = new MuxEventTranslator({
+      cwd: '/work',
+      state,
+      log: () => {},
+      replayGuard: guard,
+    })
+
+    const packed = frame({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: chunkRow('text-chunks', [' the'], 1100, 10),
+    })
+    const firstPacked = instance.translate(packed)
+    expect(firstPacked.map((event) => event.payload.type)).toContain('message.part.delta')
+    expect(instance.translate(packed)).toEqual([])
+
+    const raw = frame({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: sessionEvent('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', index: 0, text: 'x' },
+      }, 11, 1200),
+    })
+    const firstRaw = instance.translate(raw)
+    expect(firstRaw.map((event) => event.payload.type)).toContain('message.part.delta')
+    expect(instance.translate(raw)).toEqual([])
+  })
+
   it('shares todo/goal projection state across translator rebuilds', () => {
     const shared = { todos: new Map<string, unknown>(), goals: new Map<string, unknown>() }
     const deps = { cwd: '/work', state: new InteractionState(), log: () => {}, sharedState: shared }

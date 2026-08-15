@@ -115,6 +115,12 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     return R.json(204)
   })
 
+  register('POST', '/api/session/:sessionID/interrupt', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    await R.rpc(ctx, 'session.cancel', { sessionId: R.sid(id) })
+    return R.json(204)
+  })
+
   register('GET', '/api/session/:sessionID/message', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const limitRaw = req.query.get('limit')
