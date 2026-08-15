@@ -349,6 +349,7 @@ function streamPart(
   partId: string,
   text: string,
   start: number,
+  end?: number,
 ): Record<string, unknown> {
   return {
     id: partId,
@@ -356,7 +357,7 @@ function streamPart(
     messageID: messageId,
     type: blockType,
     text,
-    time: { start },
+    time: end === undefined ? { start } : { start, end },
   }
 }
 
@@ -1030,6 +1031,11 @@ export class MuxEventTranslator {
             }
           }
         }
+        // The finalized message replaced the provisional parts; drop the
+        // streamed blocks so turn/end does not emit stale closing updates.
+        for (const key of [...state.blocks.keys()]) {
+          if (key.startsWith(`${stepKey}:`)) state.blocks.delete(key)
+        }
         return events
       }
       case 'turn/start':
@@ -1039,15 +1045,31 @@ export class MuxEventTranslator {
           makeEvent(directory, 'turn.wait', { sessionID: sessionId }, project),
         ]
       case 'turn/end': {
-        this.currentAssistant.delete(sessionId)
-        this.pendingCalls.delete(sessionId)
-        this.clearToolTimers(sessionId)
-        this.streams.delete(sessionId)
-        return [
+        const state = this.streamState(sessionId)
+        const events = [
           makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'idle' } }, project),
           makeEvent(directory, 'session.idle', { sessionID: sessionId }, project),
           makeEvent(directory, 'turn.idle', { sessionID: sessionId }, project),
         ]
+        // On interrupt the final assistant/message may never arrive; close any
+        // still-open reasoning blocks so the TUI's thinking indicator stops.
+        for (const [key, candidate] of [...state.blocks]) {
+          if (candidate.blockType === 'reasoning') {
+            events.push(
+              makeEvent(directory, 'message.part.updated', {
+                sessionID: sessionId,
+                part: streamPart('reasoning', sessionId, candidate.messageId, candidate.partId, candidate.text, candidate.start, event.time),
+                time: event.time,
+              }, project),
+            )
+            state.blocks.delete(key)
+          }
+        }
+        this.currentAssistant.delete(sessionId)
+        this.pendingCalls.delete(sessionId)
+        this.clearToolTimers(sessionId)
+        this.streams.delete(sessionId)
+        return events
       }
       case 'todo/write':
         this.sessionTodos.set(sessionId, event.data.todos)
@@ -1239,6 +1261,22 @@ export class MuxEventTranslator {
     if (!block) {
       if (!state.blockStarts.has(blockStartKey)) {
         state.blockStarts.set(blockStartKey, time0)
+      }
+      if (blockType === 'text') {
+        // The model finished reasoning once the first text chunk of the step
+        // arrives; close the open reasoning part so the TUI stops animating it.
+        for (const [key, candidate] of [...state.blocks]) {
+          if (candidate.blockType === 'reasoning' && key.startsWith(`${event.data.turn}:${event.data.step}:`)) {
+            events.push(
+              makeEvent(directory, 'message.part.updated', {
+                sessionID: sessionId,
+                part: streamPart('reasoning', sessionId, candidate.messageId, candidate.partId, candidate.text, candidate.start, time0),
+                time: time0,
+              }, project),
+            )
+            state.blocks.delete(key)
+          }
+        }
       }
       const stepKey = `${event.data.turn}:${event.data.step}`
       let provisionalId = state.provisionalMessageIds.get(stepKey)

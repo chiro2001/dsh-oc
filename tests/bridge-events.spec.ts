@@ -473,6 +473,78 @@ describe('bridge events: session event mapping', () => {
     })
   })
 
+  it('closes an open reasoning part when the text block starts', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('reasoning-chunks', [' think'], 1100, 10),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('text-chunks', [' an'], 1500, 11, 1),
+      }),
+    ])
+    const closes = events.filter((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { type?: string }).type === 'reasoning'
+      && (event.payload.properties.part as { time?: { end?: number } }).time?.end !== undefined)
+    expect(closes).toHaveLength(1)
+    expect(closes[0]?.payload.properties.part).toMatchObject({
+      id: 'prt_stream:s1:1:1:reasoning:0',
+      text: ' think',
+      time: { start: 1100, end: 1500 },
+    })
+  })
+
+  it('closes an open reasoning part on turn/end without a final message', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('reasoning-chunks', [' think'], 1100, 10),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'canceled' } }, 20, 2000),
+      }),
+    ])
+    const closes = events.filter((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { type?: string }).type === 'reasoning'
+      && (event.payload.properties.part as { time?: { end?: number } }).time?.end !== undefined)
+    expect(closes).toHaveLength(1)
+    expect(closes[0]?.payload.properties.part).toMatchObject({
+      id: 'prt_stream:s1:1:1:reasoning:0',
+      text: ' think',
+      time: { start: 1100, end: 2000 },
+    })
+  })
+
   it('streams raw assistant/chunk text deltas incrementally', () => {
     const { translate } = translator()
     const events = translate([

@@ -40,6 +40,9 @@
 
 - Thought（reasoning）时长：`end` 改为最后一条 reasoning chunk 的时间，不再错误地
   等于整条回复的完成时间（历史读取与实时流均生效）。
+- 打断/流式转圈：text 块开始时立即关闭 reasoning part（带 end 时间）；中断
+  （无最终 assistant/message）时 turn/end 也会关闭仍打开的 reasoning part，
+  TUI 的 thinking 指示不再一直转圈。
 
 ## [0.1.0-rc.1] - 2026-08-15
 
