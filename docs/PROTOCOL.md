@@ -204,6 +204,8 @@ GET /api/integration?location[directory]=...
 | `GET /api/fs/read/{path}` | MAP | 读取工作区内文件原始字节（`*` 通配路径，越界 400，上限 5 MiB） |
 | `GET /api/fs/list` | MAP | 列目录（`{ location, data: FileSystemEntry[] }`，目录优先） |
 | `GET /api/fs/find` | MAP | 递归查找（query/type/limit，跳过依赖与构建目录） |
+| `GET /global/health` | MAP | `{ healthy: true, version }` |
+| `POST /global/dispose` / `POST /instance/dispose` | MAP | no-op 确认 `true`（dsh 拥有进程生命周期） |
 | 其他未列路由 | LATER | 501 或 schema-valid 空响应 |
 
 ---

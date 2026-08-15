@@ -1,7 +1,26 @@
 # dsh-oc 下一阶段需求（Roadmap）
 
 > 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读 `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
-> 基线：`main` 当前为流式子代理导航修复后的版本（2026-08-15）。
+> 基线：`main` 当前为协议补全阶段版本（2026-08-16，权限/vcs/fs/lifecycle 已合入）。
+
+## 协议补全记录（2026-08-16）
+
+以下 SDK v2 端点已从 stub/缺失升级为真实实现，全部有单测 + e2e：
+
+- 权限面：`GET /api/permission/request`、`GET /api/question/request`、
+  `GET /api/session/{id}/permission/{rid}`、`DELETE /api/permission/saved/{id}`，
+  saved 列表对齐 `PermissionSavedInfo`；授权按 session+tool 内存隔离。
+- VCS 面：`GET /vcs`、`GET /vcs/status`、`GET /vcs/diff`、`GET /vcs/diff/raw`
+  （真实 git 读取，untracked 不进入 status）。
+- 文件系统面：`GET /api/fs/read/{path}`（`*` 通配、越界 400、5 MiB 上限）、
+  `GET /api/fs/list`、`GET /api/fs/find`（跳过依赖/构建目录）。
+- 生命周期面：`GET /global/health`、`POST /global/dispose`、
+  `POST /instance/dispose`（dispose 为 no-op 确认，dsh 拥有进程生命周期）。
+
+仍为 LATER 的 SDK 路由：`/api/session/{id}/history`（durable event 流，需为
+每种 dsh 事件写独立映射，当前无客户端消费，TUI 用 `/global/event` +
+message 端点）、`/api/pty/*`（dsh 无 PTY RPC）、`/api/integration/*` 与
+`/api/credential/*`（dsh 凭据面未暴露）、`/global/upgrade`（自动更新明确关闭）。
 
 ## 优先级总览
 

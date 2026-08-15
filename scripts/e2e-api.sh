@@ -123,6 +123,14 @@ CODE="$(curl -s -o "$E2E_RUN/fs-escape.json" -w '%{http_code}' "$BRIDGE/api/fs/r
 [[ "$CODE" == "400" ]]
 echo "  /api/fs/read path escape -> 400"
 
+echo "== lifecycle assertions =="
+curl -s "$BRIDGE/global/health" | jq -e '.healthy == true and (.version | length) > 0' >/dev/null
+echo "  /global/health reports healthy + version"
+curl -s -X POST "$BRIDGE/global/dispose" | jq -e '. == true' >/dev/null
+echo "  POST /global/dispose acknowledged"
+curl -s -X POST "$BRIDGE/instance/dispose" | jq -e '. == true' >/dev/null
+echo "  POST /instance/dispose acknowledged"
+
 echo "== key route shapes =="
 curl -s "$BRIDGE/path" | jq -e --arg w "$E2E_WORKDIR" '.directory == $w' >/dev/null
 echo "  /path.directory == workdir"

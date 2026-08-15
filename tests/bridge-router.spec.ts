@@ -132,6 +132,10 @@ describe('bridge router: startup GET routes', () => {
       backgroundSubagents: true,
     })
     expect((await request(server, 'GET', '/api/health')).body).toEqual({ healthy: true })
+    const health = await request(server, 'GET', '/global/health')
+    expect(health.body).toMatchObject({ healthy: true, version: expect.any(String) })
+    expect((await request(server, 'POST', '/global/dispose')).body).toBe(true)
+    expect((await request(server, 'POST', '/instance/dispose')).body).toBe(true)
     expect((await request(server, 'POST', '/experimental/session/s1/background')).body).toBe(true)
     expect((await request(server, 'GET', '/vcs')).body).toEqual({})
     expect((await request(server, 'GET', '/experimental/workspace')).body).toEqual([])

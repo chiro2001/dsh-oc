@@ -1,7 +1,7 @@
 // boot routes for the dsh-oc bridge.
 import * as R from '../router.js'
 import { convertToProviderCatalog, convertToV1Providers, convertToV2Models, convertToV2Providers } from '../convert/model.js'
-import { projectIdFor } from '../convert/common.js'
+import { OPENCODE_VERSION, projectIdFor } from '../convert/common.js'
 import { permissionActionFromTool } from '../convert/permission.js'
 import { toPermissionV2 } from '../convert/permission.js'
 import { toQuestionV2 } from '../convert/question.js'
@@ -140,6 +140,16 @@ export function registerBootRoutes(register: RouteRegistrar): void {
   })
 
   register('GET', '/api/health', 'json', async () => R.json(200, { healthy: true }))
+
+  register('GET', '/global/health', 'json', async () => R.json(200, {
+    healthy: true,
+    version: OPENCODE_VERSION,
+  }))
+
+  // dsh owns the bridge/process lifecycle; client dispose requests are
+  // acknowledged and ignored so the profile keeps running.
+  register('POST', '/global/dispose', 'json', async () => R.json(200, true))
+  register('POST', '/instance/dispose', 'json', async () => R.json(200, true))
 
   // dsh sessions are always server-side and the `subagent` tool already runs
   // in the background, so "detach into background" is a no-op success.
