@@ -18,7 +18,8 @@
     "cordis.patch.yml",
     "opencode-version.json",
     "opencode-assets.json",
-    "tui-branding"
+    "tui-branding",
+    "docs"
   ],
   "dsh": {
     "bundle": {
