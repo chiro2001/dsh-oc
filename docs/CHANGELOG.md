@@ -52,7 +52,8 @@
 - `--mini` 无回复（补 `POST /session/:id/prompt_async`）。
 - `--mini` 回复渲染两次（流式/最终 part id 复用）。
 - 会话历史列表无标题（持久标题 → 项目目录 basename → session id 回退）。
-- 旧包名迁移导致 `duplicate loader entry id: storage`（README 迁移说明）。
+- 旧包名迁移导致 `duplicate loader entry id: storage`（清理 profile 中残留的
+  `@deepseek-ai/dsh-oc` 依赖与 bundle 项即可恢复）。
 
 ### 重构
 

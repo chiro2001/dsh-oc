@@ -87,20 +87,6 @@ dsh plugin --profile oc add .
 > 本地安装会以 `link:` 方式链接仓库，`pnpm build` 后新逻辑立即生效；
 > 但 `lib/` 仍需随提交一起推送，GitHub 直装才会包含最新构建产物。
 
-### 从旧包名迁移
-
-如果 profile 是在 `@deepseek-ai/dsh-oc` 时代安装的，直接更新会出现新旧两个 bundle
-同时存在，启动时报 `duplicate loader entry id: storage`。修复方式：
-
-```bash
-# 编辑 $DSH_HOME/profiles/oc/package.json：
-#  - dependencies 删除 "@deepseek-ai/dsh-oc"
-#  - dsh.profile.bundles 删除 "@deepseek-ai/dsh-oc"（只保留 dsh-base 与 @chiro2001/dsh-oc）
-cd "$DSH_HOME/profiles/oc"
-pnpm remove @deepseek-ai/dsh-oc 2>/dev/null || true
-dsh --profile oc --help   # 验证恢复
-```
-
 首次启动会解析并缓存 opencode 官方二进制（版本锁定 `1.18.18`）。分发优先级：
 
 1. `DSH_OC_OPENCODE_BIN`（绝对路径）
