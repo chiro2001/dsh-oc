@@ -122,6 +122,13 @@ echo "  /api/fs/find locates readme.txt"
 CODE="$(curl -s -o "$E2E_RUN/fs-escape.json" -w '%{http_code}' "$BRIDGE/api/fs/read/..%2Fescape.txt")"
 [[ "$CODE" == "400" ]]
 echo "  /api/fs/read path escape -> 400"
+CODE="$(curl -s -o "$E2E_RUN/fs-list-escape.json" -w '%{http_code}' "$BRIDGE/api/fs/list?path=..%2Foutside")"
+[[ "$CODE" == "400" ]]
+echo "  /api/fs/list path escape -> 400"
+printf 'x\n' > "$E2E_WORKDIR/read me.txt"
+curl -s "$BRIDGE/api/fs/find?query=read%20me&type=file" | jq -e \
+  'any(.data[]; .path == "read me.txt" and .type == "file")' >/dev/null
+echo "  /api/fs/find decodes URL-encoded query"
 
 echo "== lifecycle assertions =="
 curl -s "$BRIDGE/global/health" | jq -e '.healthy == true and (.version | length) > 0' >/dev/null
