@@ -38,15 +38,18 @@ function routeKey(method, path, kind) {
 }
 
 function parseRegisteredRoutes() {
-  const router = readFileSync(join(root, 'src', 'bridge', 'router.ts'), 'utf8')
+  const routeFiles = ['src/bridge/router.ts', 'src/bridge/routes.ts']
   const stubs = readFileSync(join(root, 'src', 'bridge', 'stubs.ts'), 'utf8')
   const routes = new Set()
-  for (const match of router.matchAll(/register\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
-    routes.add(routeKey(match[1], match[2], match[3]))
-  }
-  for (const match of router.matchAll(/for \(const bare of \[([^\]]*)\]\)/g)) {
-    for (const path of match[1].matchAll(/'([^']+)'/g)) {
-      routes.add(routeKey('GET', path[1], 'json'))
+  for (const file of routeFiles) {
+    const source = readFileSync(join(root, file), 'utf8')
+    for (const match of source.matchAll(/register\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
+      routes.add(routeKey(match[1], match[2], match[3]))
+    }
+    for (const match of source.matchAll(/for \(const bare of \[([^\]]*)\]\)/g)) {
+      for (const path of match[1].matchAll(/'([^']+)'/g)) {
+        routes.add(routeKey('GET', path[1], 'json'))
+      }
     }
   }
   for (const match of stubs.matchAll(/jsonRoute\(\s*'([^']+)'\s*,\s*'([^']+)'/g)) {

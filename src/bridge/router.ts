@@ -64,6 +64,7 @@ import { filterGitTrackedDiffs } from './git.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { ocHelp } from '../help.js'
 import { InteractionState, type CachedHistory } from './state.js'
+import { registerRoutes } from './routes.js'
 import { SseHub } from './sse.js'
 import { MuxEventTranslator } from './events.js'
 import { stubRoutes } from './stubs.js'
@@ -122,15 +123,15 @@ export interface RouterOptions {
   sseRetryMaxAttempts?: number
 }
 
-function json(status: number, body?: unknown): HandlerResult {
+export function json(status: number, body?: unknown): HandlerResult {
   return { status, body }
 }
 
-function sid(id: string): never {
+export function sid(id: string): never {
   return id as never
 }
 
-async function rpc<K extends keyof RpcMethodMap>(
+export async function rpc<K extends keyof RpcMethodMap>(
   ctx: BridgeRouteContext,
   method: K,
   payload: RequestPayload<K>,
@@ -144,21 +145,21 @@ async function rpc<K extends keyof RpcMethodMap>(
   }
 }
 
-function bodyAsRecord(body: unknown): Record<string, unknown> {
+export function bodyAsRecord(body: unknown): Record<string, unknown> {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     return {}
   }
   return body as Record<string, unknown>
 }
 
-function locationInfo(ctx: BridgeRouteContext): LocationInfo {
+export function locationInfo(ctx: BridgeRouteContext): LocationInfo {
   return {
     directory: ctx.cwd,
     project: { id: projectIdFor(ctx.cwd), directory: ctx.cwd },
   }
 }
 
-function v2LocationBody(ctx: BridgeRouteContext): { location: LocationInfo; data: unknown[] } {
+export function v2LocationBody(ctx: BridgeRouteContext): { location: LocationInfo; data: unknown[] } {
   return { location: locationInfo(ctx), data: [] }
 }
 
@@ -170,7 +171,7 @@ interface SessionView {
   cwd?: string
 }
 
-function sessionDirectoryFrom(
+export function sessionDirectoryFrom(
   items: readonly SessionSummary[],
   summary: SessionSummary | undefined,
   fallback: string,
@@ -188,7 +189,7 @@ function sessionDirectoryFrom(
  * without its own cwd inherits the nearest parent's cwd so the TUI opens and
  * filters its events in the same project directory.
  */
-function recordSessionSummaries(
+export function recordSessionSummaries(
   ctx: BridgeRouteContext,
   items: readonly SessionSummary[],
 ): void {
@@ -215,7 +216,7 @@ function recordSessionSummaries(
 }
 
 /** Filter dsh session summaries by a TUI-provided `directory` query. */
-function filterSessionsByDirectory(
+export function filterSessionsByDirectory(
   items: readonly SessionSummary[],
   directory: string | undefined,
   base: string,
@@ -228,7 +229,7 @@ function filterSessionsByDirectory(
   })
 }
 
-async function sessionView(ctx: BridgeRouteContext, id: string): Promise<SessionView> {
+export async function sessionView(ctx: BridgeRouteContext, id: string): Promise<SessionView> {
   ctx.state.setCurrentSession(id)
   const list = await cachedSessionList(ctx)
   const summary = list.find((item) => String(item.sessionId) === id)
@@ -258,12 +259,12 @@ async function sessionView(ctx: BridgeRouteContext, id: string): Promise<Session
 }
 
 /** Encode an opaque v2 message cursor pointing before a surface event seq. */
-function encodeMessageCursor(beforeSeq: number): string {
+export function encodeMessageCursor(beforeSeq: number): string {
   return Buffer.from(JSON.stringify({ v: 1, beforeSeq }), 'utf8').toString('base64url')
 }
 
 /** Decode an opaque v2 message cursor produced by {@link encodeMessageCursor}. */
-function decodeMessageCursor(raw: string): number {
+export function decodeMessageCursor(raw: string): number {
   try {
     const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
       v?: unknown
@@ -279,12 +280,12 @@ function decodeMessageCursor(raw: string): number {
 }
 
 /** Encode an opaque v2 session-list cursor for the next page offset. */
-function encodeSessionCursor(offset: number): string {
+export function encodeSessionCursor(offset: number): string {
   return Buffer.from(JSON.stringify({ v: 1, offset }), 'utf8').toString('base64url')
 }
 
 /** Decode an opaque v2 session-list cursor produced by {@link encodeSessionCursor}. */
-function decodeSessionCursor(raw: string): number {
+export function decodeSessionCursor(raw: string): number {
   try {
     const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
       v?: unknown
@@ -300,7 +301,7 @@ function decodeSessionCursor(raw: string): number {
 }
 
 /** Oldest surface-message seq in a history page (pagination anchor). */
-function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
+export function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
   let oldest: number | undefined
   for (const entry of events) {
     const type = entry.event.type as string
@@ -311,22 +312,22 @@ function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
   return oldest
 }
 
-const SESSION_LIST_CACHE_MS = 1000
-const HISTORY_CACHE_MS = 500
-const RECENT_HISTORY_PREFETCH = 5
-const LIST_TITLE_WARM_LIMIT = 12
-const LIST_TITLE_WARM_CONCURRENCY = 8
-const LIST_TITLE_WARM_ALL_MAX = 40
-const LIST_TITLE_WARM_BACKGROUND_MAX = 120
-const SSE_RETRY_BASE_MS = 250
-const SSE_RETRY_MAX_ATTEMPTS = 3
+export const SESSION_LIST_CACHE_MS = 1000
+export const HISTORY_CACHE_MS = 500
+export const RECENT_HISTORY_PREFETCH = 5
+export const LIST_TITLE_WARM_LIMIT = 12
+export const LIST_TITLE_WARM_CONCURRENCY = 8
+export const LIST_TITLE_WARM_ALL_MAX = 40
+export const LIST_TITLE_WARM_BACKGROUND_MAX = 120
+export const SSE_RETRY_BASE_MS = 250
+export const SSE_RETRY_MAX_ATTEMPTS = 3
 
-function historyCacheKey(sessionId: string, maxMessages?: number, beforeSeq?: number): string {
+export function historyCacheKey(sessionId: string, maxMessages?: number, beforeSeq?: number): string {
   return `${sessionId}:${maxMessages ?? 'tail'}:${beforeSeq ?? 'tail'}`
 }
 
 /** Read session.list through a short-lived cache (invalidated by mutations/SSE). */
-async function cachedSessionList(ctx: BridgeRouteContext): Promise<SessionSummary[]> {
+export async function cachedSessionList(ctx: BridgeRouteContext): Promise<SessionSummary[]> {
   const cached = ctx.state.getSessionListCache(SESSION_LIST_CACHE_MS)
   if (cached !== undefined) return cached
   const existing = ctx.state.sessionListLoading
@@ -348,7 +349,7 @@ async function cachedSessionList(ctx: BridgeRouteContext): Promise<SessionSummar
 }
 
 /** Read a history page through a short-lived per-page cache. */
-async function cachedSessionHistory(
+export async function cachedSessionHistory(
   ctx: BridgeRouteContext,
   sessionId: string,
   options: { maxMessages?: number; beforeSeq?: number } = {},
@@ -391,7 +392,7 @@ async function cachedSessionHistory(
  * (bounded, parallel) so the list shows durable titles instead of directory
  * basenames; blank sessions have no title and are skipped.
  */
-async function warmListTitles(ctx: BridgeRouteContext, items: readonly SessionSummary[]): Promise<void> {
+export async function warmListTitles(ctx: BridgeRouteContext, items: readonly SessionSummary[]): Promise<void> {
   const missing = items
     .filter((item) => !item.blank && ctx.state.sessionTitleFor(String(item.sessionId)) === undefined)
   // Small homes get every title on the first list open; large homes stay
@@ -408,7 +409,7 @@ async function warmListTitles(ctx: BridgeRouteContext, items: readonly SessionSu
 }
 
 /** Read the title-bearing history tail for candidates with bounded concurrency. */
-async function warmTitles(ctx: BridgeRouteContext, candidates: readonly SessionSummary[]): Promise<void> {
+export async function warmTitles(ctx: BridgeRouteContext, candidates: readonly SessionSummary[]): Promise<void> {
   if (candidates.length === 0) return
   let next = 0
   const workers = Array.from({ length: Math.min(LIST_TITLE_WARM_CONCURRENCY, candidates.length) }, async () => {
@@ -433,7 +434,7 @@ async function warmTitles(ctx: BridgeRouteContext, candidates: readonly SessionS
  * Seed the derived page when the loaded window provably covers it (and vice
  * versa when a 100-message page is the whole history).
  */
-function seedDerivedHistoryPage(
+export function seedDerivedHistoryPage(
   ctx: BridgeRouteContext,
   sessionId: string,
   value: CachedHistory,
@@ -458,7 +459,7 @@ function seedDerivedHistoryPage(
 }
 
 /** Pick a session for a directory query (or the most recent one). */
-async function sessionForDirectory(
+export async function sessionForDirectory(
   ctx: BridgeRouteContext,
   directory: string | undefined,
 ): Promise<SessionSummary | undefined> {
@@ -471,7 +472,7 @@ async function sessionForDirectory(
 }
 
 /** Resolve the dsh skill catalog for the session matching a directory query. */
-async function skillList(
+export async function skillList(
   ctx: BridgeRouteContext,
   directory: string | undefined,
 ): Promise<Array<{ name: string; description: string; whenToUse?: string }>> {
@@ -494,7 +495,7 @@ async function skillList(
 }
 
 /** dsh skills exposed as opencode v1 slash commands. */
-async function skillCommandsV1(
+export async function skillCommandsV1(
   ctx: BridgeRouteContext,
   directory: string | undefined,
 ): Promise<V1Command[]> {
@@ -506,7 +507,7 @@ async function skillCommandsV1(
 }
 
 /** dsh skills exposed as opencode v2 slash commands. */
-async function skillCommandsV2(
+export async function skillCommandsV2(
   ctx: BridgeRouteContext,
   directory: string | undefined,
 ): Promise<CommandV2Info[]> {
@@ -518,7 +519,7 @@ async function skillCommandsV2(
 }
 
 /** Skill catalog for one specific session (used by the command route). */
-async function skillListForSession(
+export async function skillListForSession(
   ctx: BridgeRouteContext,
   sessionId: string,
 ): Promise<Array<{ name: string; description: string }>> {
@@ -537,7 +538,7 @@ async function skillListForSession(
 }
 
 /** Test-only fake skills injected via `DSH_OC_E2E_FAKE_SKILLS=name1,name2`. */
-function fakeSkillEntries(): Array<{ name: string; description: string; whenToUse?: string }> {
+export function fakeSkillEntries(): Array<{ name: string; description: string; whenToUse?: string }> {
   const raw = process.env.DSH_OC_E2E_FAKE_SKILLS
   if (raw === undefined || raw.trim() === '') return []
   return raw.split(',').map((item) => item.trim()).filter(Boolean).map((name) => ({
@@ -547,7 +548,7 @@ function fakeSkillEntries(): Array<{ name: string; description: string; whenToUs
   }))
 }
 
-function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
+export function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
   if (view.summary) {
     return convertSessionSummary(view.summary, {
       cwd: view.cwd ?? ctx.cwd,
@@ -564,7 +565,7 @@ function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2
   })
 }
 
-function toV2Session(view: SessionView, id: string, ctx: BridgeRouteContext): SessionV2Info {
+export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteContext): SessionV2Info {
   if (view.summary) {
     return convertSessionSummaryV2(view.summary, {
       cwd: view.cwd ?? ctx.cwd,
@@ -581,7 +582,7 @@ function toV2Session(view: SessionView, id: string, ctx: BridgeRouteContext): Se
   })
 }
 
-async function modelGroups(ctx: BridgeRouteContext) {
+export async function modelGroups(ctx: BridgeRouteContext) {
   const catalog = await rpc(ctx, 'llm.models', {})
   return catalog.groups
 }
@@ -595,7 +596,7 @@ interface PromptPartInput {
   source?: { path?: unknown; type?: unknown }
 }
 
-const TEXT_MIME_PREFIXES = new Set([
+export const TEXT_MIME_PREFIXES = new Set([
   'application/json',
   'application/xml',
   'application/javascript',
@@ -608,23 +609,23 @@ const TEXT_MIME_PREFIXES = new Set([
   'application/x-python',
 ])
 
-const TEXT_EXTENSIONS = new Set([
+export const TEXT_EXTENSIONS = new Set([
   '.txt', '.md', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.json', '.jsonc', '.yaml', '.yml', '.toml', '.sh', '.py', '.rs',
   '.go', '.c', '.h', '.cpp', '.hpp', '.java', '.sql', '.css', '.html',
   '.xml', '.csv', '.log',
 ])
 
-function isTextMime(mime: string): boolean {
+export function isTextMime(mime: string): boolean {
   const normalized = mime.toLowerCase().split(';')[0]?.trim() ?? ''
   return normalized.startsWith('text/') || TEXT_MIME_PREFIXES.has(normalized)
 }
 
-function isTextFile(path: string, mime: string): boolean {
+export function isTextFile(path: string, mime: string): boolean {
   return isTextMime(mime) || TEXT_EXTENSIONS.has(extname(path).toLowerCase())
 }
 
-function filePartToContent(part: PromptPartInput, cwd: string): PromptContentPart {
+export function filePartToContent(part: PromptPartInput, cwd: string): PromptContentPart {
   const url = typeof part.url === 'string' ? part.url : ''
   const mime = typeof part.mime === 'string' ? part.mime : ''
   if (url.length === 0 || mime.length === 0) {
@@ -678,7 +679,7 @@ function filePartToContent(part: PromptPartInput, cwd: string): PromptContentPar
   throw badRequest(`unsupported file mime "${mediaType}" (dsh supports text and image parts)`)
 }
 
-function parsePromptParts(raw: unknown, cwd: string): PromptContentPart[] {
+export function parsePromptParts(raw: unknown, cwd: string): PromptContentPart[] {
   if (!Array.isArray(raw)) throw badRequest('prompt body requires a parts array')
   const parts: PromptContentPart[] = []
   for (const entry of raw) {
@@ -698,7 +699,7 @@ function parsePromptParts(raw: unknown, cwd: string): PromptContentPart[] {
   return parts
 }
 
-function pendingAssistantPlaceholder(
+export function pendingAssistantPlaceholder(
   sessionID: string,
   cwd: string,
   text?: string,
@@ -737,45 +738,45 @@ function pendingAssistantPlaceholder(
 }
 
 /** The dsh-oc bridge exposes one primary agent so the TUI prompt stays usable. */
-const DEFAULT_AGENT_NAME = 'build'
+export const DEFAULT_AGENT_NAME = 'build'
 
-const PRESET_COMMAND_V1: V1Command = {
+export const PRESET_COMMAND_V1: V1Command = {
   name: 'preset',
   description: 'List or switch the session dsh agent preset',
   template: 'preset',
 }
 
-const PRESET_COMMAND_V2: CommandV2Info = {
+export const PRESET_COMMAND_V2: CommandV2Info = {
   name: 'preset',
   template: 'preset',
   description: 'List or switch the session dsh agent preset',
 }
 
-const GOAL_COMMAND_V1: V1Command = {
+export const GOAL_COMMAND_V1: V1Command = {
   name: 'goal',
   description: 'Set or view the goal for a long-running task',
   template: 'goal',
 }
 
-const GOAL_COMMAND_V2: CommandV2Info = {
+export const GOAL_COMMAND_V2: CommandV2Info = {
   name: 'goal',
   template: 'goal',
   description: 'Set or view the goal for a long-running task',
 }
 
-const HELP_COMMAND_V1: V1Command = {
+export const HELP_COMMAND_V1: V1Command = {
   name: 'help',
   description: 'Show the dsh-oc capability summary and documentation entry points',
   template: 'help',
 }
 
-const HELP_COMMAND_V2: CommandV2Info = {
+export const HELP_COMMAND_V2: CommandV2Info = {
   name: 'help',
   template: 'help',
   description: 'Show the dsh-oc capability summary and documentation entry points',
 }
 
-async function defaultAgents(ctx: BridgeRouteContext): Promise<{
+export async function defaultAgents(ctx: BridgeRouteContext): Promise<{
   providerID: string
   modelID: string
 }> {
@@ -793,11 +794,11 @@ async function defaultAgents(ctx: BridgeRouteContext): Promise<{
   return { providerID, modelID }
 }
 
-async function defaultModelRef(ctx: BridgeRouteContext): Promise<{ providerID: string; modelID: string }> {
+export async function defaultModelRef(ctx: BridgeRouteContext): Promise<{ providerID: string; modelID: string }> {
   return defaultAgents(ctx)
 }
 
-async function v1DefaultAgent(ctx: BridgeRouteContext): Promise<V2Agent> {
+export async function v1DefaultAgent(ctx: BridgeRouteContext): Promise<V2Agent> {
   const { providerID, modelID } = await defaultAgents(ctx)
   return {
     name: DEFAULT_AGENT_NAME,
@@ -809,7 +810,7 @@ async function v1DefaultAgent(ctx: BridgeRouteContext): Promise<V2Agent> {
   }
 }
 
-async function v2DefaultAgent(ctx: BridgeRouteContext): Promise<AgentV2Info> {
+export async function v2DefaultAgent(ctx: BridgeRouteContext): Promise<AgentV2Info> {
   const { providerID, modelID } = await defaultAgents(ctx)
   return {
     id: DEFAULT_AGENT_NAME,
@@ -822,12 +823,12 @@ async function v2DefaultAgent(ctx: BridgeRouteContext): Promise<AgentV2Info> {
   }
 }
 
-async function presetRoster(ctx: BridgeRouteContext) {
+export async function presetRoster(ctx: BridgeRouteContext) {
   const roster = await rpc(ctx, 'agentPreset.list', {})
   return roster.presets.filter((preset) => preset.broken === undefined)
 }
 
-async function defaultPresetId(ctx: BridgeRouteContext): Promise<string | undefined> {
+export async function defaultPresetId(ctx: BridgeRouteContext): Promise<string | undefined> {
   try {
     const presets = await presetRoster(ctx)
     return presets.find((preset) => preset.isDefault)?.id
@@ -837,7 +838,7 @@ async function defaultPresetId(ctx: BridgeRouteContext): Promise<string | undefi
   }
 }
 
-async function presetIdForAgent(
+export async function presetIdForAgent(
   ctx: BridgeRouteContext,
   agentName: string,
 ): Promise<string | undefined> {
@@ -851,7 +852,7 @@ async function presetIdForAgent(
   }
 }
 
-async function switchAgentPreset(
+export async function switchAgentPreset(
   ctx: BridgeRouteContext,
   sessionId: string,
   agentName: string,
@@ -869,7 +870,7 @@ async function switchAgentPreset(
 }
 
 /** All text parts of a prompt body, joined the way the TUI renders them. */
-function textFromPromptParts(content: readonly PromptContentPart[]): string {
+export function textFromPromptParts(content: readonly PromptContentPart[]): string {
   return content
     .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
     .map((part) => part.text)
@@ -886,7 +887,7 @@ interface SlashPromptCapture {
  * popup) reaches the prompt routes as a plain prompt. Commands handled by the
  * bridge are captured here so they never trigger a model turn.
  */
-function slashPromptCapture(content: readonly PromptContentPart[]): SlashPromptCapture | undefined {
+export function slashPromptCapture(content: readonly PromptContentPart[]): SlashPromptCapture | undefined {
   const text = textFromPromptParts(content).trim()
   if (/^\/preset(?:\s|$)/.test(text)) {
     return { name: 'preset', argument: text.slice('/preset'.length).trim() }
@@ -905,7 +906,7 @@ interface PresetCommandOutcome {
   text: string
 }
 
-async function presetCommandOutcome(
+export async function presetCommandOutcome(
   ctx: BridgeRouteContext,
   sessionId: string,
   argument: string,
@@ -926,7 +927,7 @@ async function presetCommandOutcome(
 }
 
 /** Broadcast one synthetic command-result message (with optional status). */
-function broadcastCommandResult(
+export function broadcastCommandResult(
   ctx: BridgeRouteContext,
   sessionId: string,
   text: string,
@@ -941,7 +942,7 @@ function broadcastCommandResult(
 }
 
 /** Push a `session.updated` carrying the new agent so the TUI label refreshes. */
-function broadcastSessionAgent(
+export function broadcastSessionAgent(
   ctx: BridgeRouteContext,
   sessionId: string,
   agent: string,
@@ -961,7 +962,7 @@ function broadcastSessionAgent(
 }
 
 /** Run a `/preset` list/switch with visible TUI progress and result. */
-async function runPresetCommand(
+export async function runPresetCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
   argument: string,
@@ -987,7 +988,7 @@ interface RegistryCommandOutcome {
  * agent/registry/command) throw; a command-level error becomes an outcome
  * the caller can turn into a 400.
  */
-async function runRegistryCommand(
+export async function runRegistryCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
   commandLine: string,
@@ -1031,7 +1032,7 @@ async function runRegistryCommand(
 }
 
 /** Run `/goal` with an optional argument through the dsh command registry. */
-async function runGoalCommand(
+export async function runGoalCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
   argument: string,
@@ -1053,7 +1054,7 @@ async function runGoalCommand(
  * normally automatic), so the bridge implements it directly through the
  * `goal.complete` RPC with the current projection ref.
  */
-async function completeGoalCommand(
+export async function completeGoalCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
 ): Promise<RegistryCommandOutcome> {
@@ -1085,7 +1086,7 @@ async function completeGoalCommand(
 }
 
 /** Run `/help`: broadcast the shared capability summary without a model turn. */
-function runHelpCommand(
+export function runHelpCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
   _argument: string,
@@ -1096,7 +1097,7 @@ function runHelpCommand(
 }
 
 /** Dispatch a captured slash command to its bridge-side implementation. */
-async function runSlashCommand(
+export async function runSlashCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
   slash: SlashPromptCapture,
@@ -1107,7 +1108,7 @@ async function runSlashCommand(
   throw badRequest(`unsupported command /${slash.name}`)
 }
 
-async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
+export async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
   try {
     return (await presetRoster(ctx))
       .filter((preset) => preset.id !== DEFAULT_AGENT_NAME)
@@ -1124,7 +1125,7 @@ async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
   }
 }
 
-async function dshPresetAgentsV2(ctx: BridgeRouteContext): Promise<AgentV2Info[]> {
+export async function dshPresetAgentsV2(ctx: BridgeRouteContext): Promise<AgentV2Info[]> {
   try {
     return (await presetRoster(ctx))
       .filter((preset) => preset.id !== DEFAULT_AGENT_NAME)
@@ -1148,7 +1149,7 @@ interface ModelInput {
   variant?: string
 }
 
-function modelInputFromBody(body: unknown): ModelInput | undefined {
+export function modelInputFromBody(body: unknown): ModelInput | undefined {
   const record = bodyAsRecord(body)
   const raw = record.model !== undefined && bodyAsRecord(record.model) ? record.model : body
   const input = bodyAsRecord(raw)
@@ -1167,7 +1168,7 @@ function modelInputFromBody(body: unknown): ModelInput | undefined {
   }
 }
 
-async function applyModelSelection(
+export async function applyModelSelection(
   ctx: BridgeRouteContext,
   sessionId: string,
   body: unknown,
@@ -1189,7 +1190,7 @@ async function applyModelSelection(
  * passing the message seq; the boundary then closes at the following
  * turn/end, which includes the whole turn).
  */
-async function atSeqForMessage(
+export async function atSeqForMessage(
   ctx: BridgeRouteContext,
   sessionId: string,
   messageId: string,
@@ -1207,7 +1208,7 @@ async function atSeqForMessage(
   throw badRequest('message not found for fork', { sessionId, messageId })
 }
 
-async function forkSession(
+export async function forkSession(
   req: BridgeRequest,
   ctx: BridgeRouteContext,
   v2: boolean,
@@ -1229,7 +1230,7 @@ async function forkSession(
  * user-visible `(fork #N)` title from the source session and the number of
  * existing non-subagent forks before calling `session.rename`.
  */
-function forkChainBase(title: string): string {
+export function forkChainBase(title: string): string {
   let base = title
   for (;;) {
     const match = /^(.*?)\s+\(fork #\d+\)$/.exec(base)
@@ -1238,7 +1239,7 @@ function forkChainBase(title: string): string {
   }
 }
 
-function forkNumberInTitle(title: string): number {
+export function forkNumberInTitle(title: string): number {
   let max = 0
   for (const match of title.matchAll(/\(fork #(\d+)\)/g)) {
     const value = Number(match[1])
@@ -1247,7 +1248,7 @@ function forkNumberInTitle(title: string): number {
   return max
 }
 
-async function forkTitleForSource(
+export async function forkTitleForSource(
   ctx: BridgeRouteContext,
   sourceId: string,
 ): Promise<string> {
@@ -1268,7 +1269,7 @@ async function forkTitleForSource(
   return `${base} (fork #${existingForks.length + 1})`
 }
 
-async function forkFromSource(
+export async function forkFromSource(
   ctx: BridgeRouteContext,
   sourceId: string,
   atSeq?: number,
@@ -1297,7 +1298,7 @@ async function forkFromSource(
  * synthetic assistant message plus busy/idle status so the TUI visibly moves
  * while the command runs, even when the mock LLM cannot produce a summary.
  */
-async function runCompactCommand(
+export async function runCompactCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
 ): Promise<void> {
@@ -1337,7 +1338,7 @@ async function runCompactCommand(
   ctx.log(`[bridge] /compact: ${text}`)
 }
 
-async function createSession(
+export async function createSession(
   req: BridgeRequest,
   ctx: BridgeRouteContext,
   v2: boolean,
@@ -1388,7 +1389,7 @@ async function createSession(
   return json(200, v2 ? { data: toV2Session(view, id, ctx) } : toV1Session(view, id, ctx))
 }
 
-async function permissionReply(
+export async function permissionReply(
   ctx: BridgeRouteContext,
   requestID: string,
   body: unknown,
@@ -1418,7 +1419,7 @@ async function permissionReply(
   ctx.state.removePermission(requestID)
 }
 
-async function questionReply(
+export async function questionReply(
   ctx: BridgeRouteContext,
   requestID: string,
   body: unknown,
@@ -1437,7 +1438,7 @@ async function questionReply(
   ctx.state.removeQuestion(requestID)
 }
 
-async function questionReject(
+export async function questionReject(
   ctx: BridgeRouteContext,
   requestID: string,
 ): Promise<void> {
@@ -1450,7 +1451,7 @@ async function questionReject(
   ctx.state.removeQuestion(requestID)
 }
 
-function producedFilesV1(diffs: readonly { file?: string; additions: number; deletions: number }[]): V1FileDiff[] {
+export function producedFilesV1(diffs: readonly { file?: string; additions: number; deletions: number }[]): V1FileDiff[] {
   return diffs.map((diff) => ({
     file: diff.file ?? '',
     before: '',
@@ -1460,7 +1461,7 @@ function producedFilesV1(diffs: readonly { file?: string; additions: number; del
   }))
 }
 
-function historyChanges(history: { events: HistoryEntry[] }): FileChange[] {
+export function historyChanges(history: { events: HistoryEntry[] }): FileChange[] {
   const calls = new Map<string, ToolCallInfo>()
   const changes: FileChange[] = []
   for (const entry of history.events) {
@@ -1490,7 +1491,7 @@ function historyChanges(history: { events: HistoryEntry[] }): FileChange[] {
   return changes
 }
 
-function historyFileDiffs(history: { events: HistoryEntry[]; projections?: { values?: Partial<Record<string, unknown>> } }): Array<{ file?: string; patch?: string; additions: number; deletions: number; status?: 'added' | 'deleted' | 'modified' }> {
+export function historyFileDiffs(history: { events: HistoryEntry[]; projections?: { values?: Partial<Record<string, unknown>> } }): Array<{ file?: string; patch?: string; additions: number; deletions: number; status?: 'added' | 'deleted' | 'modified' }> {
   const values = history.projections?.values as Partial<Record<string, unknown>> | undefined
   if (values?.['produced-files'] !== undefined) {
     return convertProducedFiles(values['produced-files'])
@@ -1503,7 +1504,7 @@ function historyFileDiffs(history: { events: HistoryEntry[]; projections?: { val
  * fold the latest `goal/change` event when the projection is unavailable.
  * `null` (clear tombstone) means no goal is rendered.
  */
-function goalFromHistory(history: {
+export function goalFromHistory(history: {
   projections?: { values?: Partial<Record<string, unknown>> }
   events: readonly HistoryEntry[]
 }): unknown {
@@ -1541,499 +1542,7 @@ export function createBridgeRouter(
     routes.push({ method, pattern, kind, handler })
   }
 
-  // ---- v1 boot / catalog routes ----
-  register('GET', '/path', 'json', async (_req, ctx) => {
-    const directory = ctx.cwd
-    return json(200, {
-      home: directory,
-      state: 'ready',
-      config: '',
-      worktree: directory,
-      directory,
-      path: directory,
-    })
-  })
-
-  register('GET', '/project/current', 'json', async (_req, ctx) => json(200, {
-    id: projectIdFor(ctx.cwd),
-    worktree: ctx.cwd,
-    time: { created: 0 },
-  }))
-
-  register('GET', '/project/global/directories', 'json', async (_req, ctx) => json(200, [
-    { directory: ctx.cwd },
-  ]))
-
-  register('GET', '/config', 'json', async () => json(200, { autoupdate: false }))
-
-  register('GET', '/config/providers', 'json', async (_req, ctx) => {
-    const groups = await modelGroups(ctx)
-    return json(200, { providers: convertToV1Providers(groups), default: {} })
-  })
-
-  register('GET', '/provider', 'json', async (_req, ctx) => {
-    const groups = await modelGroups(ctx)
-    return json(200, convertToProviderCatalog(groups))
-  })
-
-  register('GET', '/provider/auth', 'json', async () => json(200, {}))
-
-  register('GET', '/agent', 'json', async (_req, ctx) => json(200, [
-    await v1DefaultAgent(ctx),
-    ...(await dshPresetAgents(ctx)),
-  ]))
-  // `/preset` stays advertised as a server command: the 1.18.18 TUI opens a
-  // slash popup for any `/` input, so the first Enter completes to `/preset `
-  // and the second Enter executes through `POST /session/:id/command`. The
-  // prompt routes below additionally capture `/preset` typed with a trailing
-  // space (or after Esc), so every path ends with a visible SSE result.
-  register('GET', '/command', 'json', async (req, ctx) => json(200, [
-    PRESET_COMMAND_V1,
-    GOAL_COMMAND_V1,
-    HELP_COMMAND_V1,
-    ...(await skillCommandsV1(ctx, req.query.get('directory') ?? undefined)),
-  ]))
-  register('GET', '/skill', 'json', async (req, ctx) => json(200, await skillList(ctx, req.query.get('directory') ?? undefined)))
-  for (const bare of ['/reference', '/integration']) {
-    register('GET', bare, 'json', async () => json(200, []))
-  }
-
-  // ---- v2 boot / catalog routes ----
-  register('GET', '/api/location', 'json', async (_req, ctx) => json(200, locationInfo(ctx)))
-
-  register('GET', '/api/agent', 'json', async (_req, ctx) => json(200, {
-    location: locationInfo(ctx),
-    data: [await v2DefaultAgent(ctx), ...(await dshPresetAgentsV2(ctx))],
-  }))
-
-  register('GET', '/api/command', 'json', async (_req, ctx) => json(200, {
-    location: locationInfo(ctx),
-    data: [
-      PRESET_COMMAND_V2,
-      GOAL_COMMAND_V2,
-      HELP_COMMAND_V2,
-      ...(await skillCommandsV2(ctx, _req.query.get('directory') ?? undefined)),
-    ],
-  }))
-  register('GET', '/api/skill', 'json', async (req, ctx) => json(200, {
-    location: locationInfo(ctx),
-    data: await skillList(ctx, req.query.get('directory') ?? undefined),
-  }))
-  for (const bare of ['/api/reference', '/api/integration']) {
-    register('GET', bare, 'json', async (_req, ctx) => json(200, v2LocationBody(ctx)))
-  }
-
-  register('GET', '/api/model', 'json', async (_req, ctx) => {
-    const groups = await modelGroups(ctx)
-    return json(200, { location: locationInfo(ctx), data: convertToV2Models(groups) })
-  })
-
-  register('GET', '/api/provider', 'json', async (_req, ctx) => {
-    const groups = await modelGroups(ctx)
-    return json(200, { location: locationInfo(ctx), data: convertToV2Providers(groups) })
-  })
-
-  register('GET', '/api/permission/saved', 'json', async (_req, ctx) => json(200, {
-    data: ctx.state.savedPermissionsList().map((saved) => ({
-      id: saved.toolName,
-      sessionID: saved.sessionId,
-      grantedAt: saved.grantedAt,
-    })),
-  }))
-
-  // ---- v1 sessions ----
-  register('GET', '/session', 'json', async (_req, ctx) => {
-    const list = await cachedSessionList(ctx)
-    const items = filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined, cwd)
-    recordSessionSummaries(ctx, items)
-    await warmListTitles(ctx, items)
-    return json(200, items.map((item) => convertSessionSummary(item, {
-      cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
-      title: ctx.state.sessionTitleFor(String(item.sessionId)),
-    })))
-  })
-
-  register('GET', '/session/status', 'json', async (_req, ctx) => {
-    const list = await cachedSessionList(ctx)
-    const status: Record<string, SessionStatus> = {}
-    for (const item of filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined, cwd)) {
-      status[String(item.sessionId)] = item.running ? { type: 'busy' } : { type: 'idle' }
-    }
-    return json(200, status)
-  })
-
-  register('POST', '/session', 'json', (req, ctx) => createSession(req, ctx, false))
-
-  register('POST', '/session/:id/fork', 'json', (req, ctx) => forkSession(req, ctx, false))
-
-  register('POST', '/session/:id/summarize', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    await runCompactCommand(ctx, id)
-    return json(200, true)
-  })
-
-  // Legacy alias kept for clients that call the endpoint by its action name.
-  register('POST', '/session/:id/compact', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    await runCompactCommand(ctx, id)
-    return json(200, true)
-  })
-
-  register('GET', '/session/:id', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const view = await sessionView(ctx, id)
-    return json(200, toV1Session(view, id, ctx))
-  })
-
-  register('PATCH', '/session/:id', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const body = bodyAsRecord(req.body)
-    if (typeof body.title !== 'string') throw badRequest('session update requires a string title')
-    await rpc(ctx, 'session.rename', { sessionId: sid(id), title: body.title })
-    ctx.state.setSessionTitle(id, body.title)
-    ctx.state.invalidateSession()
-    const view = await sessionView(ctx, id)
-    return json(200, toV1Session(view, id, ctx))
-  })
-
-  register('GET', '/session/:id/message', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const limitRaw = req.query.get('limit')
-    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
-    const history = await cachedSessionHistory(ctx, id, { maxMessages: limit })
-    const defaultModel = await defaultModelRef(ctx)
-    const entries = history.events
-    return json(200, convertMessagesV1(
-      entries.map((entry) => entry.event),
-      {
-        sessionId: id,
-        cwd,
-        defaultModel,
-        onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`),
-      },
-      entries.map((entry) => entry.view),
-    ))
-  })
-
-  register('POST', '/session/:id/message', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
-    const slash = slashPromptCapture(content)
-    if (slash !== undefined) {
-      const outcome = await runSlashCommand(ctx, id, slash)
-      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
-    }
-    await applyModelSelection(ctx, id, req.body)
-    await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
-    ctx.state.markInput()
-    ctx.state.invalidateSession(id)
-    return json(200, pendingAssistantPlaceholder(id, cwd))
-  })
-
-  // Alias used by the dsh-oc e2e matrix; the official SDK prompt route is
-  // `POST /session/:id/message` (v1) and `POST /api/session/:id/prompt` (v2).
-  register('POST', '/session/:id/prompt', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
-    const slash = slashPromptCapture(content)
-    if (slash !== undefined) {
-      const outcome = await runSlashCommand(ctx, id, slash)
-      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
-    }
-    await applyModelSelection(ctx, id, req.body)
-    await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
-    ctx.state.markInput()
-    ctx.state.invalidateSession(id)
-    return json(200, pendingAssistantPlaceholder(id, cwd))
-  })
-
-  // `opencode --mini` interactive attach submits through promptAsync.
-  register('POST', '/session/:id/prompt_async', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const body = bodyAsRecord(req.body)
-    const content = parsePromptParts(body.parts, cwd)
-    const slash = slashPromptCapture(content)
-    if (slash !== undefined) {
-      const outcome = await runSlashCommand(ctx, id, slash)
-      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return json(204)
-    }
-    const agent = typeof body.agent === 'string' && body.agent.length > 0 ? body.agent : undefined
-    if (agent !== undefined && agent !== DEFAULT_AGENT_NAME) {
-      try {
-        await switchAgentPreset(ctx, id, agent)
-        broadcastSessionAgent(ctx, id, agent)
-      } catch (error) {
-        ctx.log(`[bridge] prompt_async agent switch failed: ${error instanceof Error ? error.message : String(error)}`)
-      }
-    }
-    await applyModelSelection(ctx, id, body)
-    await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
-    ctx.state.markInput()
-    ctx.state.invalidateSession(id)
-    return json(204)
-  })
-
-  register('POST', '/session/:id/abort', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    await rpc(ctx, 'session.cancel', { sessionId: sid(id) })
-    return json(200, true)
-  })
-
-  register('POST', '/session/:id/command', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const body = bodyAsRecord(req.body)
-    const command = typeof body.command === 'string' ? body.command : ''
-    const argumentsRaw = typeof body.arguments === 'string' ? body.arguments : ''
-    const name = command.replace(/^\//, '')
-    if (name === 'preset') {
-      const outcome = await runPresetCommand(ctx, id, argumentsRaw.trim())
-      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
-    }
-    if (name === 'goal') {
-      const outcome = await runGoalCommand(ctx, id, argumentsRaw)
-      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
-    }
-    if (name === 'help') {
-      const outcome = runHelpCommand(ctx, id, argumentsRaw)
-      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
-    }
-    const skills = await skillListForSession(ctx, id)
-    if (skills.some((skill) => skill.name === name)) {
-      const promptText = argumentsRaw.trim() === '' ? `/${name}` : `/${name} ${argumentsRaw.trim()}`
-      await rpc(ctx, 'session.prompt', {
-        sessionId: sid(id),
-        mode: 'queue',
-        content: [{ type: 'text', text: promptText }],
-      })
-      ctx.state.invalidateSession(id)
-      return json(200, pendingAssistantPlaceholder(id, cwd))
-    }
-    throw badRequest(`unsupported command "${command}"`)
-  })
-
-  register('GET', '/session/:id/todo', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const history = await cachedSessionHistory(ctx, id)
-    let todos: unknown
-    for (let index = history.events.length - 1; index >= 0; index--) {
-      const event = (history.events[index] as HistoryEntry).event
-      if (event.type === 'todo/write') {
-        todos = event.data.todos
-        break
-      }
-    }
-    if (todos === undefined && history.projections) {
-      const values = history.projections.values as Partial<Record<string, unknown>>
-      if (values.todos !== undefined) todos = values.todos
-    }
-    return json(200, convertGoalTodos(goalFromHistory(history), todos ?? []))
-  })
-
-  register('GET', '/session/:id/diff', 'json', async (req, ctx) => {
-    const id = req.params.id as string
-    const history = await cachedSessionHistory(ctx, id)
-    return json(200, producedFilesV1(filterGitTrackedDiffs(ctx.cwd, historyFileDiffs(history))))
-  })
-
-  // ---- permission / question (legacy v1-style routes) ----
-  register('GET', '/permission', 'json', async (_req, ctx) => json(200,
-    [...ctx.state.permissions.values()].map(toPermissionRequest),
-  ))
-
-  register('POST', '/permission/:requestID/reply', 'json', async (req, ctx) => {
-    const requestID = req.params.requestID as string
-    await permissionReply(ctx, requestID, req.body)
-    return json(200, true)
-  })
-
-  register('GET', '/question', 'json', async (_req, ctx) => json(200,
-    [...ctx.state.questions.values()].map(toQuestionRequest),
-  ))
-
-  register('POST', '/question/:requestID/reply', 'json', async (req, ctx) => {
-    const requestID = req.params.requestID as string
-    await questionReply(ctx, requestID, req.body)
-    return json(200, true)
-  })
-
-  register('POST', '/question/:requestID/reject', 'json', async (req, ctx) => {
-    const requestID = req.params.requestID as string
-    await questionReject(ctx, requestID)
-    return json(200, true)
-  })
-
-  // ---- v2 sessions ----
-  register('GET', '/api/session', 'json', async (req, ctx) => {
-    const search = req.query.get('search')
-    let all: SessionSummary[]
-    if (search !== null && search.length > 0) {
-      const results = await rpc(ctx, 'session.search', { query: search })
-      const ids = new Set(results.items.map((item) => String(item.sessionId)))
-      const list = await cachedSessionList(ctx)
-      all = list.filter((item) => ids.has(String(item.sessionId)))
-    } else {
-      all = await cachedSessionList(ctx)
-    }
-    const filtered = filterSessionsByDirectory(all, req.query.get('directory') ?? undefined, cwd)
-    const limitRaw = req.query.get('limit')
-    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
-    const cursorRaw = req.query.get('cursor')
-    const offset = cursorRaw === null ? 0 : decodeSessionCursor(cursorRaw)
-    const ordered = req.query.get('order') === 'asc' ? [...filtered].reverse() : filtered
-    const page = ordered.slice(offset, offset + limit)
-    const nextOffset = offset + page.length
-    recordSessionSummaries(ctx, page)
-    await warmListTitles(ctx, page)
-    return json(200, {
-      data: page.map((item) => convertSessionSummaryV2(item, {
-        cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
-        title: ctx.state.sessionTitleFor(String(item.sessionId)),
-      })),
-      cursor: {
-        ...(nextOffset < filtered.length ? { next: encodeSessionCursor(nextOffset) } : {}),
-        ...(offset > 0 ? { previous: encodeSessionCursor(Math.max(0, offset - limit)) } : {}),
-      },
-    })
-  })
-
-  register('POST', '/api/session', 'json', (req, ctx) => createSession(req, ctx, true))
-
-  register('POST', '/api/session/:sessionID/fork', 'json', (req, ctx) => forkSession(req, ctx, true))
-
-  register('POST', '/api/session/:sessionID/compact', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    await runCompactCommand(ctx, id)
-    return json(204)
-  })
-
-  register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
-    const slash = slashPromptCapture(content)
-    if (slash !== undefined) {
-      const outcome = await runSlashCommand(ctx, id, slash)
-      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return json(200, {
-        data: {
-          id: `msg_${randomUUID()}`,
-          sessionID: id,
-          prompt: { parts: content },
-          delivery: 'queue',
-          timeCreated: Date.now(),
-          admittedSeq: 0,
-        },
-      })
-    }
-    await applyModelSelection(ctx, id, req.body)
-    await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
-    ctx.state.markInput()
-    ctx.state.invalidateSession(id)
-    return json(200, {
-      data: {
-        id: `msg_${randomUUID()}`,
-        sessionID: id,
-        prompt: { parts: content },
-        delivery: 'queue',
-        timeCreated: Date.now(),
-        admittedSeq: 0,
-      },
-    })
-  })
-
-  register('GET', '/api/session/:sessionID', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    const view = await sessionView(ctx, id)
-    return json(200, { data: toV2Session(view, id, ctx) })
-  })
-
-  register('POST', '/api/session/:sessionID/model', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    await applyModelSelection(ctx, id, req.body)
-    return json(204)
-  })
-
-  register('POST', '/api/session/:sessionID/agent', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    const agent = typeof bodyAsRecord(req.body).agent === 'string'
-      ? (bodyAsRecord(req.body).agent as string)
-      : ''
-    if (agent === '') throw badRequest('agent switch requires a string agent')
-    await switchAgentPreset(ctx, id, agent)
-    broadcastSessionAgent(ctx, id, agent)
-    ctx.state.invalidateSession(id)
-    return json(204)
-  })
-
-  register('GET', '/api/session/:sessionID/message', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    const limitRaw = req.query.get('limit')
-    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
-    const cursorRaw = req.query.get('cursor')
-    const beforeSeq = cursorRaw === null ? undefined : decodeMessageCursor(cursorRaw)
-    const history = await cachedSessionHistory(ctx, id, { maxMessages: limit, beforeSeq })
-    const defaultModel = await defaultModelRef(ctx)
-    const entries = history.events
-    const oldest = oldestSurfaceSeq(entries)
-    const data = convertMessagesV2(
-      entries.map((entry) => entry.event),
-      {
-        sessionId: id,
-        cwd,
-        defaultModel,
-        onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
-      },
-      entries.map((entry) => entry.view),
-    )
-    const response: SessionMessagesResponse = {
-      data: req.query.get('order') === 'desc' ? data.reverse() : data,
-      cursor: {
-        ...(history.hasMore && oldest !== undefined ? { previous: encodeMessageCursor(oldest) } : {}),
-      },
-    }
-    return json(200, response)
-  })
-
-  register('GET', '/api/session/:sessionID/diff', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    const history = await cachedSessionHistory(ctx, id)
-    return json(200, filterGitTrackedDiffs(ctx.cwd, historyFileDiffs(history)))
-  })
-
-  register('GET', '/api/session/:sessionID/permission', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    return json(200, { data: ctx.state.permissionsForSession(id).map(toPermissionV2) })
-  })
-
-  register('POST', '/api/session/:sessionID/permission/:requestID/reply', 'json', async (req, ctx) => {
-    const requestID = req.params.requestID as string
-    await permissionReply(ctx, requestID, req.body)
-    return json(204)
-  })
-
-  register('GET', '/api/session/:sessionID/question', 'json', async (req, ctx) => {
-    const id = req.params.sessionID as string
-    return json(200, { data: ctx.state.questionsForSession(id).map(toQuestionV2) })
-  })
-
-  register('POST', '/api/session/:sessionID/question/:requestID/reply', 'json', async (req, ctx) => {
-    const requestID = req.params.requestID as string
-    await questionReply(ctx, requestID, req.body)
-    return json(204)
-  })
-
-  register('POST', '/api/session/:sessionID/question/:requestID/reject', 'json', async (req, ctx) => {
-    const requestID = req.params.requestID as string
-    await questionReject(ctx, requestID)
-    return json(204)
-  })
-
-  // ---- SSE ----
-  register('GET', '/global/event', 'sse', async () => ({ status: 200 }))
+  registerRoutes(register)
 
   for (const route of stubRoutes) routes.push(route)
 
@@ -2249,7 +1758,7 @@ export function createBridgeRouter(
   }
 }
 
-function matchPattern(pattern: string, pathname: string): boolean {
+export function matchPattern(pattern: string, pathname: string): boolean {
   const patternSegments = pattern.split('/')
   const pathSegments = pathname.split('/')
   if (patternSegments.length !== pathSegments.length) return false
