@@ -68,10 +68,10 @@ jobs:
           echo "--- manual pnpm add mock-server ---"
           (cd "$DSH_HOME/profiles/oc" && pnpm add @deepseek-ai/dsh-llm-mock-server@0.1.0-rc.6 2>&1 | tail -60) || true
 
-      - name: API e2e (push regression)
+      - name: Stable e2e (push regression)
         if: github.event_name == 'push'
         env:
-          CI_E2E_SUBSET: "api"
+          CI_E2E_SUBSET: "1"
         run: bash scripts/check-all.sh --e2e
 
       - name: Full e2e + perf scale (manual)
