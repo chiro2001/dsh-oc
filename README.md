@@ -107,4 +107,4 @@ pnpm run e2e       # 全量 e2e（真实 opencode TUI）
 开发环境、常用命令、自测门槛、分支与提交流程、安装/更新与二进制策略见
 [AGENTS.md](AGENTS.md)；人类贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 其它文档：[docs/PLAN.md](docs/PLAN.md)、[docs/ROADMAP.md](docs/ROADMAP.md)、
-[docs/CHANGELOG.md](docs/CHANGELOG.md)。
+[docs/CHANGELOG.md](docs/CHANGELOG.md)、[docs/MANUAL-TEST.md](docs/MANUAL-TEST.md)。
