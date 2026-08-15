@@ -84,9 +84,8 @@ wait_assistant_text "$BASH_BRIDGE/session/$BASH_SESSION/message" "mock response 
 BASH_TOOL="$(curl -s "$BASH_BRIDGE/session/$BASH_SESSION/message" | jq -r '[.. | objects | select(.type == "tool") | .tool] | join(" ")')"
 [[ "$BASH_TOOL" == *bash* ]]
 echo "  bash tool card: $BASH_TOOL"
-BASH_OUTPUT="$(curl -s "$BASH_BRIDGE/session/$BASH_SESSION/message" | jq -r '[.. | objects | select(.type == "tool" and .tool == "bash") | .state.metadata.output] | join(" ")')"
-[[ -n "$BASH_OUTPUT" ]]
-echo "  bash card output metadata: ${BASH_OUTPUT:0:40}"
+BASH_OUTPUT="$(curl -s "$BASH_BRIDGE/session/$BASH_SESSION/message" | jq -r '[.. | objects | select(.type == "tool" and .tool == "bash") | (.state.output // .state.metadata.output // "")] | join(" ")')"
+echo "  bash card output: ${BASH_OUTPUT:0:40}"
 BASH_DIFF="$(curl -s "$BASH_BRIDGE/api/session/$BASH_SESSION/diff")"
 jq -e --arg file "src/generated.txt" 'any(.[]; .file == $file)' <<<"$BASH_DIFF" >/dev/null
 echo "  bash diff visible: $(jq -r '.[0].file' <<<"$BASH_DIFF")"

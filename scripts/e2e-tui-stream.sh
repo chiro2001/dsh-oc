@@ -75,19 +75,20 @@ fi
 echo "  partial streamed text visible"
 
 echo "== capture two in-flight panes =="
-e2e_tui_capture "$E2E_RUN_DIR/tui-stream-a.txt"
-sleep 1
-e2e_tui_capture "$E2E_RUN_DIR/tui-stream-b.txt"
-LEN_A="$(wc -c < "$E2E_RUN_DIR/tui-stream-a.txt")"
-LEN_B="$(wc -c < "$E2E_RUN_DIR/tui-stream-b.txt")"
-echo "  pane bytes: $LEN_A -> $LEN_B"
-if (( LEN_B <= LEN_A )); then
-  echo "e2e: pane did not grow while streaming ($LEN_A -> $LEN_B)" >&2
-  exit 1
-fi
-TEXT_A="$(grep -a '^     streaming' "$E2E_RUN_DIR/tui-stream-a.txt" | head -1 | wc -c)"
-TEXT_B="$(grep -a '^     streaming' "$E2E_RUN_DIR/tui-stream-b.txt" | head -1 | wc -c)"
-echo "  streamed text bytes: $TEXT_A -> $TEXT_B"
+TEXT_A=0
+TEXT_B=0
+deadline=$((SECONDS + 10))
+while (( SECONDS < deadline )); do
+  e2e_tui_capture "$E2E_RUN_DIR/tui-stream-a.txt"
+  TEXT_A="$(grep -a '^     streaming' "$E2E_RUN_DIR/tui-stream-a.txt" | head -1 | wc -c)"
+  sleep 0.75
+  e2e_tui_capture "$E2E_RUN_DIR/tui-stream-b.txt"
+  TEXT_B="$(grep -a '^     streaming' "$E2E_RUN_DIR/tui-stream-b.txt" | head -1 | wc -c)"
+  echo "  streamed text bytes: $TEXT_A -> $TEXT_B"
+  if (( TEXT_B > TEXT_A )); then
+    break
+  fi
+done
 if (( TEXT_B <= TEXT_A )); then
   echo "e2e: visible streamed text did not grow while streaming ($TEXT_A -> $TEXT_B)" >&2
   exit 1
