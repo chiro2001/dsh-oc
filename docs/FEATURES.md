@@ -96,7 +96,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`42726f7`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`5509bb3`（2026-08-15）。
 
 ### 路由注册表
 
@@ -186,7 +186,7 @@
 | `tests/convert/session.spec.ts` | 6 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
-| `tests/scaffold.spec.ts` | 7 | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
+| `tests/scaffold.spec.ts` | 7 | 4ddba09 feat(profile): mount dsh agent presets so /preset can switch minimal etc |
 | `tests/tui/binary.spec.ts` | 11 | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `tests/tui/index.spec.ts` | 19 | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
@@ -220,15 +220,16 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
-| `scripts/e2e-api.sh` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
+| `scripts/e2e-api.sh` | eb9d45f test(e2e): use standard preset for approval flow |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
-| `scripts/e2e-tui-stream.sh` | 47138cd feat(bridge): stream assistant chunks and report real message duration |
+| `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
 | `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
-| `scripts/e2e-tui-tools.sh` | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
+| `scripts/e2e-tui-tools.sh` | b06c951 test(e2e): make tools and stream assertions robust |
 | `scripts/e2e-tui-turn.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 
