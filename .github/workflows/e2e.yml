@@ -48,5 +48,13 @@ jobs:
           chmod +x /tmp/oc-bin/opencode
           echo "DSH_OC_OPENCODE_BIN=/tmp/oc-bin/opencode" >> "$GITHUB_ENV"
 
+      - name: Debug dsh plugin pnpm
+        run: |
+          export DSH_HOME=/tmp/dsh-debug
+          mkdir -p "$DSH_HOME"
+          dsh plugin --profile oc add /home/runner/work/dsh-oc/dsh-oc 2>&1 | tail -20 || true
+          echo "--- manual pnpm install ---"
+          (cd "$DSH_HOME/profiles/oc" && pnpm install 2>&1 | tail -40) || true
+
       - name: Full e2e + perf scale
         run: bash scripts/check-all.sh --e2e --scale ${{ github.event.inputs.sessions }}
