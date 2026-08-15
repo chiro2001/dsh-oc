@@ -1,23 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule, TuiThemeCurrent } from "@opencode-ai/plugin/tui"
-
-/** "DSH" in figlet Standard. */
-const DSH = [
-  "  ____  ____  _   _ ",
-  " |  _ \\/ ___|| | | |",
-  " | | | \\___ \\| |_| |",
-  " | |_| |___) |  _  |",
-  " |____/|____/|_| |_|",
-]
-
-/** "OC" in figlet Standard. */
-const OC = [
-  "   ___   ____ ",
-  "  / _ \\ / ___|",
-  " | | | | |    ",
-  " | | | | |___ ",
-  "  \\___/ \\____|",
-]
+import { DSH, OC } from "./art"
 
 const GAP = "   "
 const SUBTITLE = "DeepSeek Harness × OpenCode TUI"

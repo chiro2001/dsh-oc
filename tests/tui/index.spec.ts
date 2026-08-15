@@ -265,6 +265,7 @@ describe('prepareOpenCodeTuiState', () => {
   it('ships the branding plugin source from the repo', () => {
     expect(existsSync(join(brandingSourceDir(), 'tui.tsx'))).toBe(true)
     expect(existsSync(join(brandingSourceDir(), 'package.json'))).toBe(true)
+    expect(existsSync(join(brandingSourceDir(), 'art.ts'))).toBe(true)
   })
 })
 

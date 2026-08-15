@@ -27,7 +27,7 @@ deadline=$((SECONDS + 45))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-brand.txt"
   if grep -qa "DeepSeek Harness" "$E2E_RUN_DIR/tui-brand.txt" \
-    || grep -qa "____  ____" "$E2E_RUN_DIR/tui-brand.txt"; then
+    || grep -qa "____  _____ __  __" "$E2E_RUN_DIR/tui-brand.txt"; then
     BRAND_HINT="dsh-oc logo"
     break
   fi

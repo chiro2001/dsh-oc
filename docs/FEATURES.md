@@ -80,7 +80,7 @@
 | 自动更新/热更新关闭 | ✅ | `OPENCODE_DISABLE_AUTOUPDATE=1` + 隔离配置 `autoupdate: false` | `tests/tui/index.spec.ts`、`scripts/e2e-tui-offline.sh` | 本提交 |
 | 后台外网行为关闭（models fetch / LSP download） | ✅ | `OPENCODE_DISABLE_MODELS_FETCH=1`、`OPENCODE_DISABLE_LSP_DOWNLOAD=1` | `tests/tui/index.spec.ts` | 本提交 |
 | `dsh --profile oc --help` 能力摘要 | ✅ | `src/tui/index.ts` `ocHelp`/`helpRequested` | `tests/tui/index.spec.ts`、`scripts/e2e-tui-help.sh` | 本提交 |
-| DSH OC 品牌启动 logo（替换 OpenCode 字符画） | ✅ | `tui-branding/` TUI 插件 + `prepareOpenCodeTuiState` 注入 `tui.json` | `tests/tui/index.spec.ts`、`scripts/e2e-tui-brand.sh` | 本提交 |
+| DSH OC 品牌启动 logo（替换 OpenCode 字符画） | ✅ | `tui-branding/` TUI 插件（figlet 生成，`scripts/generate-tui-branding-art.mjs`）+ `prepareOpenCodeTuiState` 注入 `tui.json` | `tests/tui/branding-art.spec.ts`、`tests/tui/index.spec.ts`、`scripts/e2e-tui-brand.sh` | 本提交 |
 
 ## 8. 分发
 
@@ -108,7 +108,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`91b2ad0`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`de7fe57`（2026-08-15）。
 
 ### 路由注册表
 
@@ -199,9 +199,10 @@
 | `tests/convert/session.spec.ts` | 7 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
-| `tests/protocol-probe.spec.ts` | 2 | — |
+| `tests/protocol-probe.spec.ts` | 2 | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
 | `tests/scaffold.spec.ts` | 7 | 4ddba09 feat(profile): mount dsh agent presets so /preset can switch minimal etc |
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
+| `tests/tui/branding-art.spec.ts` | 3 | — |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `tests/tui/index.spec.ts` | 26 | 91b2ad0 feat(tui): replace OpenCode home logo with DSH OC branding plugin |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
@@ -246,7 +247,8 @@
 | `scripts/e2e-tui-tools.sh` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `scripts/e2e-tui-turn.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
-| `scripts/probe-opencode.mjs` | — |
+| `scripts/generate-tui-branding-art.mjs` | — |
+| `scripts/probe-opencode.mjs` | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
