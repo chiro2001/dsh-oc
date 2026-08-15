@@ -1,6 +1,10 @@
 # dsh-oc 实现规划
 
-> 状态：方案已确认，待执行。执行者应先阅读本文，再阅读同目录的 `PROTOCOL.md`。
+> ⚠️ 历史存档：本文是立项初期的实现规划，功能已基本落地。当前能力见
+> [FEATURES.md](FEATURES.md)、协议见 [PROTOCOL.md](PROTOCOL.md)、下一阶段见
+> [ROADMAP.md](ROADMAP.md)、开发指南见 [../AGENTS.md](../AGENTS.md)。
+>
+> 状态：方案已确认，主体已执行。
 > 仓库：`chiro2001/dsh-oc`（后续可能转移为 `chiro/dsh-oc`）。
 > 目标读者：后续按本计划实施 dsh-oc 的模型/工程师。
 

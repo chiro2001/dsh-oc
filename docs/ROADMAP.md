@@ -229,11 +229,11 @@ opencode 版本升级后，API 路由/类型可能变化；需要用户可自助
 
 | 编号 | 方向 | 状态 |
 |---|---|---|
-| M1 | 文档与已知限制同步 | ✅ 进行中：README/FEATURES 已同步退出 splash 说明；`features:update` 自动追踪 |
+| M1 | 文档与已知限制同步 | ✅ README（用户）与 AGENTS.md（Agent/开发）分离，CHANGELOG/FEATURES 自动追踪 |
 | M2 | 开发流程与 CI | ✅ CI 覆盖 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/`chore-*`；push 自动跑 API e2e 子集，手动触发全量 e2e + 压测 |
-| M3 | 社区贡献流程 | ✅ 新增 `CONTRIBUTING.md`、PR 模板、Issue 模板（bug/feature） |
+| M3 | 社区贡献流程 | ✅ `CONTRIBUTING.md`、PR 模板、Issue 模板（bug/feature） |
 | M4 | 分支策略与清理 | ✅ `scripts/cleanup-merged-branches.sh`（dry-run 默认）；历史 `feat-*` 已全部并入 main |
-| M5 | 重构（router 拆分/缓存统一） | ⬜ 待排期：`src/bridge/router.ts` 按路由域拆分，状态/缓存管理收敛 |
+| M5 | 重构（router 拆分/缓存统一） | ✅ 路由注册按域拆到 `src/bridge/routes/`；缓存/在途合并与失效 generation 已统一 |
 
 ### M1 文档
 
@@ -260,11 +260,13 @@ opencode 版本升级后，API 路由/类型可能变化；需要用户可自助
   `bash scripts/cleanup-merged-branches.sh`（dry-run 先看，`--apply` 删本地，
   `--remote` 同时删远端；工作树中仍检出的分支会跳过）。
 
-### M5 重构候选
+### M5 重构（已完成）
 
-- `src/bridge/router.ts` 约 2200 行，按 v1/v2/session/tool/permission/goal 域拆分。
-- `InteractionState` 各缓存/映射的失效规则统一为单一生成号管理。
-- e2e 辅助函数（`tests/e2e/common.sh`）收敛重复的 tmux/等待逻辑。
+- 路由注册按域拆到 `src/bridge/routes/{boot,session-v1,session-v2,permission}.ts`，
+  `router.ts` 从约 2200 行降到约 1600 行，协议探针自动扫描路由目录。
+- `InteractionState` 缓存/在途合并/失效 generation 统一管理。
+- 后续可选：`tests/e2e/common.sh` tmux/等待辅助收敛、helper 进一步下沉
+  （当前命令域 helper 互相耦合，收益有限，暂不拆）。
 
 ---
 

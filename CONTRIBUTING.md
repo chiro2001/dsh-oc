@@ -1,5 +1,8 @@
 # 参与 dsh-oc 开发
 
+> AI Agent 接手仓库请先读 [AGENTS.md](AGENTS.md)（结构、命令、自测门槛与陷阱）；
+> 本文面向人类贡献者。
+
 dsh-oc 是 DeepSeek Harness × OpenCode TUI 前端：dsh 负责全部后端逻辑，opencode
 官方 TUI 只负责渲染与键盘，dsh-oc 在 dsh 进程内提供 OpenCode 兼容的 HTTP/SSE
 bridge。仓库：`chiro2001/dsh-oc`，npm 包名 `@chiro2001/dsh-oc`（未发布

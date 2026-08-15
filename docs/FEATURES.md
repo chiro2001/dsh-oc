@@ -147,7 +147,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`b6e334c`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`9457a1b`（2026-08-16）。
 
 ### 路由注册表
 
@@ -173,7 +173,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 38 | b6e334c fix(bridge): close reasoning parts when text starts or on interrupt |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 79 | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
+| `tests/bridge-router.spec.ts` | 79 | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 20 | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -209,15 +209,15 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | 23d25d9 perf(bridge): keep large-home title warm in the background, low concurrency |
+| `src/bridge/router.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
 | `src/bridge/routes.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/boot.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/permission.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
-| `src/bridge/routes/session-v1.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
-| `src/bridge/routes/session-v2.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
+| `src/bridge/routes/session-v1.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
+| `src/bridge/routes/session-v2.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `src/bridge/state.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
+| `src/bridge/state.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/help.ts` | 77f5c63 docs(help): reflect real titles, Esc interrupt and preset inheritance |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
@@ -257,6 +257,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

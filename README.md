@@ -26,6 +26,7 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 - [docs/FEATURES.md](docs/FEATURES.md)：当前功能支持矩阵（自动追踪）。
 - [docs/ROADMAP.md](docs/ROADMAP.md)：下一阶段需求与验收标准。
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)：版本变更记录。
+- [AGENTS.md](AGENTS.md)：面向 AI Agent / 开发者的仓库指南（结构、命令、自测门槛）。
 - [docs/FEATURES.md](docs/FEATURES.md)：功能支持状态矩阵（含自动追踪部分）。
 
 ## 开发完成状态（2026-08-15）
@@ -107,39 +108,14 @@ dsh plugin --profile oc add .
 - `DSH_OC_TUI_TIMESTAMPS=1`：让 TUI 消息默认显示时间戳（写入隔离的 `kv.json`，
   并绑定 `ctrl+shift+t` / `/timestamps` 用于运行时切换）。
 
-## 本地开发
+## 开发者 / Agent
 
-```bash
-pnpm install
-pnpm build
-pnpm typecheck
-pnpm test
-pnpm run features:update   # 刷新 docs/FEATURES.md 的自动追踪部分
-pnpm run perf              # 会话性能测试（生成合成历史 → 启动真实 bridge → 输出 JSON 报告）
-pnpm run e2e               # 全量 e2e（真实 opencode TUI）
-pnpm run e2e:api           # API e2e 子集（快速回归）
-dsh plugin --profile oc add .
-dsh --profile oc
-```
+开发环境、常用命令、自测门槛、分支与提交流程、实现约定与陷阱见
+[AGENTS.md](AGENTS.md)（面向接手仓库的 AI Agent 与开发者）与
+[CONTRIBUTING.md](CONTRIBUTING.md)（人类贡献流程）。
 
-> `lib/` 已纳入版本库：GitHub 直装依赖已构建产物。修改 `src/` 后请运行
-> `pnpm build` 并连同 `lib/` 一起提交，否则 `chiro2001/dsh-oc` 安装的版本不会更新。
-
-## 性能测试
-
-`pnpm run perf` 会生成合成 dsh 会话历史（复用 `@deepseek-ai/dsh-session` 的校验路径），
-启动真实 `dsh --profile oc` bridge，并测量会话列表、消息分页、SSE 首事件延迟与进程内存，
-输出 p50/p95/max 的 JSON 报告：
-
-```bash
-pnpm run perf -- --sessions 1000 --messages-per-session 6 --tools --todos --children 10
-node scripts/perf.mjs --sessions 200 --no-boot   # 只生成不启动
-node scripts/perf.mjs --sessions 5000 --keep     # 保留临时 DSH_HOME 供排查
-```
-
-常用参数：`--sessions N`、`--messages-per-session M`（别名 `--turns K`）、`--tools`、
-`--todos`、`--children C`、`--repeats R`、`--seed N`、`--report PATH`。
-报告默认写入 `.perf/report-*.json`（`.perf/` 已忽略），示例见 `docs/perf/report-example.json`。
+一句话提醒：改 `src/` 后必须 `pnpm build` 并连同 `lib/` 一起提交，否则
+GitHub 直装不会包含新逻辑。
 
 ## 参数透传
 
@@ -201,40 +177,12 @@ $DSH_HOME/opencode/{config,data,state,cache}
 
 ## 自测
 
-```bash
-bash scripts/e2e-api.sh        # HTTP/SSE 路由矩阵 + 会话循环 + 权限流
-bash scripts/e2e-tui-boot.sh   # 真实 opencode TUI 启动/退出 + 终端恢复
-bash scripts/e2e-tui-turn.sh   # 真实 TUI 键盘输入完成一轮对话
-bash scripts/e2e-tui-timestamps.sh  # DSH_OC_TUI_TIMESTAMPS=1 下时间戳文本出现
-bash scripts/e2e-tui-offline.sh     # 代理不可达 + 清空缓存时 TUI 仍能启动
-bash scripts/e2e-tui-version-lock.sh  # 显式二进制版本不匹配时明确报错退出
-bash scripts/e2e-tui-help.sh        # dsh --profile oc --help 输出能力摘要并退出
-bash scripts/e2e-tui-brand.sh       # TUI 首页显示 DSH OC 品牌 logo（替换 OpenCode 字符画）
-bash scripts/e2e-tui-dir.sh         # attach --dir 切到指定工作目录
-bash scripts/e2e-tui-fork.sh        # attach --fork --session 生成 fork #1
-bash scripts/e2e-tui-continue.sh    # attach --continue 恢复最新会话
-bash scripts/e2e-tui-dir-filter.sh  # --dir 下侧边栏/新会话目录过滤
-bash scripts/e2e-tui-mini.sh        # attach --mini 最小界面启动渲染
-bash scripts/e2e-tui-print-logs.sh  # --print-logs 透传给 opencode 子进程
-bash scripts/e2e-tui-skill.sh      # 技能斜杠命令（DSH_OC_E2E_FAKE_SKILLS 注入）
-pnpm run probe                     # 协议路由清单 + 二进制/SDK 版本校验
-bash scripts/check-all.sh          # 一键自测：typecheck+单测+探针+性能冒烟
-bash scripts/check-all.sh --e2e    # 再加全量 TUI/API e2e
-bash scripts/check-all.sh --scale 5000  # 再加 5000 sessions 性能压测
-```
-
-tarball 验证模式（用 npm tarball 而不是本地路径安装）：
+全部自测命令与门槛见 [AGENTS.md](AGENTS.md)；常用入口：
 
 ```bash
-pnpm pack --pack-destination /tmp/dsh-oc-pack-release
-TGZ="$(echo /tmp/dsh-oc-pack-release/chiro2001-dsh-oc-0.1.0-rc.1.tgz)"
-DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-api.sh
-DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-boot.sh
-DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-turn.sh
-DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-timestamps.sh
+pnpm run e2e:api   # 快速 API 回归
+pnpm run e2e       # 全量 e2e（真实 opencode TUI）
 ```
-
-四个脚本必须全部输出 `PASSED`；该模式下 profile 安装的是 tarball 而非本地路径。
 
 ## 网络与更新策略
 
