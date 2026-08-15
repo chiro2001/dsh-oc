@@ -38,6 +38,8 @@
 - README 新增核心功能演示：asciinema 录制真实 TUI，上传 asciinema.org 在线
   播放器（cast 源文件存 `docs/demo/`），覆盖品牌 logo、会话标题、流式回复、
   Esc 打断、工具卡片、退出提示。
+- 报错显示：dsh `host/agent-error` 现在除了 `session.error` 还会广播一条可见的
+  assistant 文本消息（`[错误] …`），TUI 对话区能直接看到错误，不再静默或渲染异常。
 
 ### 修复
 

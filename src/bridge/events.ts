@@ -1428,10 +1428,49 @@ export function fileChangeEvents(
   return events
 }
 
-/** Map a dsh `host/agent-error` frame to the opencode `session.error` event. */
-export function agentErrorEvent(sessionId: string, message: string, cwd: string): BridgeGlobalEvent {
-  return makeEvent(cwd, 'session.error', {
-    sessionID: sessionId,
-    error: { code: 'agent-error', message },
-  }, projectIdFor(cwd))
+/**
+ * Map a dsh `host/agent-error` frame to opencode events: the protocol
+ * `session.error` plus a visible assistant message so the TUI conversation
+ * shows the error text instead of swallowing it or rendering an object.
+ */
+export function agentErrorEvents(sessionId: string, message: string, cwd: string): BridgeGlobalEvent[] {
+  const project = projectIdFor(cwd)
+  const created = Date.now()
+  const id = `msg_err:${randomUUID()}`
+  const partId = `${id}:0`
+  return [
+    makeEvent(cwd, 'session.error', {
+      sessionID: sessionId,
+      error: { code: 'agent-error', message },
+    }, project),
+    makeEvent(cwd, 'message.updated', {
+      sessionID: sessionId,
+      info: {
+        id,
+        sessionID: sessionId,
+        role: 'assistant',
+        agent: DEFAULT_AGENT,
+        time: { created },
+        parentID: `pending:${sessionId}:user`,
+        modelID: 'deepseek-chat',
+        providerID: 'deepseek',
+        mode: DEFAULT_AGENT,
+        path: { cwd, root: cwd },
+        cost: 0,
+        tokens: zeroTokens(),
+      },
+    }, project),
+    makeEvent(cwd, 'message.part.updated', {
+      sessionID: sessionId,
+      part: {
+        id: partId,
+        sessionID: sessionId,
+        messageID: id,
+        type: 'text',
+        text: `[错误] ${message}`,
+        time: { start: created, end: created },
+      },
+      time: created,
+    }, project),
+  ]
 }

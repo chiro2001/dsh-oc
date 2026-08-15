@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import {
+  agentErrorEvents,
   commandResultEvents,
   MuxEventTranslator,
   type BridgeGlobalEvent,
@@ -86,6 +87,23 @@ function translator(
 }
 
 describe('bridge events: session event mapping', () => {
+  it('emits a visible error message for host/agent-error frames', () => {
+    const events = agentErrorEvents('s1', 'mock authentication failed', '/work')
+    expect(events.map((event) => event.payload.type)).toEqual([
+      'session.error',
+      'message.updated',
+      'message.part.updated',
+    ])
+    expect(events[0]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      error: { code: 'agent-error', message: 'mock authentication failed' },
+    })
+    expect((events[1]?.payload.properties.info as { role?: string }).role).toBe('assistant')
+    const part = events[2]?.payload.properties.part as { type?: string; text?: string }
+    expect(part.type).toBe('text')
+    expect(part.text).toContain('mock authentication failed')
+  })
+
   it('maps turn/start and turn/end to status + idle', () => {
     const { translate } = translator()
     const events = translate([

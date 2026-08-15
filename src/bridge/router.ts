@@ -59,7 +59,7 @@ import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertGoalTodos } from './convert/goal.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
-import { agentErrorEvent, commandResultEvents, convertProducedFiles, makeEvent, toSnapshotFileDiffs } from './events.js'
+import { agentErrorEvents, commandResultEvents, convertProducedFiles, makeEvent, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { ocHelp } from '../help.js'
@@ -1634,7 +1634,9 @@ export function createBridgeRouter(
             if (payload.type === 'host/agent-error') {
               const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
               const message = typeof payload.message === 'string' ? payload.message : 'agent error'
-              if (sessionId) hub.send(client, agentErrorEvent(sessionId, message, cwd))
+              if (sessionId) {
+                for (const event of agentErrorEvents(sessionId, message, cwd)) hub.send(client, event)
+              }
             }
             if (payload.type === 'host/session-added' || payload.type === 'host/session-removed') {
               ctx.state.invalidateSession()
