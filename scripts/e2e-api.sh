@@ -243,6 +243,31 @@ wait_assistant() {
 wait_assistant "$BRIDGE/session/$SESSION_V1/message" "mock response recovered"
 wait_assistant "$BRIDGE/api/session/$SESSION_V2/message" "mock response recovered"
 
+echo "== per-session SSE =="
+PER_SESSION_PID=""
+curl -sN --max-time 60 "$BRIDGE/api/session/$SESSION_V2/event" > "$E2E_RUN/per-session-sse.log" 2>/dev/null &
+PER_SESSION_PID=$!
+sleep 2
+curl -s -X POST "$BRIDGE/api/session/$SESSION_V2/prompt" -H 'Content-Type: application/json' \
+  -d '{"parts":[{"type":"text","text":"per session sse probe"}]}' >/dev/null
+PER_SESSION_SEEN=""
+deadline=$((SECONDS + 30))
+while (( SECONDS < deadline )); do
+  if grep -qa '"sessionID":"'"$SESSION_V2"'"' "$E2E_RUN/per-session-sse.log" \
+    && grep -qa '"type":"session.status"' "$E2E_RUN/per-session-sse.log"; then
+    PER_SESSION_SEEN="1"
+    break
+  fi
+  sleep 1
+done
+kill "$PER_SESSION_PID" 2>/dev/null || true
+if [[ -z "$PER_SESSION_SEEN" ]]; then
+  echo "e2e: per-session SSE did not stream events for $SESSION_V2" >&2
+  tail -20 "$E2E_RUN/per-session-sse.log" >&2 || true
+  exit 1
+fi
+echo "  per-session SSE streams events for the requested session"
+
 echo "== fork lineage =="
 USER_MESSAGE_ID="$(curl -s "$BRIDGE/session/$SESSION_V1/message" | jq -er '.[] | select(.info.role == "user") | .info.id' | head -1)"
 [[ -n "$USER_MESSAGE_ID" ]]

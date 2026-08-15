@@ -67,6 +67,7 @@ import { InteractionState, type CachedHistory } from './state.js'
 import { registerRoutes } from './routes.js'
 import { SseHub } from './sse.js'
 import { MuxEventTranslator } from './events.js'
+import type { BridgeGlobalEvent } from './events.js'
 import { stubRoutes } from './stubs.js'
 
 export interface BridgeRequest {
@@ -1582,7 +1583,7 @@ export function createBridgeRouter(
     )
   }
 
-  function startSse(_req: BridgeRequest, res: ServerResponse): void {
+  function startSse(req: BridgeRequest, res: ServerResponse): void {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -1592,6 +1593,14 @@ export function createBridgeRouter(
     res.write('retry: 3000\n\n')
     const client = hub.add(res)
     const controller = client.controller
+    const sessionFilter = (req.params as Record<string, string | undefined>).sessionID
+    const sendToClient = (event: BridgeGlobalEvent): void => {
+      if (sessionFilter !== undefined) {
+        const eventSession = (event.payload.properties as Record<string, unknown> | undefined)?.sessionID
+        if (eventSession !== sessionFilter) return
+      }
+      hub.send(client, event)
+    }
     void (async () => {
       let translator: MuxEventTranslator | undefined
       let listRefreshTimer: NodeJS.Timeout | undefined
@@ -1611,7 +1620,7 @@ export function createBridgeRouter(
           replayGuard,
           sharedState,
           onFlush: (events) => {
-            for (const event of events) hub.send(client, event)
+            for (const event of events) sendToClient(event)
           },
         })
         translator = makeTranslator()
@@ -1639,7 +1648,7 @@ export function createBridgeRouter(
               const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
               const message = typeof payload.message === 'string' ? payload.message : 'agent error'
               if (sessionId) {
-                for (const event of agentErrorEvents(sessionId, message, cwd)) hub.send(client, event)
+                for (const event of agentErrorEvents(sessionId, message, cwd)) sendToClient(event)
               }
             }
             if (payload.type === 'host/session-added' || payload.type === 'host/session-removed') {
@@ -1704,7 +1713,7 @@ export function createBridgeRouter(
               }
             }
             for (const event of translator!.translate(frame)) {
-              hub.send(client, event)
+              sendToClient(event)
             }
           }
         }

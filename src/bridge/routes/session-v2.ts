@@ -141,6 +141,8 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     return R.json(204)
   })
 
+  register('GET', '/api/session/:sessionID/event', 'sse', async () => ({ status: 200 }))
+
   register('POST', '/api/session/:sessionID/agent', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const agent = typeof R.bodyAsRecord(req.body).agent === 'string'
