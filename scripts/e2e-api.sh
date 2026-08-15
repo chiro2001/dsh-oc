@@ -349,7 +349,7 @@ fi
 
 curl -s -X POST "$BRIDGE/session/$SESSION_V1/init" | jq -e '. == true' >/dev/null
 echo "  POST /session/$SESSION_V1/init -> true"
-WAIT_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/wait")"
+WAIT_CODE="$(curl -s --max-time 35 -o /dev/null -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/wait")"
 [[ "$WAIT_CODE" == "204" ]]
 echo "  POST /api/session/$SESSION_V2/wait -> 204"
 curl -s "$BRIDGE/api/session/$SESSION_V2/context" | jq -e '.data | type == "array"' >/dev/null
