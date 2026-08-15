@@ -31,6 +31,8 @@
     "test": "vitest run",
     "branding:art": "node scripts/generate-tui-branding-art.mjs",
     "probe": "node scripts/probe-opencode.mjs",
+    "perf": "node scripts/perf.mjs",
+    "perf:gen": "node scripts/perf-session-gen.mjs",
     "features:update": "node scripts/update-feature-matrix.mjs",
     "pack:dry": "pnpm pack --dry-run"
   },

@@ -4,3 +4,4 @@ node_modules/
 coverage/
 .vitest/
 .e2e/
+.perf/
