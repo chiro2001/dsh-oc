@@ -102,6 +102,8 @@ export interface BridgeRouter {
   setCwd(directory: string): void
   /** Warm the session-list cache in the background after startup. */
   prefetchSessionList(): void
+  /** Warm one session's tail history in the background. */
+  prefetchSession(sessionId: string): void
 }
 
 export interface RouterOptions {
@@ -1859,6 +1861,12 @@ export function createBridgeRouter(
     prefetchSessionList() {
       void cachedSessionList(ctx).catch((error) => {
         log(`[bridge] session list prefetch failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+    },
+    prefetchSession(sessionId: string) {
+      // Match the TUI's initial v1 message fetch (default limit 100).
+      void cachedSessionHistory(ctx, sessionId, { maxMessages: 100 }).catch((error) => {
+        log(`[bridge] session history prefetch failed: ${error instanceof Error ? error.message : String(error)}`)
       })
     },
   }

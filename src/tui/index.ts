@@ -356,6 +356,20 @@ export function tuiDirFromArgs(args: readonly string[]): string | undefined {
   return undefined
 }
 
+/** Extract the `--session <id>` / `-s <id>` / `--session=<id>` value. */
+export function tuiSessionFromArgs(args: readonly string[]): string | undefined {
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index] ?? ''
+    if (arg === '--session' || arg === '-s') {
+      const value = args[index + 1]
+      if (value !== undefined && !value.startsWith('-')) return value
+      continue
+    }
+    if (arg.startsWith('--session=')) return arg.slice('--session='.length)
+  }
+  return undefined
+}
+
 /**
  * Build the child environment: inherit the parent and isolate opencode state
  * under `$DSH_HOME/opencode`. `OPENCODE_CONFIG_CONTENT` is intentionally
@@ -459,6 +473,8 @@ export class OcTuiService extends Service {
         return
       }
     }
+    const sessionId = tuiSessionFromArgs(rawArgs)
+    if (sessionId !== undefined) bridge.prefetchSession?.(sessionId)
 
     let resolved: ResolvedBinary
     try {

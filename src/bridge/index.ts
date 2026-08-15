@@ -11,6 +11,8 @@ export interface OcBridgeValue {
   port: number
   /** Change the bridge working directory (attach `--dir` support). */
   setCwd(directory: string): void
+  /** Warm one session's tail history (attach `--session` resume support). */
+  prefetchSession(sessionId: string): void
 }
 
 /**
@@ -53,6 +55,10 @@ export class OcBridgeService extends Service implements OcBridgeValue {
 
   setCwd(directory: string): void {
     this.router?.setCwd(directory)
+  }
+
+  prefetchSession(sessionId: string): void {
+    this.router?.prefetchSession(sessionId)
   }
 
   private async stop(): Promise<void> {

@@ -19,6 +19,7 @@ import {
   requestExit,
   startOpenCodeTui,
   tuiDirFromArgs,
+  tuiSessionFromArgs,
   tuiTimestampsEnabled,
   type RunningTui,
   type TimerHandle,
@@ -143,6 +144,17 @@ describe('tuiDirFromArgs', () => {
     expect(tuiDirFromArgs(['--dir', '/tmp/work'])).toBe('/tmp/work')
     expect(tuiDirFromArgs(['--dir=/tmp/work'])).toBe('/tmp/work')
     expect(tuiDirFromArgs(['--dir', '--mini'])).toBeUndefined()
+  })
+})
+
+describe('tuiSessionFromArgs', () => {
+  it('extracts --session/-s value forms and ignores missing values', () => {
+    expect(tuiSessionFromArgs([])).toBeUndefined()
+    expect(tuiSessionFromArgs(['--dir', '/tmp'])).toBeUndefined()
+    expect(tuiSessionFromArgs(['--session', 'abc-123'])).toBe('abc-123')
+    expect(tuiSessionFromArgs(['--session=abc-123'])).toBe('abc-123')
+    expect(tuiSessionFromArgs(['-s', 'abc-123'])).toBe('abc-123')
+    expect(tuiSessionFromArgs(['--session', '--mini'])).toBeUndefined()
   })
 })
 

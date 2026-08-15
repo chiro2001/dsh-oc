@@ -126,7 +126,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`ce8e488`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`e2892fb`（2026-08-15）。
 
 ### 路由注册表
 
@@ -209,7 +209,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 30 | 5743dd1 perf(bridge): short-TTL list/history caches with mutation and SSE invalidation |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 55 | ce8e488 perf(bridge): background session-list prefetch after bridge start |
+| `tests/bridge-router.spec.ts` | 56 | e2892fb feat(bridge): honor order=desc on v2 message history route |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -224,7 +224,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 27 | 18741fd feat(tui): make --dir switch the bridge working directory |
+| `tests/tui/index.spec.ts` | 28 | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -245,7 +245,7 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | ce8e488 perf(bridge): background session-list prefetch after bridge start |
-| `src/bridge/router.ts` | ce8e488 perf(bridge): background session-list prefetch after bridge start |
+| `src/bridge/router.ts` | e2892fb feat(bridge): honor order=desc on v2 message history route |
 | `src/bridge/rpc.ts` | ecb00f1 feat(bridge): v2 session search with limit and directory filters |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 5743dd1 perf(bridge): short-TTL list/history caches with mutation and SSE invalidation |
@@ -282,6 +282,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

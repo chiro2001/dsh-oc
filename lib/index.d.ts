@@ -4,6 +4,8 @@ interface OcBridgeService {
   readonly port: number;
   /** Change the bridge working directory (attach `--dir` support). */
   setCwd?(directory: string): void;
+  /** Warm one session's tail history (attach `--session` resume support). */
+  prefetchSession?(sessionId: string): void;
 }
 interface OpenCodeAsset {
   /** Platform facts derived from the asset key. */

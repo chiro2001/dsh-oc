@@ -7,6 +7,8 @@ interface OcBridgeValue {
   port: number;
   /** Change the bridge working directory (attach `--dir` support). */
   setCwd(directory: string): void;
+  /** Warm one session's tail history (attach `--session` resume support). */
+  prefetchSession(sessionId: string): void;
 }
 /**
  * oc-bridge cordis service: owns the loopback HTTP/SSE server and exposes
@@ -23,6 +25,7 @@ declare class OcBridgeService extends Service implements OcBridgeValue {
   constructor(ctx: Context);
   [Service.init](): AsyncGenerator<() => Promise<void>>;
   setCwd(directory: string): void;
+  prefetchSession(sessionId: string): void;
   private stop;
 }
 //#endregion
