@@ -24,6 +24,7 @@
 | 功能 | 状态 | 路由/实现 | 验证方式 | 最后更新 |
 |---|---|---|---|---|
 | 会话列表 / 状态 | ✅ | `GET /session`、`GET /session/status`、`GET /api/session` | `tests/bridge-router.spec.ts`、`e2e-api.sh` | `f30b156` |
+| 会话列表标题回退 | ✅ | 持久标题 → 项目目录 basename → session id（对齐 dsh 客户端展示逻辑） | `tests/convert/session.spec.ts` | 本提交 |
 | 会话搜索（v2 `?search=`）与 limit/目录过滤 | ✅ | `src/bridge/router.ts` `/api/session` 经 `session.search` | `tests/bridge-router.spec.ts` | 本提交 |
 | 会话列表分页（v2 `cursor` next/previous + order） | ✅ | `src/bridge/router.ts` `/api/session` offset 游标 | `tests/bridge-router.spec.ts` | 本提交 |
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
@@ -140,7 +141,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`bca2ad6`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`87d9e76`（2026-08-15）。
 
 ### 路由注册表
 
@@ -238,7 +239,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 30 | 69f5bbd perf(tui): prefetch the resumed session history for --session |
+| `tests/tui/index.spec.ts` | 30 | 22e8032 feat(tui): validate --dir exists and is a directory before attach |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -268,7 +269,7 @@
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/tui/index.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
+| `src/tui/index.ts` | 22e8032 feat(tui): validate --dir exists and is a directory before attach |
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |

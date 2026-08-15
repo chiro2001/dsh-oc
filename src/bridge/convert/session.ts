@@ -23,7 +23,13 @@ export function sessionTitleFrom(summary: SessionSummary): string {
   const values = summary.projections?.values as Partial<Record<string, unknown>> | undefined
   const title = values?.title
   if (typeof title === 'string' && title.length > 0) return title
-  return summary.origin === 'subagent' ? 'Subagent session' : ''
+  if (summary.origin === 'subagent') return 'Subagent session'
+  const cwd = summary.cwd
+  if (typeof cwd === 'string' && cwd.length > 0) {
+    const base = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).pop() ?? ''
+    if (base.length > 0) return base
+  }
+  return String(summary.sessionId)
 }
 
 /** Metadata marker opencode surfaces use to identify dsh subagent children. */

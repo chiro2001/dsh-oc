@@ -37,12 +37,12 @@ describe('convert/session', () => {
     expect(session.time.updated).toBe(2000)
   })
 
-  it('falls back to cwd, empty title and updatedAt when fields are missing', () => {
+  it('falls back to cwd, session-id title and updatedAt when fields are missing', () => {
     const session = convertSessionSummary(summary({ cwd: undefined, projections: undefined }), {
       cwd: '/fallback',
     })
     expect(session.directory).toBe('/fallback')
-    expect(session.title).toBe('')
+    expect(session.title).toBe('session-1')
     expect(session.time.created).toBe(2000)
     expect(session.projectID).toBe(
       convertSessionSummary(summary({ cwd: undefined }), { cwd: '/fallback' }).projectID,
@@ -87,19 +87,20 @@ describe('convert/session', () => {
     const v1 = convertSessionSummary(fork, { cwd: '/parent' })
     expect(v1.parentID).toBeUndefined()
     expect(v1.metadata).toBeUndefined()
-    expect(v1.title).toBe('')
+    expect(v1.title).toBe('session-1')
     expect(v1.directory).toBe('/parent')
 
     const v2 = convertSessionSummaryV2(fork, { cwd: '/parent' })
     expect(v2.parentID).toBeUndefined()
-    expect(v2.title).toBe('')
+    expect(v2.title).toBe('session-1')
     expect(v2.location.directory).toBe('/parent')
   })
 
   it('reads the title projection', () => {
     expect(sessionTitleFrom(summary())).toBe('My Session')
-    expect(sessionTitleFrom(summary({ projections: undefined }))).toBe('')
+    expect(sessionTitleFrom(summary({ projections: undefined }))).toBe('work')
     expect(sessionTitleFrom(summary({ projections: undefined, origin: 'subagent' as const }))).toBe('Subagent session')
+    expect(sessionTitleFrom(summary({ projections: undefined, cwd: undefined }))).toBe('session-1')
   })
 
   it('builds a minimal session for SSE', () => {
