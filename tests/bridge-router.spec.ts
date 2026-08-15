@@ -953,6 +953,35 @@ describe('bridge router: session routes', () => {
     expect(result.body).toMatchObject({ name: 'BadRequest' })
   })
 
+  it('accepts prompt_async submissions used by --mini attach', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        prompt: async (request) => {
+          calls.push({ method: 'session.prompt', payload: request.payload })
+          return okRpc({ accepted: true })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/prompt_async', {
+      model: { providerID: 'deepseek', modelID: 'mock-model' },
+      parts: [{ type: 'text', text: 'mini hello' }],
+    })
+    expect(result.status).toBe(204)
+    expect(calls[0]).toMatchObject({
+      method: 'session.prompt',
+      payload: {
+        sessionId: 's1',
+        mode: 'queue',
+        content: [{ type: 'text', text: 'mini hello' }],
+      },
+    })
+  })
+
   it('accepts text and image file parts from data URLs and local paths', async () => {
     const work = mkdtempSync(join(tmpdir(), 'dsh-oc-attach-'))
     tempDirs.push(work)

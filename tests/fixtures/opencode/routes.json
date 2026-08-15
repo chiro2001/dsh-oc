@@ -20,6 +20,7 @@
     { "method": "GET", "path": "/session/:id/message", "kind": "json" },
     { "method": "POST", "path": "/session/:id/message", "kind": "json" },
     { "method": "POST", "path": "/session/:id/prompt", "kind": "json" },
+    { "method": "POST", "path": "/session/:id/prompt_async", "kind": "json" },
     { "method": "POST", "path": "/session/:id/abort", "kind": "json" },
     { "method": "POST", "path": "/session/:id/fork", "kind": "json" },
     { "method": "POST", "path": "/session/:id/summarize", "kind": "json" },

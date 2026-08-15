@@ -29,6 +29,7 @@
 | 会话列表分页（v2 `cursor` next/previous + order） | ✅ | `src/bridge/router.ts` `/api/session` offset 游标 | `tests/bridge-router.spec.ts` | 本提交 |
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
 | Prompt（v1 message、v1 alias、v2 prompt） | ✅ | `POST /session/:id/message`、`POST /session/:id/prompt`、`POST /api/session/:sessionID/prompt` | `e2e-api.sh`、`e2e-tui-turn.sh` | `f30b156` |
+| `--mini` promptAsync 提交 | ✅ | `POST /session/:id/prompt_async`（204，slash/模型/agent 处理） | `tests/bridge-router.spec.ts`、`e2e-tui-mini.sh` | 本提交 |
 | Abort / cancel | ✅ | `POST /session/:id/abort` | `e2e-api.sh` | `f30b156` |
 | Fork（`parentID`） | ✅ | `POST /session/:id/fork`、`POST /api/session/:id/fork`，messageID→atSeq | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | Todo 投影 | ✅ | `GET /session/:id/todo`、`src/bridge/convert/todo.ts` | `tests/convert/todo.spec.ts`、`tests/bridge-router.spec.ts` | `f30b156` |
@@ -126,7 +127,7 @@
 | `--dir` 目录过滤 e2e | ✅ | `scripts/e2e-tui-dir-filter.sh`：新会话落在子目录、根会话被过滤 | `bash scripts/e2e-tui-dir-filter.sh` | 本提交 |
 | `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | `--continue` attach e2e | ✅ | `scripts/e2e-tui-continue.sh`（恢复最新会话） | `bash scripts/e2e-tui-continue.sh` | 本提交 |
-| `--mini` attach e2e | ✅ | `scripts/e2e-tui-mini.sh` | `bash scripts/e2e-tui-mini.sh` | 本提交 |
+| `--mini` attach + 回复 e2e | ✅ | `scripts/e2e-tui-mini.sh`：输入 prompt 并断言 mock 回复 | `bash scripts/e2e-tui-mini.sh` | 本提交 |
 | `--mini` 退出 splash | 🟡 | 官方二进制渲染，无法替换；id 为 dsh 会话 id，恢复请用 `dsh --profile oc --session` | 文档见 README | 本提交 |
 | `--print-logs` 透传 e2e | ✅ | `scripts/e2e-tui-print-logs.sh`（fake 二进制 argv 断言） | `bash scripts/e2e-tui-print-logs.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
@@ -141,7 +142,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`87d9e76`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`7e3ded6`（2026-08-15）。
 
 ### 路由注册表
 
@@ -216,6 +217,7 @@
 | `POST` | `/session/:id/fork` | json | `src/bridge/router.ts` |
 | `POST` | `/session/:id/message` | json | `src/bridge/router.ts` |
 | `POST` | `/session/:id/prompt` | json | `src/bridge/router.ts` |
+| `POST` | `/session/:id/prompt_async` | json | `src/bridge/router.ts` |
 | `POST` | `/session/:id/summarize` | json | `src/bridge/router.ts` |
 
 ### 测试覆盖
@@ -224,13 +226,13 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 35 | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 62 | 7192ed9 fix(bridge): resolve relative directory queries against bridge cwd |
+| `tests/bridge-router.spec.ts` | 63 | 7192ed9 fix(bridge): resolve relative directory queries against bridge cwd |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `tests/convert/session.spec.ts` | 7 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
+| `tests/convert/session.spec.ts` | 7 | 7e3ded6 fix(bridge): show fallback session titles in the list |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
 | `tests/perf.spec.ts` | 5 | 776d145 test(e2e): remove remaining machine-specific absolute paths |
@@ -252,7 +254,7 @@
 | `src/bridge/convert/model.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/session.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
+| `src/bridge/convert/session.ts` | 7e3ded6 fix(bridge): show fallback session titles in the list |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |

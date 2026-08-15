@@ -1601,6 +1601,31 @@ export function createBridgeRouter(
     return json(200, pendingAssistantPlaceholder(id, cwd))
   })
 
+  // `opencode --mini` interactive attach submits through promptAsync.
+  register('POST', '/session/:id/prompt_async', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    const body = bodyAsRecord(req.body)
+    const content = parsePromptParts(body.parts, cwd)
+    const slash = slashPromptCapture(content)
+    if (slash !== undefined) {
+      const outcome = await runSlashCommand(ctx, id, slash)
+      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+      return json(204)
+    }
+    const agent = typeof body.agent === 'string' && body.agent.length > 0 ? body.agent : undefined
+    if (agent !== undefined && agent !== DEFAULT_AGENT_NAME) {
+      try {
+        await switchAgentPreset(ctx, id, agent)
+      } catch (error) {
+        ctx.log(`[bridge] prompt_async agent switch failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    await applyModelSelection(ctx, id, body)
+    await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.invalidateSession(id)
+    return json(204)
+  })
+
   register('POST', '/session/:id/abort', 'json', async (req, ctx) => {
     const id = req.params.id as string
     await rpc(ctx, 'session.cancel', { sessionId: sid(id) })

@@ -45,6 +45,31 @@ if [[ -z "$MINI_HINT" ]]; then
 fi
 echo "  mini TUI visible hint: \"$MINI_HINT\""
 
+echo "== type a prompt and verify a model reply =="
+tmux send-keys -t "$E2E_TUI_SESSION" "mini reply test" Enter
+
+REPLY_HINT=""
+deadline=$((SECONDS + 60))
+while (( SECONDS < deadline )); do
+  for sid in $(curl -s "$E2E_BRIDGE_URL/session" | jq -r '.[].id'); do
+    local_text="$(curl -s "$E2E_BRIDGE_URL/session/$sid/message" | jq -r '[.. | objects | select(has("text")) | .text] | join(" ")' 2>/dev/null || true)"
+    if [[ "$local_text" == *"mini reply test"* && "$local_text" == *"mock response recovered"* ]]; then
+      REPLY_HINT="mini reply + mock response"
+      break 2
+    fi
+  done
+  if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+    echo "e2e: dsh exited while waiting for mini reply: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if [[ -z "$REPLY_HINT" ]]; then
+  echo "e2e: --mini did not produce a model reply" >&2
+  exit 1
+fi
+echo "  mini model reply visible: $REPLY_HINT"
+
 echo "== stop the mini TUI harness =="
 e2e_stop_dsh "$E2E_TUI_SESSION"
 node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null
