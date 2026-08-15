@@ -54,7 +54,8 @@ seed_session() {
 }
 
 SESSION_ROOT="$(seed_session "/session" "dir seed root")"
-SESSION_SUB="$(seed_session "/session?directory=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$SUB_DIR")" "dir seed sub")"
+SUB_URI="$(jq -rn --arg v "$SUB_DIR" '$v|@uri')"
+SESSION_SUB="$(seed_session "/session?directory=$SUB_URI" "dir seed sub")"
 echo "  root=$SESSION_ROOT sub=$SESSION_SUB"
 
 echo "== restart dsh with relative --dir =="
@@ -109,7 +110,7 @@ if [[ -z "$PROMPT_HINT" ]]; then
   exit 1
 fi
 
-SUB_ABS="$(cd "$E2E_WORKDIR/sub-project" && pwd)"
+SUB_ABS="$(cd "$SUB_DIR" && pwd)"
 MATCHED_SUB="$(curl -s "$BRIDGE_URL/session" | jq -r --arg id "$PROMPT_HINT" '.[] | select(.id == $id) | .directory')"
 if [[ "$MATCHED_SUB" != "$SUB_ABS" ]]; then
   echo "e2e: new session directory is '$MATCHED_SUB', expected '$SUB_ABS'" >&2
@@ -117,7 +118,8 @@ if [[ "$MATCHED_SUB" != "$SUB_ABS" ]]; then
 fi
 echo "  new session lands in sub-project: $MATCHED_SUB"
 
-ROOT_IN_FILTER="$(curl -s "$BRIDGE_URL/session?directory=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$SUB_ABS")" | jq -r '[.[].id] | join(",")')"
+FILTER_URI="$(jq -rn --arg v "$SUB_ABS" '$v|@uri')"
+ROOT_IN_FILTER="$(curl -s "$BRIDGE_URL/session?directory=$FILTER_URI" | jq -r '[.[].id] | join(",")')"
 if [[ "$ROOT_IN_FILTER" == *"$SESSION_ROOT"* ]]; then
   echo "e2e: root session leaked into the --dir filter" >&2
   exit 1
