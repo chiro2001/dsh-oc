@@ -48,6 +48,11 @@ dsh --profile oc
 > `git+https://github.com/chiro2001/dsh-oc.git`，安装 `main` 分支的最新版本。
 > 如需固定版本或分支，可使用 pnpm 支持的完整 git spec，例如
 > `dsh plugin --profile oc add 'github:chiro2001/dsh-oc#main'`。
+>
+> 安装时 pnpm 可能提示 `missing peer @deepseek-ai/cordis` /
+> `@deepseek-ai/dsh-cmdline` / `@deepseek-ai/dsh-home-paths`：这些 peer 由
+> dsh-base/宿主在运行时提供，属于预期警告，可忽略；`dsh --profile oc` 能正常
+> 启动即说明解析成功。
 
 ## 更新
 
