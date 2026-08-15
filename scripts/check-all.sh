@@ -39,7 +39,7 @@ if [[ "$E2E" == "1" ]]; then
     e2e-tui-command.sh e2e-api-goal.sh e2e-tui-goal.sh e2e-tui-brand.sh \
     e2e-tui-dir.sh e2e-tui-fork.sh e2e-tui-offline.sh e2e-tui-version-lock.sh \
     e2e-tui-help.sh e2e-tui-print-logs.sh e2e-tui-timestamps.sh \
-    e2e-tui-mini.sh e2e-tui-skill.sh; do
+    e2e-tui-mini.sh e2e-tui-skill.sh e2e-tui-continue.sh; do
     out="$(bash "scripts/$s" 2>&1 | tail -1)"
     if [[ "$out" == *PASSED* ]]; then
       echo "PASS $s"
