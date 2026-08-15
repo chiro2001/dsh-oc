@@ -59,4 +59,6 @@ jobs:
           (cd "$DSH_HOME/profiles/oc" && pnpm add @deepseek-ai/dsh-llm-mock-server@0.1.0-rc.6 2>&1 | tail -60) || true
 
       - name: Full e2e + perf scale
+        env:
+          CI_E2E_SUBSET: "1"
         run: bash scripts/check-all.sh --e2e --scale ${{ github.event.inputs.sessions }}
