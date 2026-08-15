@@ -113,6 +113,9 @@ echo "== fs assertions =="
 FS_CONTENT="$(curl -s "$BRIDGE/api/fs/read/readme.txt")"
 [[ "$FS_CONTENT" == $'one\ntwo' ]]
 echo "  /api/fs/read/readme.txt returns raw file content"
+FS_HEADERS="$(curl -s -D - -o /dev/null "$BRIDGE/api/fs/read/readme.txt")"
+grep -qi '^Content-Type: text/plain' <<<"$FS_HEADERS"
+echo "  /api/fs/read/readme.txt content-type is text/plain"
 curl -s "$BRIDGE/api/fs/list" | jq -e \
   --arg w "$E2E_WORKDIR" '.location.directory == $w and any(.data[]; .path == "readme.txt" and .type == "file")' >/dev/null
 echo "  /api/fs/list includes readme.txt"

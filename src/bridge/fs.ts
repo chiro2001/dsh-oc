@@ -28,6 +28,30 @@ const SKIP_DIRS = new Set([
   '.dsh',
 ])
 
+const TEXT_EXTENSIONS = new Set([
+  'txt', 'md', 'markdown', 'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json',
+  'yml', 'yaml', 'toml', 'xml', 'html', 'css', 'scss', 'py', 'sh', 'bash',
+  'zsh', 'rs', 'go', 'java', 'c', 'h', 'cpp', 'hpp', 'sql', 'log', 'ini',
+  'cfg', 'env', 'csv', 'tsv',
+])
+
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  ico: 'image/x-icon',
+}
+
+/** Content-Type for one workspace file path (best effort by extension). */
+export function contentTypeFor(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? ''
+  if (TEXT_EXTENSIONS.has(ext)) return 'text/plain; charset=utf-8'
+  return IMAGE_CONTENT_TYPES[ext] ?? 'application/octet-stream'
+}
+
 /**
  * Resolve a user-supplied relative path inside `cwd`; any path that escapes
  * the workspace is rejected before touching the filesystem.

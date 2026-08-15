@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { findWithin, listDirWithin, readFileWithin, resolveWithin } from '../src/bridge/fs.js'
+import {
+  contentTypeFor,
+  findWithin,
+  listDirWithin,
+  readFileWithin,
+  resolveWithin,
+} from '../src/bridge/fs.js'
 
 const tempDirs: string[] = []
 
@@ -23,6 +29,14 @@ function workspace(): string {
 }
 
 describe('workspace fs helpers', () => {
+  it('infers content types by extension', () => {
+    expect(contentTypeFor('readme.txt')).toBe('text/plain; charset=utf-8')
+    expect(contentTypeFor('src/main.ts')).toBe('text/plain; charset=utf-8')
+    expect(contentTypeFor('photo.PNG')).toBe('image/png')
+    expect(contentTypeFor('favicon.svg')).toBe('image/svg+xml')
+    expect(contentTypeFor('archive.bin')).toBe('application/octet-stream')
+  })
+
   it('resolves paths inside the workspace and rejects escapes', () => {
     const work = workspace()
     expect(resolveWithin(work, 'readme.txt')).toBe(join(work, 'readme.txt'))

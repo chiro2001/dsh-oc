@@ -240,7 +240,7 @@ describe('bridge router: wildcard pattern and workspace fs routes', () => {
     const { server } = await boot(fakeApi(), work)
     const read = await request(server, 'GET', '/api/fs/read/readme.txt')
     expect(read.status).toBe(200)
-    expect(read.contentType).toContain('application/octet-stream')
+    expect(read.contentType).toContain('text/plain')
     expect(read.body).toBe('hello fs\n')
     expect((await request(server, 'GET', '/api/fs/read/missing.txt')).status).toBe(404)
     expect((await request(server, 'GET', '/api/fs/read/..%2Fescape.txt')).status).toBe(400)

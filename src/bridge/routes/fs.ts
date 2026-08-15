@@ -1,6 +1,6 @@
 // Workspace filesystem routes: /api/fs/read/*, /api/fs/list, /api/fs/find.
 import * as R from '../router.js'
-import { findWithin, listDirWithin, readFileWithin } from '../fs.js'
+import { contentTypeFor, findWithin, listDirWithin, readFileWithin } from '../fs.js'
 import type { RouteRegistrar } from '../routes.js'
 
 export function registerFsRoutes(register: RouteRegistrar): void {
@@ -10,7 +10,7 @@ export function registerFsRoutes(register: RouteRegistrar): void {
     return {
       status: 200,
       raw: data,
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { 'Content-Type': contentTypeFor(raw) },
     }
   })
 
