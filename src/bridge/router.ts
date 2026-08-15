@@ -308,7 +308,7 @@ function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
 
 const SESSION_LIST_CACHE_MS = 1000
 const HISTORY_CACHE_MS = 500
-const RECENT_HISTORY_PREFETCH = 3
+const RECENT_HISTORY_PREFETCH = 5
 const SSE_RETRY_BASE_MS = 250
 const SSE_RETRY_MAX_ATTEMPTS = 3
 

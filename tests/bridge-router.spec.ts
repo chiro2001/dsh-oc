@@ -323,11 +323,13 @@ describe('bridge router: session routes', () => {
     const s2 = { ...item, sessionId: 's2' as never }
     const s3 = { ...item, sessionId: 's3' as never }
     const s4 = { ...item, sessionId: 's4' as never }
+    const s5 = { ...item, sessionId: 's5' as never }
+    const s6 = { ...item, sessionId: 's6' as never }
     const api: BridgeApi = {
       ...base,
       sessions: {
         ...base.sessions,
-        list: async () => okRpc({ items: [item, s2, s3, s4] }),
+        list: async () => okRpc({ items: [item, s2, s3, s4, s5, s6] }),
         history: async (request) => {
           historyCalls.push(String((request.payload as { sessionId?: string }).sessionId))
           return okRpc({ events: [], hasMore: false })
@@ -337,7 +339,7 @@ describe('bridge router: session routes', () => {
     const { router } = await boot(api)
     router.prefetchSessionList()
     await new Promise((resolve) => setTimeout(resolve, 50))
-    expect(historyCalls.sort()).toEqual(['s1', 's2', 's3'])
+    expect(historyCalls.sort()).toEqual(['s1', 's2', 's3', 's4', 's5'])
   })
 
   it('prefetches one session history into the cache', async () => {
