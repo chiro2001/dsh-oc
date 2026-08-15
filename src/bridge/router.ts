@@ -59,6 +59,7 @@ import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from '.
 import { commandResultEvents, convertProducedFiles, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
+import { ocHelp } from '../help.js'
 import { InteractionState } from './state.js'
 import { SseHub } from './sse.js'
 import { MuxEventTranslator } from './events.js'
@@ -440,6 +441,18 @@ const GOAL_COMMAND_V2: CommandV2Info = {
   description: 'Set or view the goal for a long-running task',
 }
 
+const HELP_COMMAND_V1: V1Command = {
+  name: 'help',
+  description: 'Show the dsh-oc capability summary and documentation entry points',
+  template: 'help',
+}
+
+const HELP_COMMAND_V2: CommandV2Info = {
+  name: 'help',
+  template: 'help',
+  description: 'Show the dsh-oc capability summary and documentation entry points',
+}
+
 async function defaultAgents(ctx: BridgeRouteContext): Promise<{
   providerID: string
   modelID: string
@@ -541,7 +554,7 @@ function textFromPromptParts(content: readonly PromptContentPart[]): string {
 }
 
 interface SlashPromptCapture {
-  name: 'preset' | 'goal'
+  name: 'preset' | 'goal' | 'help'
   argument: string
 }
 
@@ -557,6 +570,9 @@ function slashPromptCapture(content: readonly PromptContentPart[]): SlashPromptC
   }
   if (/^\/goal(?:\s|$)/.test(text)) {
     return { name: 'goal', argument: text.slice('/goal'.length).trim() }
+  }
+  if (/^\/help(?:\s|$)/.test(text)) {
+    return { name: 'help', argument: text.slice('/help'.length).trim() }
   }
   return undefined
 }
@@ -675,6 +691,29 @@ async function runGoalCommand(
   const trimmed = argument.trim()
   const commandLine = trimmed === '' ? '/goal' : `/goal ${trimmed}`
   return runRegistryCommand(ctx, sessionId, commandLine, '/goal')
+}
+
+/** Run `/help`: broadcast the shared capability summary without a model turn. */
+function runHelpCommand(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  _argument: string,
+): PresetCommandOutcome {
+  const text = ocHelp()
+  broadcastCommandResult(ctx, sessionId, text)
+  return { kind: 'success', text }
+}
+
+/** Dispatch a captured slash command to its bridge-side implementation. */
+async function runSlashCommand(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  slash: SlashPromptCapture,
+): Promise<PresetCommandOutcome | RegistryCommandOutcome> {
+  if (slash.name === 'preset') return runPresetCommand(ctx, sessionId, slash.argument)
+  if (slash.name === 'goal') return runGoalCommand(ctx, sessionId, slash.argument)
+  if (slash.name === 'help') return runHelpCommand(ctx, sessionId, slash.argument)
+  throw badRequest(`unsupported command /${slash.name}`)
 }
 
 async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
@@ -1144,7 +1183,7 @@ export function createBridgeRouter(
   // and the second Enter executes through `POST /session/:id/command`. The
   // prompt routes below additionally capture `/preset` typed with a trailing
   // space (or after Esc), so every path ends with a visible SSE result.
-  register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1, GOAL_COMMAND_V1]))
+  register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1, GOAL_COMMAND_V1, HELP_COMMAND_V1]))
   for (const bare of ['/skill', '/reference', '/integration']) {
     register('GET', bare, 'json', async () => json(200, []))
   }
@@ -1159,7 +1198,7 @@ export function createBridgeRouter(
 
   register('GET', '/api/command', 'json', async (_req, ctx) => json(200, {
     location: locationInfo(ctx),
-    data: [PRESET_COMMAND_V2, GOAL_COMMAND_V2],
+    data: [PRESET_COMMAND_V2, GOAL_COMMAND_V2, HELP_COMMAND_V2],
   }))
   for (const bare of ['/api/skill', '/api/reference', '/api/integration']) {
     register('GET', bare, 'json', async (_req, ctx) => json(200, v2LocationBody(ctx)))
@@ -1251,9 +1290,7 @@ export function createBridgeRouter(
     const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
     const slash = slashPromptCapture(content)
     if (slash !== undefined) {
-      const outcome = slash.name === 'preset'
-        ? await runPresetCommand(ctx, id, slash.argument)
-        : await runGoalCommand(ctx, id, slash.argument)
+      const outcome = await runSlashCommand(ctx, id, slash)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
     }
@@ -1269,9 +1306,7 @@ export function createBridgeRouter(
     const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
     const slash = slashPromptCapture(content)
     if (slash !== undefined) {
-      const outcome = slash.name === 'preset'
-        ? await runPresetCommand(ctx, id, slash.argument)
-        : await runGoalCommand(ctx, id, slash.argument)
+      const outcome = await runSlashCommand(ctx, id, slash)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
     }
@@ -1300,6 +1335,10 @@ export function createBridgeRouter(
     if (name === 'goal') {
       const outcome = await runGoalCommand(ctx, id, argumentsRaw)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
+    }
+    if (name === 'help') {
+      const outcome = runHelpCommand(ctx, id, argumentsRaw)
       return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
     }
     throw badRequest(`unsupported command "${command}"`)
@@ -1383,9 +1422,7 @@ export function createBridgeRouter(
     const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
     const slash = slashPromptCapture(content)
     if (slash !== undefined) {
-      const outcome = slash.name === 'preset'
-        ? await runPresetCommand(ctx, id, slash.argument)
-        : await runGoalCommand(ctx, id, slash.argument)
+      const outcome = await runSlashCommand(ctx, id, slash)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return json(200, {
         data: {

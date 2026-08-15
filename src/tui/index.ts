@@ -12,7 +12,8 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-cmdline'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { z } from 'zod'
-import { DSH_OC_VERSION, OPENCODE_VERSION, type OcBridgeService } from '../index.js'
+import type { OcBridgeService } from '../index.js'
+import { helpRequested, ocHelp } from '../help.js'
 import {
   verifyOpenCodeVersion,
   resolveOpenCodeBinary as resolveBinaryFromDeps,
@@ -162,36 +163,7 @@ export const OcTuiConfig = z.object({
 
 export type OcTuiConfig = z.infer<typeof OcTuiConfig>
 
-/** `dsh --profile oc --help` output; kept deliberately static for offline use. */
-export function ocHelp(version: string = DSH_OC_VERSION): string {
-  return `dsh-oc ${version} — DeepSeek Harness × OpenCode TUI (opencode ${OPENCODE_VERSION})
-
-用法:
-  dsh --profile oc [attach 参数]
-
-支持的 attach 参数:
-  --continue/-c, --session/-s, --fork, --dir, --mini, --print-logs, --log-level
-
-核心能力:
-  ✅ 会话列表/新建/续聊/fork/compact，SSE 流式消息
-  ✅ dsh 模型目录、reasoning effort、agent preset 切换
-  ✅ 工具卡片（bash/read/write/edit）、diff 与 Modified Files
-  ✅ 权限/提问流、子代理会话树
-  ✅ 自动更新关闭、二进制版本锁定 ${OPENCODE_VERSION}
-  ✅ DSH OC 品牌启动 logo
-  🟡 文件附件仅文本/data image；"Allow always" 降级为 once
-  ❌ MCP/LSP/formatter/skills/integration 等外围路由为 stub
-
-完整能力矩阵: docs/FEATURES.md（仓库内）
-协议与路由: docs/PROTOCOL.md
-下一阶段需求: docs/ROADMAP.md
-`
-}
-
-/** Whether the raw dsh args request the dsh-oc help screen. */
-export function helpRequested(args: readonly string[]): boolean {
-  return args.includes('--help') || args.includes('-h')
-}
+export { helpRequested, ocHelp } from '../help.js'
 
 /** Minimal child-process surface used by the spawn helper (test friendly). */
 export interface TuiChild {

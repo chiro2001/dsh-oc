@@ -81,6 +81,15 @@ interface BinaryResolverDeps {
   download?: (options: DownloadOpenCodeOptions) => Promise<string>;
 }
 //#endregion
+//#region src/help.d.ts
+/**
+ * `dsh --profile oc --help` and TUI `/help` output; kept deliberately static
+ * so it works offline and is identical across entry points.
+ */
+declare function ocHelp(version?: string): string;
+/** Whether the raw dsh args request the dsh-oc help screen. */
+declare function helpRequested(args: readonly string[]): boolean;
+//#endregion
 //#region src/tui/index.d.ts
 /** Environment variable that seeds the opencode TUI with timestamps shown. */
 declare const DSH_OC_TUI_TIMESTAMPS = "DSH_OC_TUI_TIMESTAMPS";
@@ -137,10 +146,6 @@ declare const OcTuiConfig: z.ZodDefault<z.ZodObject<{
   args: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>>;
 type OcTuiConfig = z.infer<typeof OcTuiConfig>;
-/** `dsh --profile oc --help` output; kept deliberately static for offline use. */
-declare function ocHelp(version?: string): string;
-/** Whether the raw dsh args request the dsh-oc help screen. */
-declare function helpRequested(args: readonly string[]): boolean;
 /** Minimal child-process surface used by the spawn helper (test friendly). */
 interface TuiChild {
   readonly killed: boolean;

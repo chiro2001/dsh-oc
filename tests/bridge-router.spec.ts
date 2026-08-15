@@ -897,12 +897,14 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     expect(v1Commands.body).toMatchObject([
       { name: 'preset', template: 'preset' },
       { name: 'goal', template: 'goal' },
+      { name: 'help', template: 'help' },
     ])
     const v2Commands = await request(server, 'GET', '/api/command')
     expect(v2Commands.body).toMatchObject({
       data: [
         { name: 'preset', template: 'preset' },
         { name: 'goal', template: 'goal' },
+        { name: 'help', template: 'help' },
       ],
     })
   })
@@ -1205,6 +1207,38 @@ describe('bridge router: model variants, agent presets and /preset', () => {
       payload: { sessionId: 's1', agentPreset: 'minimal' },
     })
     expect(calls.some((call) => call.method === 'session.prompt')).toBe(false)
+  })
+
+  it('serves /help through the command route and prompt capture without a model turn', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        prompt: async (request) => {
+          calls.push({ method: 'session.prompt', payload: request.payload })
+          return okRpc({ accepted: true })
+        },
+      },
+    }
+    const { server } = await boot(api)
+
+    const cmd = await request(server, 'POST', '/session/s1/command', {
+      command: 'help',
+      arguments: '',
+    })
+    expect(cmd.status).toBe(200)
+    const cmdText = (cmd.body as { parts: Array<{ text: string }> }).parts[0]?.text
+    expect(cmdText).toContain('dsh-oc')
+    expect(cmdText).toContain('docs/FEATURES.md')
+
+    const slash = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: '/help' }],
+    })
+    expect(slash.status).toBe(200)
+    expect((slash.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('核心能力')
+    expect(calls).toHaveLength(0)
   })
 
   it('surfaces unknown /preset switches as command errors', async () => {

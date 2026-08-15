@@ -107,6 +107,8 @@ curl -s "$BRIDGE/command" | jq -e '([.[].name] | index("preset") != null)' >/dev
 echo "  /command advertises /preset"
 curl -s "$BRIDGE/api/command" | jq -e '([.data[].name] | index("preset") != null)' >/dev/null
 echo "  /api/command advertises /preset"
+curl -s "$BRIDGE/command" | jq -e '([.[].name] | index("help") != null)' >/dev/null
+echo "  /command advertises /help"
 
 AGENT_IDS="$(curl -s "$BRIDGE/api/agent" | jq -r '[.data[].id] | join(",")')"
 echo "  /api/agent ids: $AGENT_IDS"
@@ -154,6 +156,13 @@ if ! jq -e '.parts[0].text | test("standard|minimal|No switchable dsh agent pres
 fi
 echo "  POST /session/$SESSION_V2/message /preset captured -> visible preset result"
 
+HELP_PROMPT_BODY="$E2E_RUN/help-prompt.json"
+HELP_PROMPT_CODE="$(curl -s -o "$HELP_PROMPT_BODY" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V2/message" \
+  -H 'Content-Type: application/json' -d '{"parts":[{"type":"text","text":"/help"}]}')"
+[[ "$HELP_PROMPT_CODE" == "200" ]]
+jq -e '.parts[0].text | test("核心能力")' "$HELP_PROMPT_BODY" >/dev/null
+echo "  POST /session/$SESSION_V2/message /help captured -> visible capability summary"
+
 if [[ "$AGENT_IDS" == *minimal* ]]; then
   AGENT_SWITCH_CODE="$(curl -s -o "$E2E_RUN/agent-switch.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/agent" \
     -H 'Content-Type: application/json' -d '{"agent":"minimal"}')"
@@ -172,6 +181,11 @@ fi
 PATCH_BODY="$(curl -s -X PATCH "$BRIDGE/session/$SESSION_V1" -H 'Content-Type: application/json' -d '{"title":"e2e renamed"}' | jq -er '.id == "'"$SESSION_V1"'" and .title == "e2e renamed"')"
 [[ "$PATCH_BODY" == true ]]
 echo "  PATCH /session/$SESSION_V1 rename ok"
+
+HELP_CMD_OUT="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/command" -H 'Content-Type: application/json' \
+  -d '{"command":"help","arguments":""}')"
+jq -e '.parts[0].text | test("dsh-oc") and test("docs/FEATURES.md")' <<<"$HELP_CMD_OUT" >/dev/null
+echo "  POST /session/$SESSION_V1/command /help -> visible capability summary"
 
 curl -s -X POST "$BRIDGE/session/$SESSION_V1/message" -H 'Content-Type: application/json' \
   -d '{"parts":[{"type":"text","text":"e2e: hello from dsh-oc"}]}' | jq -e '.info.role == "assistant"' >/dev/null
