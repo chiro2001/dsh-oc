@@ -194,6 +194,47 @@ wait_assistant() {
 wait_assistant "$BRIDGE/session/$SESSION_V1/message" "mock response recovered"
 wait_assistant "$BRIDGE/api/session/$SESSION_V2/message" "mock response recovered"
 
+echo "== fork lineage =="
+USER_MESSAGE_ID="$(curl -s "$BRIDGE/session/$SESSION_V1/message" | jq -er '.[] | select(.info.role == "user") | .info.id' | head -1)"
+[[ -n "$USER_MESSAGE_ID" ]]
+FORKED_AT_MSG="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' \
+  -d "{\"messageID\":\"$USER_MESSAGE_ID\"}" | jq -er .id)"
+[[ -n "$FORKED_AT_MSG" && "$FORKED_AT_MSG" != "$SESSION_V1" ]]
+curl -s "$BRIDGE/session/$FORKED_AT_MSG" | jq -e --arg f "$FORKED_AT_MSG" --arg p "$SESSION_V1" '.id == $f and .parentID == $p' >/dev/null
+echo "  fork at message $USER_MESSAGE_ID -> $FORKED_AT_MSG"
+FORKED_V1="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' -d '{}' | jq -er .id)"
+[[ -n "$FORKED_V1" && "$FORKED_V1" != "$SESSION_V1" ]]
+curl -s "$BRIDGE/session/$FORKED_V1" | jq -e --arg f "$FORKED_V1" --arg p "$SESSION_V1" '.id == $f and .parentID == $p' >/dev/null
+echo "  v1 fork: $FORKED_V1 (parent $SESSION_V1)"
+FORKED_V2="$(curl -s -X POST "$BRIDGE/api/session/$SESSION_V1/fork" -H 'Content-Type: application/json' -d '{}' | jq -er .data.id)"
+[[ -n "$FORKED_V2" && "$FORKED_V2" != "$SESSION_V1" ]]
+curl -s "$BRIDGE/api/session/$FORKED_V2" | jq -e --arg f "$FORKED_V2" --arg p "$SESSION_V1" '.data.id == $f and .data.parentID == $p' >/dev/null
+echo "  v2 fork: $FORKED_V2 (parent $SESSION_V1)"
+
+echo "== compact =="
+COMPACT_CODE="$(curl -s -o "$E2E_RUN/compact-summarize.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V1/summarize" \
+  -H 'Content-Type: application/json' -d '{"providerID":"deepseek","modelID":"mock-model"}')"
+[[ "$COMPACT_CODE" =~ ^(200|204)$ ]]
+jq -e '. == true' "$E2E_RUN/compact-summarize.json" >/dev/null
+echo "  POST /session/$SESSION_V1/summarize -> $COMPACT_CODE"
+COMPACT_SEEN=""
+deadline=$((SECONDS + 60))
+while (( SECONDS < deadline )); do
+  if curl -s "$BRIDGE/session/$SESSION_V1/message" | jq -e 'any(.[]; (.parts // []) | any(.type == "compaction"))' >/dev/null 2>&1; then
+    COMPACT_SEEN=yes
+    echo "  compaction checkpoint visible in history"
+    break
+  fi
+  sleep 1
+done
+[[ "$COMPACT_SEEN" == yes ]]
+COMPACT_V2_CODE="$(curl -s -o "$E2E_RUN/compact-v2.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/compact")"
+if [[ ! "$COMPACT_V2_CODE" =~ ^(200|204)$ ]]; then
+  echo "  compact v2 body: $(cat "$E2E_RUN/compact-v2.json" 2>/dev/null || true)" >&2
+fi
+[[ "$COMPACT_V2_CODE" =~ ^(200|204)$ ]]
+echo "  POST /api/session/$SESSION_V2/compact -> $COMPACT_V2_CODE"
+
 TODO_LEN="$(curl -s "$BRIDGE/session/$SESSION_V1/todo" | jq -e 'type == "array"' >/dev/null && echo array)"
 echo "  todo: $TODO_LEN"
 DIFF_LEN="$(curl -s "$BRIDGE/session/$SESSION_V1/diff" | jq -e 'type == "array"' >/dev/null && echo array)"

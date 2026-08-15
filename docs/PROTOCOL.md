@@ -126,6 +126,9 @@ GET /api/integration?location[directory]=...
 | `GET /session` | MAP | `apiProxy.sessions.list` |
 | `GET /session/status` | MAP | list 的 running 状态 |
 | `POST /session` | MAP | `apiProxy.sessions.create` |
+| `POST /session/{id}/fork` | MAP | `apiProxy.sessions.fork`（opencode `messageID` 换算为 dsh `atSeq`） |
+| `POST /session/{id}/summarize` | MAP | dsh `/compact` command registry（TUI `/compact` 实际调用此路由） |
+| `POST /session/{id}/compact` | MAP | 同上（v1 兼容别名） |
 | `GET /session/{id}` | MAP | history + summary |
 | `PATCH /session/{id}` | MAP | `apiProxy.sessions.rename` |
 | `GET /session/{id}/message` | MAP | `apiProxy.sessions.history` |
@@ -164,6 +167,8 @@ GET /api/integration?location[directory]=...
 | `GET /api/skill` | STUB/LATER | `[]` |
 | `GET /api/session` | MAP | 同 v1 |
 | `POST /api/session` | MAP | 同 v1 |
+| `POST /api/session/{id}/fork` | MAP | 同 v1 fork，返回 v2 信封 |
+| `POST /api/session/{id}/compact` | MAP | 同 v1 summarize/compact（SDK v2 路由，204） |
 | `GET /api/session/{id}` | MAP | 同 v1 |
 | `GET /api/session/{id}/message` | MAP | 同 v1 |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
@@ -294,6 +299,9 @@ dsh 0.1.0-rc.6 + opencode 1.18.18，TUI 与 bridge 均实际跑通）：
 | `GET /global/event` | 200 SSE | `retry: 3000` 首帧；每帧含 `directory` |
 | `GET /agent`、`GET /api/agent` | MAP | 首版返回单个 `build` 主 agent（含 `model`），否则 TUI prompt 无法提交 |
 | `POST /session/{id}/message` | MAP | opencode SDK v1 实际 prompt 路由 |
+| `POST /session/{id}/fork`、`POST /api/session/{id}/fork` | MAP | dsh fork；child session 的 `parentID` 正确 |
+| `POST /session/{id}/summarize`、`POST /session/{id}/compact`、`POST /api/session/{id}/compact` | MAP | TUI `/compact` 走 summarize 路由，经 dsh command registry 执行 `/compact` |
+| `GET /session`、`GET /api/session` | MAP | child session 输出 `parentID`；subagent 带 `metadata.origin` 与标题标识 |
 | `POST /session/{id}/prompt` | 别名 | 官方 SDK 无此路由；dsh-oc 提供 v1 兼容别名（e2e 矩阵使用） |
 | `POST /api/session/{id}/prompt` | MAP | opencode SDK v2 官方路由，返回 `{ data: SessionInputAdmitted }` |
 | `GET /provider` | MAP | 返回 `ProviderListResponse` 对象 `{ all, default, connected }`（协议对象，非裸数组） |

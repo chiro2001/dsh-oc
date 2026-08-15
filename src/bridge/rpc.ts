@@ -33,6 +33,32 @@ export interface BridgeApi {
   agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>
   events: Pick<ApiProxy['events'], 'mux'>
   respond: ApiProxy['respond']
+  /**
+   * dsh human-command registry (`ctx.commands`). Optional so unit fixtures and
+   * older hosts without the registry still type-check; the oc profile always
+   * mounts it through dsh-base.
+   */
+  commands?: BridgeCommands
+  /** Live agent registry (`ctx.agents`), used to address `/compact`. */
+  agents?: BridgeAgents
+}
+
+/** Structural view of `@deepseek-ai/dsh-commands` CommandExecution. */
+export interface BridgeCommandExecution {
+  commandId: unknown
+  result: { kind: 'success' | 'error'; text?: string }
+}
+
+export interface BridgeCommands {
+  execute(
+    agent: unknown,
+    line: string,
+    signal: AbortSignal,
+  ): Promise<BridgeCommandExecution | undefined>
+}
+
+export interface BridgeAgents {
+  get(sessionId: string): unknown
 }
 
 export class RpcCallError extends Error {

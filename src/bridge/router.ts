@@ -22,7 +22,7 @@ import type {
   SessionV2Info,
 } from '@opencode-ai/sdk/v2/types'
 import type { Agent as V2Agent, AgentV2Info } from '@opencode-ai/sdk/v2/types'
-import type { BridgeApi } from './rpc.js'
+import type { BridgeApi, BridgeCommandExecution } from './rpc.js'
 import { call, RpcCallError, respondApproval, respondQuestion, cancelQuestion } from './rpc.js'
 import {
   badRequest,
@@ -139,13 +139,59 @@ interface SessionView {
   events: HistoryEntry[]
   createdAt?: number
   model?: { id: string; providerID: string; variant?: string }
+  cwd?: string
+}
+
+function sessionDirectoryFrom(
+  items: readonly SessionSummary[],
+  summary: SessionSummary | undefined,
+  fallback: string,
+): string {
+  if (summary?.cwd) return summary.cwd
+  if (summary?.parentSessionId !== undefined) {
+    const parent = items.find((item) => String(item.sessionId) === String(summary.parentSessionId))
+    if (parent?.cwd) return parent.cwd
+  }
+  return fallback
+}
+
+/**
+ * Record child cwd and parent lineage from a session list. A subagent child
+ * without its own cwd inherits the nearest parent's cwd so the TUI opens and
+ * filters its events in the same project directory.
+ */
+function recordSessionSummaries(
+  ctx: BridgeRouteContext,
+  items: readonly SessionSummary[],
+): void {
+  const directories = new Map<string, string>()
+  for (const item of items) {
+    if (item.cwd) directories.set(String(item.sessionId), item.cwd)
+  }
+  for (const item of items) {
+    const id = String(item.sessionId)
+    if (!directories.has(id)) {
+      const parentId = item.parentSessionId === undefined
+        ? undefined
+        : String(item.parentSessionId)
+      directories.set(id, (parentId === undefined ? undefined : directories.get(parentId)) ?? ctx.cwd)
+    }
+  }
+  for (const item of items) {
+    const id = String(item.sessionId)
+    ctx.state.sessionDirectories.set(id, directories.get(id) ?? ctx.cwd)
+    if (item.parentSessionId !== undefined) {
+      ctx.state.sessionParents.set(id, String(item.parentSessionId))
+    }
+  }
 }
 
 async function sessionView(ctx: BridgeRouteContext, id: string): Promise<SessionView> {
   const list = await rpc(ctx, 'session.list', {})
   const summary = list.items.find((item) => String(item.sessionId) === id)
+  recordSessionSummaries(ctx, list.items)
+  const cwd = sessionDirectoryFrom(list.items, summary, ctx.cwd)
   const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
-  if (summary?.cwd) ctx.state.sessionDirectories.set(id, summary.cwd)
   let model: SessionView['model']
   try {
     const selection = await rpc(ctx, 'session.models', { sessionId: sid(id) })
@@ -164,29 +210,42 @@ async function sessionView(ctx: BridgeRouteContext, id: string): Promise<Session
     events: history.events,
     createdAt: history.events[0]?.event.time,
     ...(model === undefined ? {} : { model }),
+    cwd,
   }
 }
 
 function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
   if (view.summary) {
     return convertSessionSummary(view.summary, {
-      cwd: ctx.cwd,
+      cwd: view.cwd ?? ctx.cwd,
       createdAt: view.createdAt,
       ...(view.model === undefined ? {} : { model: view.model }),
     })
   }
-  return minimalSession(id, { cwd: ctx.cwd, createdAt: view.createdAt })
+  return minimalSession(id, {
+    cwd: view.cwd ?? ctx.cwd,
+    createdAt: view.createdAt,
+    ...(ctx.state.sessionParents.get(id) === undefined
+      ? {}
+      : { parentID: ctx.state.sessionParents.get(id) }),
+  })
 }
 
 function toV2Session(view: SessionView, id: string, ctx: BridgeRouteContext): SessionV2Info {
   if (view.summary) {
     return convertSessionSummaryV2(view.summary, {
-      cwd: ctx.cwd,
+      cwd: view.cwd ?? ctx.cwd,
       createdAt: view.createdAt,
       ...(view.model === undefined ? {} : { model: view.model }),
     })
   }
-  return minimalSessionV2(id, { cwd: ctx.cwd, createdAt: view.createdAt })
+  return minimalSessionV2(id, {
+    cwd: view.cwd ?? ctx.cwd,
+    createdAt: view.createdAt,
+    ...(ctx.state.sessionParents.get(id) === undefined
+      ? {}
+      : { parentID: ctx.state.sessionParents.get(id) }),
+  })
 }
 
 async function modelGroups(ctx: BridgeRouteContext) {
@@ -449,6 +508,92 @@ async function applyModelSelection(
   })
 }
 
+/**
+ * dsh `session.fork` anchors on a completed-turn boundary by event seq.
+ * opencode's fork payload names a message id, so translate it to the seq of
+ * that message's user/assistant event (dsh documents message-fork buttons as
+ * passing the message seq; the boundary then closes at the following
+ * turn/end, which includes the whole turn).
+ */
+async function atSeqForMessage(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  messageId: string,
+): Promise<number> {
+  const history = await rpc(ctx, 'session.history', { sessionId: sid(sessionId) })
+  for (const entry of history.events) {
+    const event = entry.event
+    const candidate = event.type === 'user/message'
+      ? String(event.data.id)
+      : event.type === 'assistant/message'
+        ? String(event.data.message.id)
+        : undefined
+    if (candidate === messageId) return event.seq
+  }
+  throw badRequest('message not found for fork', { sessionId, messageId })
+}
+
+async function forkSession(
+  req: BridgeRequest,
+  ctx: BridgeRouteContext,
+  v2: boolean,
+): Promise<HandlerResult> {
+  const id = req.params.id ?? req.params.sessionID ?? ''
+  const body = bodyAsRecord(req.body)
+  const messageId = typeof body.messageID === 'string' ? body.messageID : undefined
+  const atSeq = messageId === undefined ? undefined : await atSeqForMessage(ctx, id, messageId)
+  const result = await rpc(ctx, 'session.fork', {
+    sessionId: sid(id),
+    ...(atSeq === undefined ? {} : { atSeq }),
+  })
+  const childId = String(result.sessionId)
+  const view = await sessionView(ctx, childId)
+  return json(200, v2
+    ? { data: toV2Session(view, childId, ctx) }
+    : toV1Session(view, childId, ctx))
+}
+
+/**
+ * Run dsh's registered `/compact` command directly through the command
+ * registry. The opencode TUI's slash command is `session.summarize`, which
+ * posts `/session/{id}/summarize`; dsh owns the model-backed compaction
+ * inside command-compact, so we address the live session agent here rather
+ * than sending a slash prompt to the model.
+ */
+async function compactSession(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+): Promise<void> {
+  const agent = ctx.api.agents?.get(sessionId)
+  if (agent === undefined) {
+    throw conflict('session is not attached; cannot compact', { sessionId })
+  }
+  if (!ctx.api.commands) {
+    throw internalError('dsh command registry is unavailable; cannot compact', { sessionId })
+  }
+  let execution: BridgeCommandExecution | undefined
+  try {
+    execution = await ctx.api.commands.execute(agent, '/compact', new AbortController().signal)
+  } catch (error) {
+    throw internalError(
+      `compact command failed: ${error instanceof Error ? error.message : String(error)}`,
+      { sessionId },
+    )
+  }
+  if (execution === undefined) {
+    throw badRequest('unknown command /compact', { code: 'unknown-command', sessionId })
+  }
+  if (execution.result.kind === 'error') {
+    throw badRequest(execution.result.text ?? 'compact command failed', {
+      code: 'command-error',
+      sessionId,
+    })
+  }
+  if (execution.result.text) {
+    ctx.log(`[bridge] /compact: ${execution.result.text}`)
+  }
+}
+
 async function createSession(
   req: BridgeRequest,
   ctx: BridgeRouteContext,
@@ -698,10 +843,10 @@ export function createBridgeRouter(
   // ---- v1 sessions ----
   register('GET', '/session', 'json', async (_req, ctx) => {
     const list = await rpc(ctx, 'session.list', {})
-    for (const item of list.items) {
-      if (item.cwd) state.sessionDirectories.set(String(item.sessionId), item.cwd)
-    }
-    return json(200, list.items.map((item) => convertSessionSummary(item, { cwd })))
+    recordSessionSummaries(ctx, list.items)
+    return json(200, list.items.map((item) => convertSessionSummary(item, {
+      cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
+    })))
   })
 
   register('GET', '/session/status', 'json', async (_req, ctx) => {
@@ -714,6 +859,21 @@ export function createBridgeRouter(
   })
 
   register('POST', '/session', 'json', (req, ctx) => createSession(req, ctx, false))
+
+  register('POST', '/session/:id/fork', 'json', (req, ctx) => forkSession(req, ctx, false))
+
+  register('POST', '/session/:id/summarize', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    await compactSession(ctx, id)
+    return json(200, true)
+  })
+
+  // Legacy alias kept for clients that call the endpoint by its action name.
+  register('POST', '/session/:id/compact', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    await compactSession(ctx, id)
+    return json(200, true)
+  })
 
   register('GET', '/session/:id', 'json', async (req, ctx) => {
     const id = req.params.id as string
@@ -845,16 +1005,24 @@ export function createBridgeRouter(
   // ---- v2 sessions ----
   register('GET', '/api/session', 'json', async (_req, ctx) => {
     const list = await rpc(ctx, 'session.list', {})
-    for (const item of list.items) {
-      if (item.cwd) state.sessionDirectories.set(String(item.sessionId), item.cwd)
-    }
+    recordSessionSummaries(ctx, list.items)
     return json(200, {
-      data: list.items.map((item) => convertSessionSummaryV2(item, { cwd })),
+      data: list.items.map((item) => convertSessionSummaryV2(item, {
+        cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
+      })),
       cursor: {},
     })
   })
 
   register('POST', '/api/session', 'json', (req, ctx) => createSession(req, ctx, true))
+
+  register('POST', '/api/session/:sessionID/fork', 'json', (req, ctx) => forkSession(req, ctx, true))
+
+  register('POST', '/api/session/:sessionID/compact', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    await compactSession(ctx, id)
+    return json(204)
+  })
 
   register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string

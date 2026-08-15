@@ -58,6 +58,24 @@ describe('convert/message (v1)', () => {
     }
   })
 
+  it('marks compaction checkpoint user messages with a compaction part', () => {
+    const event = sessionEvent('user/message', {
+      id: 'checkpoint-1' as never,
+      content: [{ type: 'text', text: '<compacted-summary>summary</compacted-summary>' }],
+      source: { kind: 'plugin', plugin: 'compact', sourceCommandId: 'cmd-1' },
+    }, 2, 1000)
+    const [entry] = convertMessagesV1([event], opts)
+    expect(entry?.info.role).toBe('user')
+    expect(entry?.parts).toHaveLength(1)
+    expect(entry?.parts[0]).toMatchObject({
+      id: 'checkpoint-1:compaction',
+      sessionID: 's1',
+      messageID: 'checkpoint-1',
+      type: 'compaction',
+      auto: false,
+    })
+  })
+
   it('folds assistant content into text/reasoning/tool parts', () => {
     const event = makeAssistantEvent([
       { type: 'reasoning', text: 'think' },
