@@ -90,6 +90,21 @@ function countsFromNumstat(output: string): Map<string, { additions: number; del
   return counts
 }
 
+function mergeCounts(
+  left: Map<string, { additions: number; deletions: number }>,
+  right: Map<string, { additions: number; deletions: number }>,
+): Map<string, { additions: number; deletions: number }> {
+  const merged = new Map(left)
+  for (const [file, counts] of right) {
+    const existing = merged.get(file)
+    merged.set(file, {
+      additions: (existing?.additions ?? 0) + counts.additions,
+      deletions: (existing?.deletions ?? 0) + counts.deletions,
+    })
+  }
+  return merged
+}
+
 /**
  * Working-tree + staged file statuses relative to `cwd`. Untracked files are
  * intentionally omitted (the SDK status type has no untracked variant).
@@ -101,13 +116,21 @@ export function vcsFileStatuses(cwd: string): VcsFileStatus[] {
     .split('\n')
     .map(statusFromPorcelain)
     .filter((row): row is VcsFileStatus => row !== undefined)
-  const staged = countsFromNumstat(git(cwd, ['diff', '--cached', '--numstat']).stdout)
-  const unstaged = countsFromNumstat(git(cwd, ['diff', '--numstat']).stdout)
+  // staged + unstaged line counts together equal the working tree against
+  // HEAD, so one numstat pass replaces two separate diff scans. Repositories
+  // without HEAD (staged files before the first commit) fall back to both
+  // sides so staged additions still carry counts.
+  const headDiff = git(cwd, ['diff', 'HEAD', '--numstat'])
+  const totals = headDiff.status === 0
+    ? countsFromNumstat(headDiff.stdout)
+    : mergeCounts(
+        countsFromNumstat(git(cwd, ['diff', '--cached', '--numstat']).stdout),
+        countsFromNumstat(git(cwd, ['diff', '--numstat']).stdout),
+      )
   for (const row of rows) {
-    const stagedCounts = staged.get(row.file)
-    const unstagedCounts = unstaged.get(row.file)
-    row.additions = (stagedCounts?.additions ?? 0) + (unstagedCounts?.additions ?? 0)
-    row.deletions = (stagedCounts?.deletions ?? 0) + (unstagedCounts?.deletions ?? 0)
+    const total = totals.get(row.file)
+    row.additions = total?.additions ?? 0
+    row.deletions = total?.deletions ?? 0
   }
   return rows
 }

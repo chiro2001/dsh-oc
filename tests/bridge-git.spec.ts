@@ -116,6 +116,17 @@ describe('vcs info / status / diff', () => {
     expect(rows.some((row) => row.file === 'untracked.txt')).toBe(false)
   })
 
+  it('counts staged additions before the first commit (no HEAD)', () => {
+    const work = gitRepo()
+    track(work, 'first.txt', 'one\n')
+    expect(vcsFileStatuses(work)).toContainEqual({
+      file: 'first.txt',
+      additions: 1,
+      deletions: 0,
+      status: 'added',
+    })
+  })
+
   it('builds per-file diffs and raw output against HEAD', () => {
     const work = gitRepo()
     track(work, 'tracked.txt', 'one\n')
