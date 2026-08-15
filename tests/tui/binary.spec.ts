@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { resolveOpenCodeBinary } from '../../src/tui/binary.ts'
+import {
+  parseOpenCodeVersion,
+  resolveOpenCodeBinary,
+  verifyOpenCodeVersion,
+} from '../../src/tui/binary.ts'
 import type { PlatformSelection } from '../../src/tui/platform.ts'
 
 const dirs: string[] = []
@@ -129,19 +133,46 @@ describe('resolveOpenCodeBinary', () => {
     expect(result).toEqual({ bin, source: 'package' })
   })
 
-  it('continues past a version mismatch on a higher-priority source', async () => {
-    const root = tmpDir('mismatch')
+  it('rejects an explicit DSH_OC_OPENCODE_BIN whose version mismatches', async () => {
+    const root = tmpDir('env-mismatch')
     const envBin = join(root, 'env', 'opencode')
-    const cacheBin = join(root, 'home', 'opencode', 'bin', '1.18.18', 'opencode')
     touch(envBin)
-    touch(cacheBin)
 
-    const result = await resolveOpenCodeBinary({
-      env: { DSH_OC_OPENCODE_BIN: envBin, PATH: '' },
-      home: join(root, 'home'),
-      probe: async bin => (bin === envBin ? 'opencode 0.0.0' : 'opencode 1.18.18'),
-    })
-    expect(result).toEqual({ bin: cacheBin, source: 'cache' })
+    await expect(
+      resolveOpenCodeBinary({
+        env: { DSH_OC_OPENCODE_BIN: envBin, PATH: '' },
+        home: join(root, 'home'),
+        probe: async () => 'opencode 0.0.0',
+      }),
+    ).rejects.toThrow(/reports version 0\.0\.0.*expected 1\.18\.18/s)
+  })
+
+  it('rejects an explicit DSH_OC_OPENCODE_BIN that does not exist', async () => {
+    const root = tmpDir('env-missing')
+    const envBin = join(root, 'env', 'opencode')
+
+    await expect(
+      resolveOpenCodeBinary({
+        env: { DSH_OC_OPENCODE_BIN: envBin, PATH: '' },
+        home: join(root, 'home'),
+        probe: versionProbe,
+      }),
+    ).rejects.toThrow(/points to a missing binary/)
+  })
+
+  it('requires an exact semver match instead of a prefix match', async () => {
+    const root = tmpDir('exact-version')
+    const bin = join(root, 'opencode')
+    touch(bin)
+
+    await expect(
+      resolveOpenCodeBinary({
+        env: { DSH_OC_OPENCODE_BIN: bin, PATH: '' },
+        home: join(root, 'home'),
+        probe: async () => 'opencode 1.18.180',
+        download: async () => join(root, 'downloaded', 'opencode'),
+      }),
+    ).rejects.toThrow(/reports version 1\.18\.180.*expected 1\.18\.18/s)
   })
 
   it('continues from a wrong PATH binary to an installed package', async () => {
@@ -254,5 +285,40 @@ describe('resolveOpenCodeBinary', () => {
       }),
     )
     expect(result).toEqual({ bin: join(root, 'downloaded', 'opencode'), source: 'download' })
+  })
+})
+
+describe('parseOpenCodeVersion', () => {
+  it('extracts x.y.z from common opencode --version outputs', () => {
+    expect(parseOpenCodeVersion('1.18.18')).toBe('1.18.18')
+    expect(parseOpenCodeVersion('opencode 1.18.18')).toBe('1.18.18')
+    expect(parseOpenCodeVersion('opencode v1.18.18 (bun 1.2.3)')).toBe('1.18.18')
+  })
+
+  it('returns undefined for missing or ambiguous output', () => {
+    expect(parseOpenCodeVersion(undefined)).toBeUndefined()
+    expect(parseOpenCodeVersion('not a version')).toBeUndefined()
+    expect(parseOpenCodeVersion('1.18.180')).toBe('1.18.180')
+    expect(parseOpenCodeVersion('1.18')).toBeUndefined()
+  })
+})
+
+describe('verifyOpenCodeVersion', () => {
+  it('resolves when the probed version matches', async () => {
+    await expect(
+      verifyOpenCodeVersion('/x/opencode', '1.18.18', async () => 'opencode 1.18.18'),
+    ).resolves.toBe('1.18.18')
+  })
+
+  it('rejects mismatches with the expected remediation message', async () => {
+    await expect(
+      verifyOpenCodeVersion('/x/opencode', '1.18.18', async () => 'opencode 0.0.0'),
+    ).rejects.toThrow(/reports version 0\.0\.0.*expected 1\.18\.18.*DSH_OC_OPENCODE_BIN/s)
+  })
+
+  it('rejects unparseable probe output', async () => {
+    await expect(
+      verifyOpenCodeVersion('/x/opencode', '1.18.18', async () => 'garbage'),
+    ).rejects.toThrow(/reports version unknown/)
   })
 })

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildChildEnv,
@@ -8,6 +8,9 @@ import {
   filterSupportedArgs,
   installSignalForwarding,
   OcTuiConfig,
+  OPENCODE_CONFIG_FILE,
+  OPENCODE_NETWORK_SAFETY_ENV,
+  prepareOpenCodeConfig,
   prepareOpenCodeTuiState,
   requestExit,
   startOpenCodeTui,
@@ -133,6 +136,7 @@ describe('buildChildEnv', () => {
     const env = buildChildEnv({ FOO: 'bar' }, '/home/dsh')
     expect(env.FOO).toBe('bar')
     expect(env).toMatchObject({
+      ...OPENCODE_NETWORK_SAFETY_ENV,
       OPENCODE_CONFIG_DIR: '/home/dsh/opencode/config',
       XDG_CONFIG_HOME: '/home/dsh/opencode/config',
       XDG_DATA_HOME: '/home/dsh/opencode/data',
@@ -140,6 +144,18 @@ describe('buildChildEnv', () => {
       XDG_CACHE_HOME: '/home/dsh/opencode/cache',
     })
     expect(env.OPENCODE_CONFIG_CONTENT).toBeUndefined()
+  })
+
+  it('overrides parent-provided auto-update switches with the hardcoded safe values', () => {
+    const env = buildChildEnv(
+      {
+        OPENCODE_DISABLE_AUTOUPDATE: '0',
+        OPENCODE_DISABLE_MODELS_FETCH: 'false',
+        OPENCODE_DISABLE_LSP_DOWNLOAD: '',
+      },
+      '/home/dsh',
+    )
+    expect(env).toMatchObject(OPENCODE_NETWORK_SAFETY_ENV)
   })
 
   it('never passes OPENCODE_CONFIG_CONTENT even when the parent set it', () => {
@@ -199,6 +215,31 @@ describe('prepareOpenCodeTuiState', () => {
     prepareOpenCodeTuiState(home, {})
     expect(existsSync(join(home, 'opencode', 'state', 'opencode', 'kv.json'))).toBe(false)
     expect(existsSync(join(home, 'opencode', 'config', 'tui.json'))).toBe(false)
+  })
+})
+
+describe('prepareOpenCodeConfig', () => {
+  it('writes autoupdate:false into the isolated opencode.json, preserving existing keys', () => {
+    const home = tmpDir('config')
+    const configPath = join(home, 'opencode', 'config', OPENCODE_CONFIG_FILE)
+    mkdirSync(dirname(configPath), { recursive: true })
+    writeFileSync(configPath, JSON.stringify({ theme: 'dark', model: 'deepseek-chat' }))
+
+    prepareOpenCodeConfig(home)
+
+    expect(JSON.parse(readFileSync(configPath, 'utf8'))).toEqual({
+      theme: 'dark',
+      model: 'deepseek-chat',
+      autoupdate: false,
+    })
+  })
+
+  it('creates the config directory when missing', () => {
+    const home = tmpDir('config-missing')
+    prepareOpenCodeConfig(home)
+    expect(JSON.parse(readFileSync(join(home, 'opencode', 'config', OPENCODE_CONFIG_FILE), 'utf8'))).toEqual({
+      autoupdate: false,
+    })
   })
 })
 

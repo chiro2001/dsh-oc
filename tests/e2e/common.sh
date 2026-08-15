@@ -7,7 +7,7 @@ export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:14514}"
 
 E2E_REPO_ROOT="$(git rev-parse --show-toplevel)"
 case "$E2E_REPO_ROOT" in
-  /home/chiro/projects/dsh-oc/dsh-oc-*)
+  /home/chiro/projects/dsh-oc/dsh-oc|/home/chiro/projects/dsh-oc/dsh-oc-*)
     ;;
   *)
     echo "e2e: must run from /home/chiro/projects/dsh-oc/dsh-oc-* (got $E2E_REPO_ROOT)" >&2

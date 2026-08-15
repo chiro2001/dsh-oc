@@ -29,6 +29,39 @@ export interface ResolvedBinary {
   readonly source: BinarySource
 }
 
+/**
+ * Extract the first `x.y.z` semver from an opencode `--version` probe.
+ * Accepts `1.18.18`, `opencode 1.18.18` and `v1.18.18` outputs.
+ */
+export function parseOpenCodeVersion(output: string | undefined): string | undefined {
+  if (output === undefined) return undefined
+  const match = /\b(?:v)?(\d+)\.(\d+)\.(\d+)\b/.exec(output)
+  if (match === null) return undefined
+  return `${match[1]}.${match[2]}.${match[3]}`
+}
+
+/**
+ * Probe a binary and verify its `--version` matches the expected opencode
+ * version. Throws with a clear remediation message on mismatch.
+ */
+export async function verifyOpenCodeVersion(
+  bin: string,
+  expected: string = OPENCODE_VERSION,
+  probe: (bin: string) => string | undefined | Promise<string | undefined> = defaultProbe,
+): Promise<string> {
+  const output = await probe(bin)
+  const actual = parseOpenCodeVersion(output)
+  if (actual !== expected) {
+    throw new Error(
+      `opencode binary ${JSON.stringify(bin)} reports version ${actual ?? 'unknown'} ` +
+      `(${JSON.stringify(output ?? '')}), expected ${expected}. ` +
+      `Clear the versioned cache under $DSH_HOME/opencode/bin or set ` +
+      `${OPENCODE_BIN_ENV} to a binary matching ${expected}.`,
+    )
+  }
+  return actual
+}
+
 /** Injectable operations for unit tests. */
 export interface BinaryResolverDeps {
   env?: Record<string, string | undefined>
@@ -64,7 +97,7 @@ export async function resolveOpenCodeBinary(deps: BinaryResolverDeps = {}): Prom
   const matches = async (bin: string): Promise<boolean> => {
     try {
       const output = await probe(bin)
-      return typeof output === 'string' && output.includes(version)
+      return parseOpenCodeVersion(output) === version
     } catch {
       return false
     }
@@ -75,7 +108,13 @@ export async function resolveOpenCodeBinary(deps: BinaryResolverDeps = {}): Prom
     if (!isAbsolute(override)) {
       throw new Error(`${OPENCODE_BIN_ENV} must be an absolute path, got ${JSON.stringify(override)}`)
     }
-    if (exists(override) && await matches(override)) return { bin: override, source: 'env' }
+    if (!exists(override)) {
+      throw new Error(`${OPENCODE_BIN_ENV} points to a missing binary: ${JSON.stringify(override)}`)
+    }
+    if (await matches(override)) return { bin: override, source: 'env' }
+    // An explicit override that exists must match the locked version; never
+    // silently fall back to a different binary the user did not approve.
+    await verifyOpenCodeVersion(override, version, probe)
   }
 
   const cacheBin = join(home, 'opencode', 'bin', version, platform.executableName)

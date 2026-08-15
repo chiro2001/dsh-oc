@@ -76,7 +76,9 @@
 | 数据隔离（config/data/state/cache 在 `$DSH_HOME/opencode`） | ✅ | `src/tui/index.ts` `buildChildEnv` | `tests/tui/index.spec.ts` | `f30b156` |
 | 消息时间戳默认开启 | ✅ | `DSH_OC_TUI_TIMESTAMPS=1` → `kv.json` `timestamps: show` + `tui.json` 快捷键 | `tests/tui/index.spec.ts`、`scripts/e2e-tui-timestamps.sh` | 本提交 |
 | 时间戳运行时切换 | ✅ | `tui.json` 绑定 `session_toggle_timestamps` / `messages_toggle_timestamps` 为 `ctrl+shift+t`，也可用 `/timestamps` | 手工 TUI 验证 | 本提交 |
-| 二进制版本校验（`--version` 匹配） | ✅ | `src/tui/binary.ts`、`src/tui/download.ts` | `tests/tui/binary.spec.ts`、`tests/tui/download.spec.ts` | `f30b156` |
+| 二进制版本校验（`--version` 精确匹配 + 显式覆盖报错） | ✅ | `src/tui/binary.ts` `parseOpenCodeVersion`/`verifyOpenCodeVersion` | `tests/tui/binary.spec.ts`、`scripts/e2e-tui-version-lock.sh` | 本提交 |
+| 自动更新/热更新关闭 | ✅ | `OPENCODE_DISABLE_AUTOUPDATE=1` + 隔离配置 `autoupdate: false` | `tests/tui/index.spec.ts`、`scripts/e2e-tui-offline.sh` | 本提交 |
+| 后台外网行为关闭（models fetch / LSP download） | ✅ | `OPENCODE_DISABLE_MODELS_FETCH=1`、`OPENCODE_DISABLE_LSP_DOWNLOAD=1` | `tests/tui/index.spec.ts` | 本提交 |
 
 ## 8. 分发
 
@@ -95,12 +97,13 @@
 | API e2e 路由矩阵 + 权限流 | ✅ | `scripts/e2e-api.sh` | `bash scripts/e2e-api.sh` | `f30b156` |
 | TUI boot / turn / stream e2e | ✅ | `scripts/e2e-tui-boot.sh`、`scripts/e2e-tui-turn.sh`、`scripts/e2e-tui-stream.sh` | 对应脚本输出 `PASSED` | `f30b156` |
 | TUI 时间戳 e2e | ✅ | `scripts/e2e-tui-timestamps.sh` | `bash scripts/e2e-tui-timestamps.sh` | 本提交 |
+| 离线启动 / 版本锁定 e2e | ✅ | `scripts/e2e-tui-offline.sh`、`scripts/e2e-tui-version-lock.sh` | 对应脚本输出 `PASSED` | 本提交 |
 | 功能矩阵自动追踪 | ✅ | `scripts/update-feature-matrix.mjs` | `pnpm run features:update` | 本提交 |
 
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`5509bb3`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`0befa22`（2026-08-15）。
 
 ### 路由注册表
 
@@ -181,19 +184,20 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 17 | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
-| `tests/bridge-router.spec.ts` | 34 | 42726f7 fix(bridge): accept /preset slash spelling in command route |
+| `tests/bridge-events.spec.ts` | 21 | 75b45a9 fix(bridge): push live subagent child sessions into tui session tree |
+| `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
+| `tests/bridge-router.spec.ts` | 36 | 82591b3 merge: integrate command ux and fork/diff fixes |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `tests/convert/session.spec.ts` | 6 | 87406ba feat(bridge): subagent child sessions, fork and compact |
+| `tests/convert/session.spec.ts` | 7 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
 | `tests/scaffold.spec.ts` | 7 | 4ddba09 feat(profile): mount dsh agent presets so /preset can switch minimal etc |
-| `tests/tui/binary.spec.ts` | 11 | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
+| `tests/tui/binary.spec.ts` | 18 | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 19 | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
+| `tests/tui/index.spec.ts` | 22 | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -205,16 +209,17 @@
 | `src/bridge/convert/model.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/session.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
+| `src/bridge/convert/session.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
+| `src/bridge/events.ts` | 75b45a9 fix(bridge): push live subagent child sessions into tui session tree |
+| `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
-| `src/bridge/router.ts` | 42726f7 fix(bridge): accept /preset slash spelling in command route |
+| `src/bridge/router.ts` | 75b45a9 fix(bridge): push live subagent child sessions into tui session tree |
 | `src/bridge/rpc.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
-| `src/bridge/sse.ts` | 10bbb52 fix(bridge): per-client sse writes and correct assistant parent id |
+| `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/index.ts` | 6310216 feat(scaffold): project skeleton, dsh bundle patch and opencode asset manifest |
@@ -224,12 +229,15 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
-| `scripts/e2e-api.sh` | eb9d45f test(e2e): use standard preset for approval flow |
+| `scripts/e2e-api.sh` | cb9c22b test(e2e): verify fork chain advances from fork #1 to fork #2 |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
+| `scripts/e2e-tui-command.sh` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
+| `scripts/e2e-tui-offline.sh` | — |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
 | `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
-| `scripts/e2e-tui-tools.sh` | b06c951 test(e2e): make tools and stream assertions robust |
+| `scripts/e2e-tui-tools.sh` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `scripts/e2e-tui-turn.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
+| `scripts/e2e-tui-version-lock.sh` | — |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->

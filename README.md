@@ -106,6 +106,8 @@ bash scripts/e2e-api.sh        # HTTP/SSE 路由矩阵 + 会话循环 + 权限�
 bash scripts/e2e-tui-boot.sh   # 真实 opencode TUI 启动/退出 + 终端恢复
 bash scripts/e2e-tui-turn.sh   # 真实 TUI 键盘输入完成一轮对话
 bash scripts/e2e-tui-timestamps.sh  # DSH_OC_TUI_TIMESTAMPS=1 下时间戳文本出现
+bash scripts/e2e-tui-offline.sh     # 代理不可达 + 清空缓存时 TUI 仍能启动
+bash scripts/e2e-tui-version-lock.sh  # 显式二进制版本不匹配时明确报错退出
 ```
 
 tarball 验证模式（用 npm tarball 而不是本地路径安装）：
@@ -120,6 +122,20 @@ DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-timestamps.sh
 ```
 
 四个脚本必须全部输出 `PASSED`；该模式下 profile 安装的是 tarball 而非本地路径。
+
+## 网络与更新策略
+
+opencode 子进程启动时被强制关闭后台外网行为（以 1.18.18 源码验证为准）：
+
+- `OPENCODE_DISABLE_AUTOUPDATE=1`：禁用自动更新检查（`cli/upgrade.ts` 直接短路）。
+- `OPENCODE_DISABLE_MODELS_FETCH=1`：不主动拉取远程模型目录。
+- `OPENCODE_DISABLE_LSP_DOWNLOAD=1`：不下载 LSP 二进制。
+- 隔离配置中写入 `autoupdate: false`，即使未来版本改变环境变量名也不下载/热替换。
+
+二进制锁定：运行前 `resolveOpenCodeBinary` 与 `verifyOpenCodeVersion` 双重校验
+`--version` 必须等于 `opencode-version.json` 中的 `1.18.18`；显式指定的
+`DSH_OC_OPENCODE_BIN` 版本不匹配时会直接报错退出，不会静默回退到 PATH 上的其它版本。
+缓存错误时清除 `$DSH_HOME/opencode/bin` 或设置匹配版本的 `DSH_OC_OPENCODE_BIN`。
 
 ## 已知限制
 

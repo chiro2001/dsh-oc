@@ -13,6 +13,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { z } from 'zod'
 import type { OcBridgeService } from '../index.js'
 import {
+  verifyOpenCodeVersion,
   resolveOpenCodeBinary as resolveBinaryFromDeps,
   type BinaryResolverDeps,
   type ResolvedBinary,
@@ -27,8 +28,22 @@ export const DSH_OC_TUI_TIMESTAMPS = 'DSH_OC_TUI_TIMESTAMPS'
 /** TUI config file name under OPENCODE_CONFIG_DIR. */
 export const OPENCODE_TUI_FILE = 'tui.json'
 
+/** Main opencode config file name under OPENCODE_CONFIG_DIR. */
+export const OPENCODE_CONFIG_FILE = 'opencode.json'
+
 /** KV state file used by the opencode TUI for per-feature signals. */
 export const OPENCODE_KV_FILE = 'kv.json'
+
+/**
+ * Verified opencode 1.18.18 switches that disable background update checks,
+ * remote model catalog fetches and LSP binary downloads. Set before the child
+ * process spawns; the values are read from the process environment.
+ */
+export const OPENCODE_NETWORK_SAFETY_ENV: Readonly<Record<string, string>> = {
+  OPENCODE_DISABLE_AUTOUPDATE: '1',
+  OPENCODE_DISABLE_MODELS_FETCH: '1',
+  OPENCODE_DISABLE_LSP_DOWNLOAD: '1',
+}
 
 /**
  * Whether timestamps should be enabled for the opencode TUI child.
@@ -93,6 +108,23 @@ export function prepareOpenCodeTuiState(
   writeFileSync(
     kvPath,
     `${JSON.stringify({ ...kv, timestamps: 'show' }, null, 2)}\n`,
+  )
+}
+
+/**
+ * Seed the isolated opencode config with `autoupdate: false`, preserving any
+ * existing values. This is the config-level counterpart of
+ * `OPENCODE_DISABLE_AUTOUPDATE` and keeps the attach child from downloading or
+ * hot-replacing itself even if a future opencode version changes the env flag.
+ */
+export function prepareOpenCodeConfig(dshHome: string): void {
+  const configDir = join(dshHome, 'opencode', 'config')
+  const configPath = join(configDir, OPENCODE_CONFIG_FILE)
+  mkdirSync(configDir, { recursive: true })
+  const config = readJsonObject(configPath)
+  writeFileSync(
+    configPath,
+    `${JSON.stringify({ ...config, autoupdate: false }, null, 2)}\n`,
   )
 }
 
@@ -294,6 +326,7 @@ export function buildChildEnv(
 ): NodeJS.ProcessEnv {
   const childEnv: NodeJS.ProcessEnv = {
     ...env,
+    ...OPENCODE_NETWORK_SAFETY_ENV,
     OPENCODE_CONFIG_DIR: join(dshHome, 'opencode', 'config'),
     XDG_CONFIG_HOME: join(dshHome, 'opencode', 'config'),
     XDG_DATA_HOME: join(dshHome, 'opencode', 'data'),
@@ -376,6 +409,7 @@ export class OcTuiService extends Service {
         env: process.env,
         binaryOverride: this.config.binary,
       })
+      await verifyOpenCodeVersion(resolved.bin)
     } catch (error) {
       this.fail(error)
       return
@@ -395,6 +429,7 @@ export class OcTuiService extends Service {
     ]) {
       mkdirSync(dir, { recursive: true })
     }
+    prepareOpenCodeConfig(dshHome)
     prepareOpenCodeTuiState(dshHome, process.env)
 
     try {
@@ -416,7 +451,11 @@ export class OcTuiService extends Service {
   }
 
   private fail(error: unknown): void {
-    this.ctx.logger.error(error instanceof Error ? error : new Error(String(error)))
+    const message = error instanceof Error ? error.message : String(error)
+    this.ctx.logger.error(message)
+    // Keep startup failures visible even when the dsh logger is not attached
+    // to the console (e.g. version-lock rejections during `--profile oc`).
+    process.stderr.write(`[dsh-oc] ${message}\n`)
     requestExit(this.ctx, 1)
   }
 }

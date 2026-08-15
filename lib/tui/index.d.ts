@@ -86,8 +86,16 @@ interface BinaryResolverDeps {
 declare const DSH_OC_TUI_TIMESTAMPS = "DSH_OC_TUI_TIMESTAMPS";
 /** TUI config file name under OPENCODE_CONFIG_DIR. */
 declare const OPENCODE_TUI_FILE = "tui.json";
+/** Main opencode config file name under OPENCODE_CONFIG_DIR. */
+declare const OPENCODE_CONFIG_FILE = "opencode.json";
 /** KV state file used by the opencode TUI for per-feature signals. */
 declare const OPENCODE_KV_FILE = "kv.json";
+/**
+ * Verified opencode 1.18.18 switches that disable background update checks,
+ * remote model catalog fetches and LSP binary downloads. Set before the child
+ * process spawns; the values are read from the process environment.
+ */
+declare const OPENCODE_NETWORK_SAFETY_ENV: Readonly<Record<string, string>>;
 /**
  * Whether timestamps should be enabled for the opencode TUI child.
  * Accepts `1`, `true`, `yes` and `on` (case-insensitive).
@@ -104,6 +112,13 @@ declare function tuiTimestampsEnabled(env?: NodeJS.ProcessEnv): boolean;
  * Existing config/state values are preserved by merging.
  */
 declare function prepareOpenCodeTuiState(dshHome: string, env?: NodeJS.ProcessEnv): void;
+/**
+ * Seed the isolated opencode config with `autoupdate: false`, preserving any
+ * existing values. This is the config-level counterpart of
+ * `OPENCODE_DISABLE_AUTOUPDATE` and keeps the attach child from downloading or
+ * hot-replacing itself even if a future opencode version changes the env flag.
+ */
+declare function prepareOpenCodeConfig(dshHome: string): void;
 /** oc-tui configuration schema; both fields are optional. */
 declare const OcTuiConfig: z.ZodDefault<z.ZodObject<{
   binary: z.ZodOptional<z.ZodString>;
@@ -220,5 +235,5 @@ declare class OcTuiService extends Service {
   private fail;
 }
 //#endregion
-export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_KV_FILE, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, buildChildEnv, filterSupportedArgs, installSignalForwarding, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiTimestampsEnabled };
+export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, buildChildEnv, filterSupportedArgs, installSignalForwarding, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiTimestampsEnabled };
 //# sourceMappingURL=index.d.ts.map
