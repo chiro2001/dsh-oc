@@ -37,7 +37,7 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 | 模型目录、reasoning effort、agent preset 切换 | ✅ |
 | 工具卡片（bash/read/write/edit）、diff 与 Modified Files | ✅ |
 | 工具参数流式显示 | ✅ |
-| 权限/提问流、子代理会话树 | ✅ |
+| 权限/提问流、子代理会话树与后台子代理 | ✅ |
 | Goal 创建/查看（sidebar + `/goal`） | ✅ |
 | Esc 打断/取消（全量双按、mini 单按） | ✅ |
 | 文本/图片附件 | ✅（PDF 等二进制暂不支持） |
