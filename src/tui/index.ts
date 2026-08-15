@@ -220,6 +220,7 @@ export function buildChildEnv(
   const childEnv: NodeJS.ProcessEnv = {
     ...env,
     OPENCODE_CONFIG_DIR: join(dshHome, 'opencode', 'config'),
+    XDG_CONFIG_HOME: join(dshHome, 'opencode', 'config'),
     XDG_DATA_HOME: join(dshHome, 'opencode', 'data'),
     XDG_STATE_HOME: join(dshHome, 'opencode', 'state'),
     XDG_CACHE_HOME: join(dshHome, 'opencode', 'cache'),

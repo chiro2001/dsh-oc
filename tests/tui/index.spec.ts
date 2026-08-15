@@ -116,6 +116,7 @@ describe('buildChildEnv', () => {
     expect(env.FOO).toBe('bar')
     expect(env).toMatchObject({
       OPENCODE_CONFIG_DIR: '/home/dsh/opencode/config',
+      XDG_CONFIG_HOME: '/home/dsh/opencode/config',
       XDG_DATA_HOME: '/home/dsh/opencode/data',
       XDG_STATE_HOME: '/home/dsh/opencode/state',
       XDG_CACHE_HOME: '/home/dsh/opencode/cache',
