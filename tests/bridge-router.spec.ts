@@ -914,6 +914,12 @@ describe('bridge router: session routes', () => {
     const context = await request(server, 'GET', '/api/session/s1/context')
     expect(context.status).toBe(200)
     expect(context.body).toMatchObject({ data: [{ type: 'user' }, { type: 'assistant' }] })
+    const v2FirstID = (v2Messages.body as { data: Array<{ id: string }> }).data[0]?.id
+    expect(v2FirstID).toBeDefined()
+    const v2Single = await request(server, 'GET', `/api/session/s1/message/${v2FirstID}`)
+    expect(v2Single.status).toBe(200)
+    expect((v2Single.body as { data: { id: string } }).data.id).toBe(v2FirstID)
+    expect((await request(server, 'GET', '/api/session/s1/message/nope')).status).toBe(404)
   })
 
   it('reports the active session through /api/session/active', async () => {

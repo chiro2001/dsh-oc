@@ -273,6 +273,9 @@ USER_MESSAGE_ID="$(curl -s "$BRIDGE/session/$SESSION_V1/message" | jq -er '.[] |
 [[ -n "$USER_MESSAGE_ID" ]]
 curl -s "$BRIDGE/session/$SESSION_V1/message/$USER_MESSAGE_ID" | jq -e --arg id "$USER_MESSAGE_ID" '.info.id == $id' >/dev/null
 echo "  GET single message by id ok"
+V2_FIRST_MSG_ID="$(curl -s "$BRIDGE/api/session/$SESSION_V2/message" | jq -r '.data[0].id')"
+curl -s "$BRIDGE/api/session/$SESSION_V2/message/$V2_FIRST_MSG_ID" | jq -e --arg id "$V2_FIRST_MSG_ID" '.data.id == $id' >/dev/null
+echo "  GET v2 single message by id ok"
 FORKED_AT_MSG_JSON="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' \
   -d "{\"messageID\":\"$USER_MESSAGE_ID\"}")"
 FORKED_AT_MSG="$(jq -er .id <<<"$FORKED_AT_MSG_JSON")"

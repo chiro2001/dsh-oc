@@ -148,7 +148,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`9ca7905`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`d8aaf64`（2026-08-16）。
 
 ### 路由注册表
 
@@ -210,12 +210,12 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | 2e52727 feat(bridge): add v2 interrupt route and dedupe replayed stream chunks |
+| `src/bridge/router.ts` | d8aaf64 feat(bridge): add per-session SSE event stream |
 | `src/bridge/routes.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/boot.ts` | 1c14bf1 feat(bridge): add api health endpoint |
 | `src/bridge/routes/permission.ts` | fd1e4b5 feat(bridge): add SDK v2 permission reply alias route |
 | `src/bridge/routes/session-v1.ts` | f6afc34 feat(bridge): add single-message lookup endpoint |
-| `src/bridge/routes/session-v2.ts` | 9ca7905 feat(bridge): add v2 session context endpoint |
+| `src/bridge/routes/session-v2.ts` | d8aaf64 feat(bridge): add per-session SSE event stream |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
@@ -231,7 +231,7 @@
 | `scripts/check-all.sh` | 396b49b test(e2e): add real TUI permission and question dialog coverage |
 | `scripts/cleanup-merged-branches.sh` | 2848dc8 fix(scripts): accept --apply/--remote flags before the target branch |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
-| `scripts/e2e-api.sh` | 9ca7905 feat(bridge): add v2 session context endpoint |
+| `scripts/e2e-api.sh` | d8aaf64 feat(bridge): add per-session SSE event stream |
 | `scripts/e2e-tui-abort.sh` | 2e52727 feat(bridge): add v2 interrupt route and dedupe replayed stream chunks |
 | `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
@@ -259,6 +259,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

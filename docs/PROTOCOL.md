@@ -185,6 +185,7 @@ GET /api/integration?location[directory]=...
 | `GET /api/session/{id}` | MAP | 同 v1 |
 | `GET /api/session/{id}/message` | MAP | 同 v1 |
 | `GET /api/session/{id}/context` | MAP | `{ data: SessionMessage[] }`（复用 v2 消息转换，无游标） |
+| `GET /api/session/{id}/message/{messageID}` | MAP | `{ data: SessionMessage }` 单条查询；未找到 404 |
 | `GET /api/session/{id}/event` | MAP | 按会话过滤的 SSE 事件流（`/global/event` 子集） |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
 | `POST /api/session/{id}/permission/{rid}/reply` | MAP | `apiProxy.respond` |
