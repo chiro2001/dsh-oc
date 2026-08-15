@@ -58,9 +58,9 @@ dsh plugin --profile oc add chiro2001/dsh-oc
 dsh --profile oc --help            # 验证新版本已生效
 ```
 
-> 包的 npm 名称仍是 `@deepseek-ai/dsh-oc`（安装源是
-> `github:chiro2001/dsh-oc`）；也可在 `$DSH_HOME/profiles/oc` 下用
-> `pnpm update @deepseek-ai/dsh-oc` 更新。
+> 注意：仓库 `package.json` 里的 npm 包名是 `@deepseek-ai/dsh-oc@0.1.0-rc.1`，
+> 但该包**没有发布到 npm registry**；安装与更新一律走 GitHub 源
+> `chiro2001/dsh-oc`。
 
 本地开发时（仓库已 clone 到本地），重新构建并指向本地路径即可：
 
