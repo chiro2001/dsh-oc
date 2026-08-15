@@ -79,6 +79,7 @@ async function newRun(argv) {
   const workdir = join(runDir, 'work')
   mkdirSync(dshHome, { recursive: true })
   mkdirSync(workdir, { recursive: true })
+  const resolvedToolArguments = toolArguments.replaceAll('@WORKDIR@', workdir)
 
   const dshEnv = { ...process.env, DSH_HOME: dshHome }
   run('git', ['init', '-q'], { cwd: workdir })
@@ -134,7 +135,7 @@ async function newRun(argv) {
       ...(chunkDelayMs === undefined ? [] : ['--chunk-delay-ms', String(chunkDelayMs)]),
       ...(chunkSize === undefined ? [] : ['--chunk-size', String(chunkSize)]),
       '--tool-name', toolName,
-      '--tool-arguments', toolArguments,
+      '--tool-arguments', resolvedToolArguments,
       '--port-file', mockPortFile,
     ],
     {

@@ -366,6 +366,107 @@ describe('bridge events: session event mapping', () => {
     }
   })
 
+  it('emits snapshot/patch parts and session.diff after a file-changing tool', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/call', {
+          turn: 1,
+          step: 1,
+          callId: 'c1' as never,
+          name: 'str_replace_editor',
+          arguments: JSON.stringify({
+            command: 'str_replace',
+            path: '/work/src/a.ts',
+            old_str: 'const a = 1',
+            new_str: 'const a = 2',
+          }),
+        }, 3, 100),
+        view: {
+          for: 'call',
+          view: {
+            card: 'diff',
+            title: 'str_replace /work/src/a.ts',
+            diffs: [{
+              path: '/work/src/a.ts',
+              oldText: 'const a = 1',
+              newText: 'const a = 2',
+            }],
+          },
+        },
+      }, 'rpc-call'),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/result', {
+          turn: 1,
+          step: 1,
+          message: {
+            id: 't1' as never,
+            role: 'user',
+            content: [{
+              type: 'tool-result',
+              toolCallId: 'c1' as never,
+              content: [{ type: 'text', text: 'Edited' }],
+            }],
+            source: { kind: 'tool', callId: 'c1' as never },
+          },
+        }, 4, 150),
+        view: {
+          for: 'result',
+          view: {
+            card: 'diff',
+            title: 'str_replace /work/src/a.ts',
+            diffs: [{
+              path: '/work/src/a.ts',
+              oldText: 'const a = 1',
+              newText: 'const a = 2',
+            }],
+          },
+        },
+      }, 'rpc-result'),
+    ])
+
+    const partEvents = events.filter((event) => event.payload.type === 'message.part.updated')
+    expect(partEvents.map((event) => (event.payload.properties.part as { type?: string }).type)).toEqual([
+      'tool',
+      'tool',
+      'snapshot',
+      'patch',
+    ])
+    expect(partEvents[0]?.payload.properties.part).toMatchObject({
+      tool: 'edit',
+      state: { status: 'pending' },
+    })
+    expect(partEvents[1]?.payload.properties.part).toMatchObject({
+      tool: 'edit',
+      state: {
+        status: 'completed',
+        metadata: {
+          files: ['/work/src/a.ts'],
+          command: 'str_replace',
+        },
+      },
+    })
+    const patch = partEvents[3]?.payload.properties.part as { type: string; files: string[]; hash: string }
+    expect(patch.type).toBe('patch')
+    expect(patch.files).toEqual(['/work/src/a.ts'])
+    expect(patch.hash).toBeTypeOf('string')
+
+    const diff = events.find((event) => event.payload.type === 'session.diff')
+    expect(diff?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      diff: [{
+        file: '/work/src/a.ts',
+        additions: 1,
+        deletions: 1,
+        status: 'modified',
+      }],
+    })
+  })
+
   it('maps todo/write to todo.updated', () => {
     const { translate } = translator()
     const events = translate([
@@ -526,6 +627,31 @@ describe('bridge events: projection and control frames', () => {
       sessionID: 's1',
       diff: [{ file: 'a.ts', additions: 2, deletions: 1, status: 'modified' }],
     })
+  })
+
+  it('normalizes produced-files patch/status into SnapshotFileDiff', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/projection',
+        sessionId: 's1' as never,
+        key: 'produced-files',
+        value: [{
+          file: 'src/new.ts',
+          patch: '--- a/src/new.ts\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+hello\n',
+          additions: 1,
+          deletions: 0,
+        }],
+        seq: 2,
+      }),
+    ])
+    expect(events[0]?.payload.properties.diff).toEqual([{
+      file: 'src/new.ts',
+      patch: '--- a/src/new.ts\n+++ b/src/new.ts\n@@ -0,0 +1 @@\n+hello\n',
+      additions: 1,
+      deletions: 0,
+      status: 'modified',
+    }])
   })
 
   it('ignores control frames and stream errors', () => {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { createBridgeRouter, type BridgeRouter } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import type { BridgeApi } from '../src/bridge/rpc.js'
@@ -366,6 +367,105 @@ describe('bridge router: session routes', () => {
     const diff = await request(server, 'GET', '/session/s1/diff')
     expect(diff.status).toBe(200)
     expect(diff.body).toMatchObject([{ file: 'src/a.ts', additions: 3, deletions: 1 }])
+    const v2Diff = await request(server, 'GET', '/api/session/s1/diff')
+    expect(v2Diff.status).toBe(200)
+    expect(v2Diff.body).toMatchObject([{
+      file: 'src/a.ts',
+      additions: 3,
+      deletions: 1,
+      status: 'modified',
+    }])
+    expect((v2Diff.body as Array<Record<string, unknown>>)[0]).not.toHaveProperty('patch')
+  })
+
+  it('derives diff from tool result views when no produced-files projection exists', async () => {
+    const base = fakeApi()
+    const callEvent = sessionEvent('tool/call', {
+      turn: 1,
+      step: 1,
+      callId: 'c1' as never,
+      name: 'str_replace_editor',
+      arguments: JSON.stringify({
+        command: 'str_replace',
+        path: '/work/src/a.ts',
+        old_str: 'const a = 1',
+        new_str: 'const a = 2',
+      }),
+    }, 1, 100)
+    const resultEvent = sessionEvent('tool/result', {
+      turn: 1,
+      step: 1,
+      message: {
+        id: 't1' as never,
+        role: 'user',
+        content: [{
+          type: 'tool-result',
+          toolCallId: 'c1' as never,
+          content: [{ type: 'text', text: 'Edited' }],
+        }],
+        source: { kind: 'tool', callId: 'c1' as never },
+      },
+    }, 2, 150)
+    const callView: ToolEventView = {
+      for: 'call',
+      view: {
+        card: 'diff',
+        title: 'str_replace /work/src/a.ts',
+        diffs: [{
+          path: '/work/src/a.ts',
+          oldText: 'const a = 1',
+          newText: 'const a = 2',
+        }],
+      },
+    }
+    const resultView: ToolEventView = {
+      for: 'result',
+      view: {
+        card: 'diff',
+        title: 'str_replace /work/src/a.ts',
+        diffs: [{
+          path: '/work/src/a.ts',
+          oldText: 'const a = 1',
+          newText: 'const a = 2',
+        }],
+      },
+    }
+    const api = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [
+            {
+              event: callEvent,
+              view: callView,
+            },
+            {
+              event: resultEvent,
+              view: resultView,
+            },
+          ],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const diff = await request(server, 'GET', '/session/s1/diff')
+    expect(diff.status).toBe(200)
+    expect(diff.body).toMatchObject([{
+      file: '/work/src/a.ts',
+      additions: 1,
+      deletions: 1,
+    }])
+    const v2Diff = await request(server, 'GET', '/api/session/s1/diff')
+    expect(v2Diff.status).toBe(200)
+    expect(v2Diff.body).toMatchObject([{
+      file: '/work/src/a.ts',
+      status: 'modified',
+      additions: 1,
+      deletions: 1,
+    }])
+    expect(String((v2Diff.body as Array<{ patch?: string }>)[0]?.patch ?? '')).toContain('@@')
   })
 
   it('returns empty todo/diff when no data exists', async () => {

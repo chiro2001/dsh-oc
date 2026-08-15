@@ -1,17 +1,25 @@
 import { randomUUID } from 'node:crypto'
-import type { MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { MuxFrame, RpcRequest, ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
+import type { SnapshotFileDiff } from '@opencode-ai/sdk/v2/types'
 import {
   assistantMessageFromEvent,
   userMessageFromEvent,
   type MessageConvertOptions,
 } from './convert/message.js'
-import { projectIdFor, provisionalMessageId, provisionalPartId } from './convert/common.js'
+import { projectIdFor, provisionalMessageId, provisionalPartId, stableId } from './convert/common.js'
 import { toPermissionRequest } from './convert/permission.js'
 import { toQuestionRequest } from './convert/question.js'
 import { convertTodos } from './convert/todo.js'
-import { completedToolPart, errorToolPart, pendingToolPart, type ToolCallInfo } from './convert/tool.js'
+import {
+  completedToolPart,
+  errorToolPart,
+  fileChangesFromToolResult,
+  pendingToolPart,
+  type FileChange,
+  type ToolCallInfo,
+} from './convert/tool.js'
 import { minimalSession } from './convert/session.js'
 import type { InteractionState, NewApprovalEntry, NewQuestionEntry } from './state.js'
 
@@ -230,7 +238,7 @@ export class MuxEventTranslator {
     const payload = frame.payload
     switch (payload.type) {
       case 'session/event':
-        return this.translateSessionEvent(frame.rpcId, payload.sessionId, payload.event)
+        return this.translateSessionEvent(frame.rpcId, payload.sessionId, payload.event, payload.view)
       case 'approval/requested': {
         const entry: NewApprovalEntry = {
           rpcId: String(frame.rpcId),
@@ -366,6 +374,7 @@ export class MuxEventTranslator {
     rpcId: string,
     sessionId: string,
     event: SessionEvent,
+    view?: ToolEventView,
   ): BridgeGlobalEvent[] {
     const directory = directoryFor(sessionId, this.deps)
     const project = projectIdFor(directory)
@@ -490,6 +499,7 @@ export class MuxEventTranslator {
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
+          ...(view === undefined ? {} : { view }),
         }
         let calls = this.pendingCalls.get(sessionId)
         if (!calls) {
@@ -520,28 +530,37 @@ export class MuxEventTranslator {
         const messageID = this.currentAssistant.get(sessionId)
           ?? this.streamState(sessionId).provisionalMessageIds.get(`${data.turn}:${data.step}`)
           ?? `assistant:${data.turn}:${data.step}`
+        const resultInfo = {
+          callId,
+          content: data.message.content,
+          time: event.time,
+          meta: data.meta,
+          view,
+          callView: call.view,
+        }
         const part = data.error === undefined
           ? completedToolPart(call, {
-              callId,
-              content: data.message.content,
-              time: event.time,
-              meta: data.meta,
+              ...resultInfo,
             }, { sessionID: sessionId, messageID, time: event.time })
           : errorToolPart(call, {
-              callId,
-              content: data.message.content,
+              ...resultInfo,
               error: data.error,
-              time: event.time,
-              meta: data.meta,
             }, { sessionID: sessionId, messageID, time: event.time })
         calls?.delete(callId)
-        return [
+        const events: BridgeGlobalEvent[] = [
           makeEvent(directory, 'message.part.updated', {
             sessionID: sessionId,
             part,
             time: event.time,
           }, project),
         ]
+        if (data.error === undefined) {
+          const changes = fileChangesFromToolResult(call, resultInfo)
+          if (changes.length > 0) {
+            events.push(...fileChangeEvents(sessionId, messageID, changes, project, directory, event.time))
+          }
+        }
+        return events
       }
       default: {
         const type = event.type as string
@@ -649,21 +668,9 @@ export class MuxEventTranslator {
 }
 
 /** Best-effort conversion of a produced-files projection to SnapshotFileDiff[]. */
-export function convertProducedFiles(value: unknown): Array<{
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: 'added' | 'deleted' | 'modified'
-}> {
+export function convertProducedFiles(value: unknown): SnapshotFileDiff[] {
   if (!Array.isArray(value)) return []
-  const result: Array<{
-    file?: string
-    patch?: string
-    additions: number
-    deletions: number
-    status?: 'added' | 'deleted' | 'modified'
-  }> = []
+  const result: SnapshotFileDiff[] = []
   for (const raw of value) {
     if (raw === null || typeof raw !== 'object') continue
     const item = raw as Record<string, unknown>
@@ -672,7 +679,7 @@ export function convertProducedFiles(value: unknown): Array<{
     const file = typeof item.file === 'string' ? item.file : typeof item.path === 'string' ? item.path : undefined
     const status = item.status === 'added' || item.status === 'deleted' || item.status === 'modified'
       ? item.status
-      : undefined
+      : file === undefined ? undefined : 'modified'
     result.push({
       ...(file === undefined ? {} : { file }),
       ...(typeof item.patch === 'string' ? { patch: item.patch } : {}),
@@ -682,4 +689,71 @@ export function convertProducedFiles(value: unknown): Array<{
     })
   }
   return result
+}
+
+/** Convert bridge file changes to the opencode SnapshotFileDiff shape. */
+export function toSnapshotFileDiffs(changes: readonly FileChange[]): SnapshotFileDiff[] {
+  return changes.map((change) => ({
+    file: change.file,
+    ...(change.patch === undefined ? {} : { patch: change.patch }),
+    additions: change.additions,
+    deletions: change.deletions,
+    ...(change.status === undefined ? {} : { status: change.status }),
+  }))
+}
+
+/**
+ * Emit the message parts and session diff that make a completed file-changing
+ * tool visible to the opencode TUI (sidebar "Modified Files" plus snapshot /
+ * patch parts for consumers that render them).
+ */
+export function fileChangeEvents(
+  sessionID: string,
+  messageID: string,
+  changes: readonly FileChange[],
+  project: string,
+  directory: string,
+  time: number,
+): BridgeGlobalEvent[] {
+  if (changes.length === 0) return []
+  const patch = changes
+    .map((change) => change.patch)
+    .filter((value): value is string => value !== undefined)
+    .join('\n')
+  const files = changes.map((change) => change.file)
+  const hash = stableId(`${sessionID}:${messageID}:${files.join('\u0000')}:${patch}`)
+  const events: BridgeGlobalEvent[] = [
+    makeEvent(directory, 'message.part.updated', {
+      sessionID,
+      part: {
+        id: `patch:${hash}`,
+        sessionID,
+        messageID,
+        type: 'patch',
+        hash,
+        files,
+      },
+      time,
+    }, project),
+    makeEvent(directory, 'session.diff', {
+      sessionID,
+      diff: toSnapshotFileDiffs(changes),
+    }, project),
+  ]
+  if (patch) {
+    events.unshift(
+      makeEvent(directory, 'message.part.updated', {
+        sessionID,
+        part: {
+          id: `snapshot:${hash}`,
+          sessionID,
+          messageID,
+          type: 'snapshot',
+          snapshot: hash,
+        },
+        time,
+      }, project),
+    )
+  }
+  return events
 }
