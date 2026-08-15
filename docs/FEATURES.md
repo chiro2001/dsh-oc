@@ -121,6 +121,7 @@
 | 品牌 logo e2e | ✅ | `scripts/e2e-tui-brand.sh` | `bash scripts/e2e-tui-brand.sh` | 本提交 |
 | `--dir` attach e2e | ✅ | `scripts/e2e-tui-dir.sh` | `bash scripts/e2e-tui-dir.sh` | 本提交 |
 | `--dir` 相对路径 e2e | ✅ | `scripts/e2e-tui-dir.sh` 使用相对 `sub-project` | `bash scripts/e2e-tui-dir.sh` | 本提交 |
+| `--dir` 目录过滤 e2e | ✅ | `scripts/e2e-tui-dir-filter.sh`：新会话落在子目录、根会话被过滤 | `bash scripts/e2e-tui-dir-filter.sh` | 本提交 |
 | `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | `--continue` attach e2e | ✅ | `scripts/e2e-tui-continue.sh`（恢复最新会话） | `bash scripts/e2e-tui-continue.sh` | 本提交 |
 | `--mini` attach e2e | ✅ | `scripts/e2e-tui-mini.sh` | `bash scripts/e2e-tui-mini.sh` | 本提交 |
@@ -138,7 +139,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`7192ed9`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`f8bad18`（2026-08-15）。
 
 ### 路由注册表
 
@@ -232,7 +233,7 @@
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
 | `tests/perf.spec.ts` | 5 | 776d145 test(e2e): remove remaining machine-specific absolute paths |
 | `tests/protocol-probe.spec.ts` | 2 | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
-| `tests/scaffold.spec.ts` | 7 | 4ddba09 feat(profile): mount dsh agent presets so /preset can switch minimal etc |
+| `tests/scaffold.spec.ts` | 7 | f8bad18 chore: rename package to @chiro2001/dsh-oc |
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
@@ -256,7 +257,7 @@
 | `src/bridge/events.ts` | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/index.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
+| `src/bridge/index.ts` | f8bad18 chore: rename package to @chiro2001/dsh-oc |
 | `src/bridge/router.ts` | 7192ed9 fix(bridge): resolve relative directory queries against bridge cwd |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
@@ -277,7 +278,8 @@
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
 | `scripts/e2e-tui-continue.sh` | 9cf9fb8 test(e2e): cover attach --continue resuming the newest session |
-| `scripts/e2e-tui-dir.sh` | 18741fd feat(tui): make --dir switch the bridge working directory |
+| `scripts/e2e-tui-dir-filter.sh` | — |
+| `scripts/e2e-tui-dir.sh` | 7ed9ee0 test(e2e): cover relative --dir resolution in the real TUI |
 | `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
 | `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
