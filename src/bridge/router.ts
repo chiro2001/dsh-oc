@@ -5,8 +5,10 @@ import { extname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
   HistoryEntry,
+  MuxFrame,
   PromptContentPart,
   RequestPayload,
+  RpcRequest,
   ResponseValue,
   RpcMethodMap,
   SessionSummary,
@@ -109,6 +111,10 @@ export interface BridgeRouter {
 export interface RouterOptions {
   cwd?: string
   log?: (message: string) => void
+  /** Initial SSE mux retry backoff (doubles up to 8s). */
+  sseRetryBaseMs?: number
+  /** Maximum SSE mux re-subscription attempts before giving up. */
+  sseRetryMaxAttempts?: number
 }
 
 function json(status: number, body?: unknown): HandlerResult {
@@ -301,6 +307,8 @@ function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
 const SESSION_LIST_CACHE_MS = 1000
 const HISTORY_CACHE_MS = 500
 const RECENT_HISTORY_PREFETCH = 3
+const SSE_RETRY_BASE_MS = 250
+const SSE_RETRY_MAX_ATTEMPTS = 3
 
 function historyCacheKey(sessionId: string, maxMessages?: number, beforeSeq?: number): string {
   return `${sessionId}:${maxMessages ?? 'tail'}:${beforeSeq ?? 'tail'}`
@@ -1755,7 +1763,7 @@ export function createBridgeRouter(
       let listRefreshTimer: NodeJS.Timeout | undefined
       try {
         const defaultModel = await defaultModelRef(ctx)
-        translator = new MuxEventTranslator({
+        const makeTranslator = (): MuxEventTranslator => new MuxEventTranslator({
           cwd,
           state,
           defaultModel,
@@ -1764,6 +1772,7 @@ export function createBridgeRouter(
             for (const event of events) hub.send(client, event)
           },
         })
+        translator = makeTranslator()
         const scheduleListRefresh = (): void => {
           if (listRefreshTimer !== undefined) return
           listRefreshTimer = setTimeout(() => {
@@ -1779,10 +1788,6 @@ export function createBridgeRouter(
             })()
           }, 250)
         }
-        const stream = api.events.mux(
-          { rpcId: randomUUID() as never, payload: {} },
-          controller.signal,
-        )
         const hostStream = api.events.host(
           { rpcId: randomUUID() as never, payload: {} },
           controller.signal,
@@ -1806,35 +1811,60 @@ export function createBridgeRouter(
           }
         })
         void hostLoop
-        for await (const frame of stream) {
-          if (frame.payload.type === 'approval/requested') {
-            const sessionId = String(frame.payload.sessionId)
-            const toolName = frame.payload.toolName
-            if (ctx.state.savedPermissionFor(sessionId, toolName) !== undefined) {
-              try {
-                await respondApproval(
-                  api,
-                  String(frame.rpcId),
-                  sessionId,
-                  String(frame.payload.approvalId),
-                  'allowed-once',
-                )
-              } catch (error) {
-                log(`[bridge/sse] auto-approval failed: ${error instanceof Error ? error.message : String(error)}`)
+        const consumeStream = async (stream: AsyncIterable<RpcRequest<MuxFrame>>): Promise<void> => {
+          for await (const frame of stream) {
+            if (frame.payload.type === 'approval/requested') {
+              const sessionId = String(frame.payload.sessionId)
+              const toolName = frame.payload.toolName
+              if (ctx.state.savedPermissionFor(sessionId, toolName) !== undefined) {
+                try {
+                  await respondApproval(
+                    api,
+                    String(frame.rpcId),
+                    sessionId,
+                    String(frame.payload.approvalId),
+                    'allowed-once',
+                  )
+                } catch (error) {
+                  log(`[bridge/sse] auto-approval failed: ${error instanceof Error ? error.message : String(error)}`)
+                }
+                continue
               }
-              continue
+            }
+            if (frame.payload.type === 'session/event') {
+              const sessionEvent = frame.payload.event as unknown as { type: string }
+              ctx.state.invalidateHistory(String(frame.payload.sessionId))
+              if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {
+                ctx.state.invalidateSession()
+                scheduleListRefresh()
+              }
+            }
+            for (const event of translator!.translate(frame)) {
+              hub.send(client, event)
             }
           }
-          if (frame.payload.type === 'session/event') {
-            const sessionEvent = frame.payload.event as unknown as { type: string }
-            ctx.state.invalidateHistory(String(frame.payload.sessionId))
-            if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {
-              ctx.state.invalidateSession()
-              scheduleListRefresh()
-            }
-          }
-          for (const event of translator.translate(frame)) {
-            hub.send(client, event)
+        }
+        const retryBaseMs = options.sseRetryBaseMs ?? SSE_RETRY_BASE_MS
+        const retryMaxAttempts = options.sseRetryMaxAttempts ?? SSE_RETRY_MAX_ATTEMPTS
+        let attempt = 0
+        let delay = retryBaseMs
+        while (true) {
+          attempt += 1
+          const stream = api.events.mux(
+            { rpcId: randomUUID() as never, payload: {} },
+            controller.signal,
+          )
+          try {
+            await consumeStream(stream)
+            break
+          } catch (error) {
+            if (controller.signal.aborted) break
+            if (attempt >= retryMaxAttempts) throw error
+            log(`[bridge/sse] mux stream error, retry ${attempt}/${retryMaxAttempts} in ${delay}ms: ${error instanceof Error ? error.message : String(error)}`)
+            await new Promise((resolve) => setTimeout(resolve, delay))
+            delay = Math.min(delay * 2, 8000)
+            translator?.dispose()
+            translator = makeTranslator()
           }
         }
       } catch (error) {
