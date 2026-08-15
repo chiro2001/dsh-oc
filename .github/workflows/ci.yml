@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat-**'
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Protocol probe (fake locked binary)
+        run: |
+          printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "1.18.18"' > /tmp/opencode-fake
+          chmod +x /tmp/opencode-fake
+          DSH_OC_OPENCODE_BIN=/tmp/opencode-fake pnpm run probe
