@@ -16,6 +16,7 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 
 - [docs/PLAN.md](docs/PLAN.md)：总体实现规划、阶段、验收标准。
 - [docs/PROTOCOL.md](docs/PROTOCOL.md)：OpenCode TUI 协议探针结果、路由兼容矩阵、SSE 映射。
+- [docs/FEATURES.md](docs/FEATURES.md)：功能支持状态矩阵（含自动追踪部分）。
 
 ## 安装使用
 
@@ -29,12 +30,25 @@ dsh --profile oc
 > 如需固定版本或分支，可使用 pnpm 支持的完整 git spec，例如
 > `dsh plugin --profile oc add 'github:chiro2001/dsh-oc#main'`。
 
-首次启动会惰性下载并缓存 opencode 官方二进制（版本锁定 `1.18.18`，按
-`opencode-version.json` / `opencode-assets.json` 校验 sha256，支持代理与镜像）。
+首次启动会解析并缓存 opencode 官方二进制（版本锁定 `1.18.18`）。分发优先级：
+
+1. `DSH_OC_OPENCODE_BIN`（绝对路径）
+2. `$DSH_HOME/opencode/bin/<version>/opencode(.exe)` 缓存
+3. `PATH` 上版本匹配的 `opencode`
+4. 官方 npm 平台包（`opencode-<platform>-<arch>[-baseline][-musl]@1.18.18`），惰性安装到
+   `$DSH_HOME/opencode/packages/<platform-key>`，由 npm integrity 校验
+5. profile 内已安装的 `opencode-ai` 包（自动运行官方 postinstall）
+6. GitHub Release 惰性下载（`opencode-assets.json` 中每个平台独立的 `sha256` 校验）
+
+`opencode-assets.json` 覆盖 linux/darwin/windows 的 x64/arm64、musl 与 baseline 变体，
+每个 asset 都带有自己的 `sha256`、npm 包名与 npm tarball integrity；不会退化为单一全局 hash。
+下载支持代理（`HTTPS_PROXY`/`HTTP_PROXY`）与镜像。
 也可以通过环境变量控制二进制来源：
 
 - `DSH_OC_OPENCODE_BIN`：绝对路径指向已安装的 opencode 可执行文件（优先于下载）。
 - `DSH_OC_OPENCODE_MIRROR`：GitHub Release asset 的镜像前缀，用于下载源不可达时。
+- `DSH_OC_TUI_TIMESTAMPS=1`：让 TUI 消息默认显示时间戳（写入隔离的 `kv.json`，
+  并绑定 `ctrl+shift+t` / `/timestamps` 用于运行时切换）。
 
 ## 本地开发
 
@@ -43,6 +57,7 @@ pnpm install
 pnpm build
 pnpm typecheck
 pnpm test
+pnpm run features:update   # 刷新 docs/FEATURES.md 的自动追踪部分
 dsh plugin --profile oc add .
 dsh --profile oc
 ```
@@ -88,6 +103,7 @@ $DSH_HOME/opencode/{config,data,state,cache}
 bash scripts/e2e-api.sh        # HTTP/SSE 路由矩阵 + 会话循环 + 权限流
 bash scripts/e2e-tui-boot.sh   # 真实 opencode TUI 启动/退出 + 终端恢复
 bash scripts/e2e-tui-turn.sh   # 真实 TUI 键盘输入完成一轮对话
+bash scripts/e2e-tui-timestamps.sh  # DSH_OC_TUI_TIMESTAMPS=1 下时间戳文本出现
 ```
 
 tarball 验证模式（用 npm tarball 而不是本地路径安装）：
@@ -98,9 +114,10 @@ TGZ="$(echo /tmp/dsh-oc-pack-release/deepseek-ai-dsh-oc-0.1.0-rc.1.tgz)"
 DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-api.sh
 DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-boot.sh
 DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-turn.sh
+DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-timestamps.sh
 ```
 
-三个脚本必须全部输出 `PASSED`；该模式下 profile 安装的是 tarball 而非本地路径。
+四个脚本必须全部输出 `PASSED`；该模式下 profile 安装的是 tarball 而非本地路径。
 
 ## 已知限制
 

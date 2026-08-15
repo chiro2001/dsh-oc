@@ -5,8 +5,8 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-cmdline'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -20,6 +20,81 @@ import {
 
 export type { BinaryResolverDeps, BinarySource, ResolvedBinary } from './binary.js'
 export { resolveAssetUrl } from './download.js'
+
+/** Environment variable that seeds the opencode TUI with timestamps shown. */
+export const DSH_OC_TUI_TIMESTAMPS = 'DSH_OC_TUI_TIMESTAMPS'
+
+/** TUI config file name under OPENCODE_CONFIG_DIR. */
+export const OPENCODE_TUI_FILE = 'tui.json'
+
+/** KV state file used by the opencode TUI for per-feature signals. */
+export const OPENCODE_KV_FILE = 'kv.json'
+
+/**
+ * Whether timestamps should be enabled for the opencode TUI child.
+ * Accepts `1`, `true`, `yes` and `on` (case-insensitive).
+ */
+export function tuiTimestampsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env[DSH_OC_TUI_TIMESTAMPS]?.toLowerCase()
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on'
+}
+
+function readJsonObject(path: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Seed the isolated opencode state so `DSH_OC_TUI_TIMESTAMPS=1` takes effect
+ * on the next TUI boot.
+ *
+ * The opencode 1.18.18 TUI stores the timestamps toggle in its KV state file
+ * (`$XDG_STATE_HOME/opencode/kv.json`), so this writes that state and also
+ * writes a minimal `tui.json` with `session_toggle_timestamps` /
+ * `messages_toggle_timestamps` bound to `ctrl+shift+t` for toggling at runtime.
+ * Existing config/state values are preserved by merging.
+ */
+export function prepareOpenCodeTuiState(
+  dshHome: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!tuiTimestampsEnabled(env)) return
+
+  const configDir = join(dshHome, 'opencode', 'config')
+  const tuiConfigPath = join(configDir, OPENCODE_TUI_FILE)
+  const kvPath = join(dshHome, 'opencode', 'state', 'opencode', OPENCODE_KV_FILE)
+
+  mkdirSync(configDir, { recursive: true })
+  mkdirSync(dirname(kvPath), { recursive: true })
+
+  const tuiConfig = readJsonObject(tuiConfigPath)
+  const keybinds = typeof tuiConfig.keybinds === 'object' && tuiConfig.keybinds !== null && !Array.isArray(tuiConfig.keybinds)
+    ? tuiConfig.keybinds as Record<string, unknown>
+    : {}
+  writeFileSync(
+    tuiConfigPath,
+    `${JSON.stringify({
+      ...tuiConfig,
+      keybinds: {
+        ...keybinds,
+        session_toggle_timestamps: 'ctrl+shift+t',
+        messages_toggle_timestamps: 'ctrl+shift+t',
+      },
+    }, null, 2)}\n`,
+  )
+
+  const kv = readJsonObject(kvPath)
+  writeFileSync(
+    kvPath,
+    `${JSON.stringify({ ...kv, timestamps: 'show' }, null, 2)}\n`,
+  )
+}
 
 /** oc-tui configuration schema; both fields are optional. */
 export const OcTuiConfig = z.object({
@@ -225,6 +300,9 @@ export function buildChildEnv(
     XDG_STATE_HOME: join(dshHome, 'opencode', 'state'),
     XDG_CACHE_HOME: join(dshHome, 'opencode', 'cache'),
   }
+  if (tuiTimestampsEnabled(env)) {
+    childEnv.OPENCODE_TUI_CONFIG = join(dshHome, 'opencode', 'config', OPENCODE_TUI_FILE)
+  }
   // Never leak an existing provider/key config into the opencode child.
   delete childEnv.OPENCODE_CONFIG_CONTENT
   return childEnv
@@ -317,6 +395,7 @@ export class OcTuiService extends Service {
     ]) {
       mkdirSync(dir, { recursive: true })
     }
+    prepareOpenCodeTuiState(dshHome, process.env)
 
     try {
       this.running = startOpenCodeTui({

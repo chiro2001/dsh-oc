@@ -2,61 +2,157 @@
   "version": "1.18.18",
   "assets": {
     "darwin-arm64": {
+      "platform": {
+        "os": "darwin",
+        "arch": "arm64",
+        "baseline": false,
+        "musl": false
+      },
+      "npm": "opencode-darwin-arm64",
+      "npmIntegrity": "sha512-VkG+bz8u8Xqg9NzPK+2/71nEd4DKKlo2NLZurQ1eLAzDnmb1CMYZif/o6Shl8YFuTuYU/30k6yufl4Zr0Ij64g==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-darwin-arm64.zip",
       "sha256": "7d668bf26496fec8686d4e51ebb1ac2bd2e393f0c1620aa696c4c242a9e5806a",
       "size": 46059142
     },
     "darwin-x64-baseline": {
+      "platform": {
+        "os": "darwin",
+        "arch": "x64",
+        "baseline": true,
+        "musl": false
+      },
+      "npm": "opencode-darwin-x64-baseline",
+      "npmIntegrity": "sha512-NYlIeOOxKPrqY6rdVIjQV4h+eE1AFCHzEcoxXhc8zSvqnCVIO0hMtdNm3l3HhrDucWmdh1BsQBUoZlrBOvAl4w==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-darwin-x64-baseline.zip",
       "sha256": "c029941795f9cf55cfdbc5b0e105db4300413718d489e8e47c950d1a2e126eed",
       "size": 48261294
     },
     "darwin-x64": {
+      "platform": {
+        "os": "darwin",
+        "arch": "x64",
+        "baseline": false,
+        "musl": false
+      },
+      "npm": "opencode-darwin-x64",
+      "npmIntegrity": "sha512-xox5XJJ1bI5qDEbxWWR9pWY2Gak5IuSfDcObyWunRUiN7J8OiwyazsJs1HGsTSkVhisk8SNbFIr0/0xQGhxSZg==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-darwin-x64.zip",
       "sha256": "9581bd7683a7528456179fb11e3377d9ef568e10a935611a2c6722e349454d83",
       "size": 48261294
     },
     "linux-arm64-musl": {
+      "platform": {
+        "os": "linux",
+        "arch": "arm64",
+        "baseline": false,
+        "musl": true
+      },
+      "npm": "opencode-linux-arm64-musl",
+      "npmIntegrity": "sha512-Dp3XByFRRZngPAQotNbOwr22HgZej4r9Ck0Iv/rOVU+oO5fLD9YSpHEwx80FTZOZmFmd/vriCdrR/dGdzabICw==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-arm64-musl.tar.gz",
       "sha256": "38a7504dab35007c70d2cdf89870b4be63faa60667318a90338798d34f53eab1",
       "size": 62324509
     },
     "linux-arm64": {
+      "platform": {
+        "os": "linux",
+        "arch": "arm64",
+        "baseline": false,
+        "musl": false
+      },
+      "npm": "opencode-linux-arm64",
+      "npmIntegrity": "sha512-e8D3g0qJEIzawEg2+ygW3vkZjAYL2ssyAx4GbihjwXwZFvlZZy5zRWWzdz5KLBoHSTl0FB73vNtnNeXONyHpVQ==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-arm64.tar.gz",
       "sha256": "dcb1b5ec5687b43f87749560021f9203f3809e0ce5ae44ff9be8ae17083fe4ba",
       "size": 60199312
     },
     "linux-x64-baseline-musl": {
+      "platform": {
+        "os": "linux",
+        "arch": "x64",
+        "baseline": true,
+        "musl": true
+      },
+      "npm": "opencode-linux-x64-baseline-musl",
+      "npmIntegrity": "sha512-cXD1gAZ+TTmdE3tnWy5qPstZjrnbPg0rPUwtcHeLaeB+KYxQWEoie1c88oYmZfQ+RWI6+/+LLF0FU29Uyd1Nrw==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64-baseline-musl.tar.gz",
       "sha256": "f5fe814ac3f94daa4374b7e882b9f0dabe492f63e6b3bbbe7d1e23c95c149a2b",
       "size": 62749109
     },
     "linux-x64-baseline": {
+      "platform": {
+        "os": "linux",
+        "arch": "x64",
+        "baseline": true,
+        "musl": false
+      },
+      "npm": "opencode-linux-x64-baseline",
+      "npmIntegrity": "sha512-6GvFarhP0pDiXcE9Au8PWoqb9+ZLBIGKrhZxeVAmOJp/gJ8lLL1Eno8O1qpqRb1KjOfOaOD71jHu9xNaqmjEtw==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64-baseline.tar.gz",
       "sha256": "05914655854c1dab48f0d52a8af8f74967e4e26daf87dfe6534f57e799a853d7",
       "size": 60386127
     },
     "linux-x64-musl": {
+      "platform": {
+        "os": "linux",
+        "arch": "x64",
+        "baseline": false,
+        "musl": true
+      },
+      "npm": "opencode-linux-x64-musl",
+      "npmIntegrity": "sha512-lWiWxotqyVTJYiu2dN90KDNDSrwmyhZk8ajzyfAFjwms2TBVx4L0Ly6gkdhz8nxsxwPRv751W8+yUpzetB8AMA==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64-musl.tar.gz",
       "sha256": "60279c62d2182aa4279cea4d5a84d23437f8074042cbbed4a2bfa70e5acbd193",
       "size": 62749124
     },
     "linux-x64": {
+      "platform": {
+        "os": "linux",
+        "arch": "x64",
+        "baseline": false,
+        "musl": false
+      },
+      "npm": "opencode-linux-x64",
+      "npmIntegrity": "sha512-WmeUnhljYJ252wywKTiW4bNDzsas2njpjPUEh0jM6HKNI4vFxJtREtzaWViY4AKEAcOkLWT8Ll17ixvcHz3AnA==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64.tar.gz",
       "sha256": "0cddc222418b8553669905a8980c0cda7088f00da24d83d6ac76b01c9fdb2aaf",
       "size": 60386126
     },
     "windows-arm64": {
+      "platform": {
+        "os": "windows",
+        "arch": "arm64",
+        "baseline": false,
+        "musl": false
+      },
+      "npm": "opencode-windows-arm64",
+      "npmIntegrity": "sha512-Fj1LfP3kXUeD34N0FOw6vebS1oK2YmxA2nviAKOAPo8jLFjEgq5djAJ/WroPmS71VOP1EHlKhRshnK3Sx8pI2w==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-windows-arm64.zip",
       "sha256": "0d34d837ea3b5e10349d8550318083040a8b4c061d3faaa4eabd339984aa49b0",
       "size": 58669300
     },
     "windows-x64-baseline": {
+      "platform": {
+        "os": "windows",
+        "arch": "x64",
+        "baseline": true,
+        "musl": false
+      },
+      "npm": "opencode-windows-x64-baseline",
+      "npmIntegrity": "sha512-IeTrXqbIDbXD5VXpeupRa8aD+l4lSNeq02/K0jnaEPvR5adv42tiN1rOENiTaO2uX+d9cQ/csCaJPBFiQvwoRg==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-windows-x64-baseline.zip",
       "sha256": "66ad3d31bdc48d7cf16e212da21449bdfe34656cf83a56f682a211c8b78d30ba",
       "size": 60504745
     },
     "windows-x64": {
+      "platform": {
+        "os": "windows",
+        "arch": "x64",
+        "baseline": false,
+        "musl": false
+      },
+      "npm": "opencode-windows-x64",
+      "npmIntegrity": "sha512-wbsBZsHDgfHaw9zJogFrrSfWpObtXMFjiA6xl6IFyeVGXsdKi6E8AWIMRZUxKVkf9X0P48mYUuaP1EHgmJCbpA==",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-windows-x64.zip",
       "sha256": "c6d265376fdb93164013671b0cf402410184f73c34fc15d82d40a16a745b15f4",
       "size": 60504740

@@ -32,12 +32,36 @@ const raw = execFileSync(
   { encoding: 'utf8' },
 )
 
+function npmIntegrityFor(name) {
+  const rawIntegrity = execFileSync(
+    'npm',
+    ['view', `${name}@${version}`, 'dist.integrity', '--json'],
+    { encoding: 'utf8' },
+  )
+  const parsed = JSON.parse(rawIntegrity)
+  const integrity = Array.isArray(parsed) ? parsed[0] : parsed
+  if (typeof integrity !== 'string' || !integrity.startsWith('sha512-')) {
+    throw new Error(`no npm sha512 integrity for ${name}@${version}`)
+  }
+  return integrity
+}
+
 const assets = {}
 for (const item of JSON.parse(raw)) {
   const key = item.name
     .replace(/^opencode-/, '')
     .replace(/\.(tar\.gz|zip)$/, '')
+  const [os, arch, ...variants] = key.split('-')
+  const npm = `opencode-${key}`
   assets[key] = {
+    platform: {
+      os,
+      arch,
+      baseline: variants.includes('baseline'),
+      musl: variants.includes('musl'),
+    },
+    npm,
+    npmIntegrity: npmIntegrityFor(npm),
     url: item.browser_download_url,
     sha256: item.digest.replace(/^sha256:/, ''),
     size: item.size,

@@ -8,6 +8,9 @@ interface TestAsset {
   url: string
   sha256: string
   size: number
+  platform: { os: string; arch: string; baseline: boolean; musl: boolean }
+  npm: string
+  npmIntegrity: string
 }
 
 interface TestAssetManifest {
@@ -57,6 +60,13 @@ describe('opencode-assets.json', () => {
       read('opencode-assets.json'),
     ) as TestAssetManifest
     for (const [key, asset] of Object.entries(manifest.assets)) {
+      expect(asset.platform).toBeDefined()
+      expect(asset.platform.os).toMatch(/^(linux|darwin|windows)$/)
+      expect(asset.platform.arch).toMatch(/^(x64|arm64)$/)
+      expect(asset.platform.baseline).toBeTypeOf('boolean')
+      expect(asset.platform.musl).toBeTypeOf('boolean')
+      expect(asset.npm).toBe(`opencode-${key}`)
+      expect(asset.npmIntegrity).toMatch(/^sha512-[A-Za-z0-9+/=]+$/)
       expect(asset.sha256).toMatch(/^[0-9a-f]{64}$/)
       expect(asset.size).toBeTypeOf('number')
       expect(Number.isInteger(asset.size)).toBe(true)

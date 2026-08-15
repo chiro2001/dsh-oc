@@ -1,6 +1,7 @@
 # OpenCode TUI 协议探针与兼容矩阵
 
 > 本文件是 `PLAN.md` 的配套文档。执行 P0 前必须先读本文件。
+> 功能状态入口：先读 [FEATURES.md](FEATURES.md)，再回到本文件核对路由/协议细节。
 > 探针基准：`opencode-ai@1.18.18`（GitHub Release `v1.18.18`，commit `4643e65`）。
 
 ---
@@ -251,6 +252,9 @@ deepseek-harness/packages/host/apiproxy/src/api-proxy.ts:
   "version": "1.18.18",
   "assets": {
     "linux-x64": {
+      "platform": { "os": "linux", "arch": "x64", "baseline": false, "musl": false },
+      "npm": "opencode-linux-x64",
+      "npmIntegrity": "sha512-...",
       "url": "https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64.tar.gz",
       "sha256": "0cddc222418b8553669905a8980c0cda7088f00da24d83d6ac76b01c9fdb2aaf",
       "size": 60386126
@@ -267,11 +271,26 @@ gh api repos/anomalyco/opencode/releases/tags/v1.18.18 \
 ```
 
 - 将 `digest` 的 `sha256:` 前缀去掉写入 manifest。
+- `platform` 记录该 key 的 os/arch/baseline/musl；`npm` 是对应官方 npm 平台包名，
+  `npmIntegrity` 是 npm registry 的 tarball sha512，由包管理器在安装时校验。
 - 必须覆盖以下平台：
   - `linux-x64`、`linux-x64-baseline`、`linux-x64-musl`、`linux-x64-baseline-musl`
   - `linux-arm64`、`linux-arm64-musl`
   - `darwin-x64`、`darwin-x64-baseline`、`darwin-arm64`
   - `windows-x64`、`windows-x64-baseline`、`windows-arm64`
+
+### 7.1 多 arch 二进制分发
+
+`src/tui/binary.ts` 的优先级（详细见 README 与 FEATURES.md）：
+
+```text
+env DSH_OC_OPENCODE_BIN → 版本化缓存 → PATH → 官方 npm 平台包
+  → profile 内 opencode-ai 包 → GitHub Release（per-platform sha256）
+```
+
+官方 npm 平台包安装到 `$DSH_HOME/opencode/packages/<platform-key>`，候选顺序与
+官方 `postinstall.mjs` 的 platform/arch/musl/AVX2 选择一致；GitHub asset 只作为
+fallback，且每个平台使用各自 manifest 条目独立校验，不是全局单一 hash。
 
 ---
 
@@ -302,4 +321,5 @@ dsh 0.1.0-rc.6 + opencode 1.18.18，TUI 与 bridge 均实际跑通）：
 | `DSH_PERMISSION_MODE=ask` | 不支持 | dsh 只接受 `read-only`/`workspace-write`/`danger-full-access`；approval=ask 用 `workspace-write` |
 | oc profile 宿主行 | 已并入 bundle patch | `storage`/`storage-json`/`storage-domain`/`webserver` 已由 `cordis.patch.yml` 挂载；`dsh --profile oc` 直接启动（无需宿主 overlay） |
 | `--print-logs` | 透传 | oc-tui 已把 `--print-logs` 传给 `opencode attach`（opencode 顶层全局选项，设置 `OPENCODE_PRINT_LOGS=1`） |
-| tarball 安装 e2e | PASSED | `DSH_OC_E2E_ADD_SPEC=<tgz>` 下 `e2e-api.sh` / `e2e-tui-boot.sh` / `e2e-tui-turn.sh` 全部通过；profile 安装的是 npm tarball，不再使用本地路径 |
+| 时间戳 | 默认开启 | `DSH_OC_TUI_TIMESTAMPS=1` 写入 `kv.json` 的 `timestamps: show` 并绑定 `ctrl+shift+t` / `/timestamps`；e2e 见 `scripts/e2e-tui-timestamps.sh` |
+| tarball 安装 e2e | PASSED | `DSH_OC_E2E_ADD_SPEC=<tgz>` 下 `e2e-api.sh` / `e2e-tui-boot.sh` / `e2e-tui-turn.sh` / `e2e-tui-timestamps.sh` 全部通过；profile 安装的是 npm tarball，不再使用本地路径 |

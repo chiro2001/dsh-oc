@@ -28,6 +28,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "features:update": "node scripts/update-feature-matrix.mjs",
     "pack:dry": "pnpm pack --dry-run"
   },
   "dependencies": {

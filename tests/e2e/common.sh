@@ -39,7 +39,7 @@ E2E_MOCK_ERR=""
 E2E_PERMISSION_MODE=""
 E2E_FAKE_LOG=""
 E2E_BRIDGE_URL=""
-E2E_TUI_SESSION="dsh-oc-test"
+E2E_TUI_SESSION="dsh-oc-${E2E_BRANCH//[^A-Za-z0-9_-]/_}"
 
 e2e_new_run() {
   local label="$1"
@@ -141,12 +141,16 @@ e2e_tui_start() {
 e2e_tui_wait_attach() {
   local deadline=$((SECONDS + 60))
   while (( SECONDS < deadline )); do
-    if ps -eo args= | grep -q '/home/chiro/\.local/bin/opencode attach http://127\.0\.0\.1:[0-9]'; then
-      if ps -eo args= | grep -q '/home/chiro/\.local/bin/opencode serve'; then
+    local dsh_pid
+    dsh_pid="$(ps -eo pid=,args= | awk -v overlay="$E2E_OVERLAY" '$0 ~ overlay && $0 ~ /dsh --profile/ { print $1; exit }')"
+    local attach_line
+    attach_line="$(ps -eo pid=,ppid=,args= | awk -v pid="$dsh_pid" '$2 == pid && $0 ~ /opencode attach http:\/\/127\.0\.0\.1:[0-9]/ { print; exit }')"
+    if [[ -n "$attach_line" ]]; then
+      if ps -eo pid=,ppid=,args= | awk -v pid="$dsh_pid" '$2 == pid && /opencode serve/ { found=1 } END { exit found ? 0 : 1 }'; then
         echo "e2e: unexpected opencode serve process" >&2
         return 1
       fi
-      E2E_BRIDGE_URL="$(ps -eo args= | awk '/opencode attach http:\/\/127\.0\.0\.1:/{ for (i=1;i<=NF;i++) if ($i ~ /^http:\/\/127\.0\.0\.1:/) { print $i; exit } }')"
+      E2E_BRIDGE_URL="$(awk '{ for (i=1;i<=NF;i++) if ($i ~ /^http:\/\/127\.0\.0\.1:/) { print $i; exit } }' <<<"$attach_line")"
       echo "e2e: opencode attach -> $E2E_BRIDGE_URL"
       return 0
     fi
