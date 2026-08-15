@@ -284,6 +284,18 @@ wait_assistant() {
 wait_assistant "$BRIDGE/session/$SESSION_V1/message" "mock response recovered"
 wait_assistant "$BRIDGE/api/session/$SESSION_V2/message" "mock response recovered"
 
+echo "== v2 message cursor pagination =="
+PAGE1="$(curl -s "$BRIDGE/api/session/$SESSION_V1/message?limit=2")"
+jq -e '(.data | length == 2) and (.cursor.previous | type) == "string"' <<<"$PAGE1" >/dev/null
+PREV_CURSOR="$(jq -r '.cursor.previous' <<<"$PAGE1")"
+PAGE2="$(curl -s "$BRIDGE/api/session/$SESSION_V1/message?limit=2&cursor=$(jq -rn --arg c "$PREV_CURSOR" '$c|@uri')")"
+jq -e '.data | length >= 1' <<<"$PAGE2" >/dev/null
+P1_IDS="$(jq -r '.data[].id' <<<"$PAGE1" | sort)"
+P2_IDS="$(jq -r '.data[].id' <<<"$PAGE2" | sort)"
+COMMON_IDS="$(comm -12 <(printf '%s\n' "$P1_IDS") <(printf '%s\n' "$P2_IDS"))"
+[[ -z "$COMMON_IDS" ]]
+echo "  v2 message cursor pages back without overlapping ids"
+
 echo "== per-session SSE =="
 PER_SESSION_PID=""
 curl -sN --max-time 60 "$BRIDGE/api/session/$SESSION_V2/event" > "$E2E_RUN/per-session-sse.log" 2>/dev/null &
