@@ -265,4 +265,40 @@ tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
 node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null
 E2E_RUNID=""
 
+echo "== run D: mini permission dialog =="
+e2e_new_run "tui-permission-mini" "workspace-write" "tool_call_success,success" "1"
+use_standard_preset
+e2e_tui_start "--mini"
+e2e_tui_wait_attach
+wait_tui_ready
+echo "  mini TUI ready"
+
+tmux send-keys -t "$E2E_TUI_SESSION" 'mini permission once' Enter
+SID=""
+deadline=$((SECONDS + 30))
+while (( SECONDS < deadline )); do
+  SID="$(active_session_id "$E2E_BRIDGE_URL")"
+  if [[ -n "$SID" ]]; then break; fi
+  sleep 1
+done
+[[ -n "$SID" ]]
+echo "  session $SID"
+
+wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-dialog.txt"
+echo "  mini permission dialog shown"
+tmux send-keys -t "$E2E_TUI_SESSION" Enter
+wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
+curl -s "$E2E_BRIDGE_URL/permission" | jq -e 'length == 0' >/dev/null
+e2e_tui_capture "$E2E_RUN_DIR/perm-mini-reply.txt"
+REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-reply.txt" | wc -l)"
+if [[ "$REPLY_COUNT" != "1" ]]; then
+  echo "e2e: mini rendered the reply $REPLY_COUNT times (expected 1)" >&2
+  exit 1
+fi
+echo "  mini allow once completed; reply rendered once"
+
+tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
+node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null
+E2E_RUNID=""
+
 echo "e2e-tui-permission: PASSED in $((SECONDS - SCRIPT_START))s"
