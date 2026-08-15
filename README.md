@@ -89,6 +89,8 @@ opencode 的配置、数据、状态与缓存全部隔离在 `$DSH_HOME/opencode
 - Esc 打断：`--mini` 单按、全量 TUI 连按两次；dsh-oc 会转为 `session.cancel`。
 - 附件：支持文本与图片，PDF 等二进制暂不支持。
 - 外围路由（MCP/LSP/formatter/skills/integration）：schema-valid stub，不伪造结果。
+- SSE 文本流可能携带成对重复的 delta（dsh 双编码 + mux 重放）；TUI 以全量
+  `message.updated` 渲染，实测不受影响。
 - 模型与权限：由 dsh 后端管理。
 
 ## 自测

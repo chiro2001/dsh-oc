@@ -37,6 +37,7 @@
 | Todo 投影 | ✅ | `GET /session/:id/todo`、`src/bridge/convert/todo.ts` | `tests/convert/todo.spec.ts`、`tests/bridge-router.spec.ts` | `f30b156` |
 | Diff / produced-files / Modified Files | ✅ | `GET /session/:id/diff`、`GET /api/session/:id/diff`、`session.diff` + Snapshot/Patch part | `tests/bridge-router.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | SSE 会话/消息事件 | ✅ | `GET /global/event`、`src/bridge/events.ts` | `tests/bridge-events.spec.ts`、`e2e-api.sh`、`e2e-tui-stream.sh` | `f30b156` |
+| SSE 文本 delta 成对重复 | 🟡 | 已知行为：dsh 对同一文本同时下发 `assistant/chunk` 与 packed `text-chunks`，且新 mux 订阅会重放；bridge 的 delta 可能成对重复，TUI 以 `message.updated` 全量文本渲染、实测无重复显示 | `docs/PROTOCOL.md` | 本提交 |
 | Agent/流错误 → `session.error` | ✅ | `stream/error` 与 `host/agent-error` 映射 | `tests/bridge-events.spec.ts` | 本提交 |
 | SSE mux/host 短暂错误自动重连（指数退避） | ✅ | `src/bridge/router.ts` `startSse` 重订阅（默认 250ms 起、最多 3 次） | `tests/bridge-events.spec.ts` | 本提交 |
 | 重连 approval/question 重放去重 | ✅ | `MuxEventTranslator` `replayGuard`（按 SSE 连接） | `tests/bridge-events.spec.ts` | 本提交 |
@@ -258,7 +259,6 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
-
 
 
 
