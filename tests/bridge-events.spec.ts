@@ -1240,7 +1240,7 @@ describe('bridge events: projection and control frames', () => {
     }])
   })
 
-  it('ignores control frames and stream errors', () => {
+  it('ignores control frames and maps stream errors to session.error', () => {
     const logs: string[] = []
     const events = new MuxEventTranslator({ cwd: '/work', state: new InteractionState(), log: (m) => logs.push(m) })
       .translate(frame({
@@ -1261,7 +1261,11 @@ describe('bridge events: projection and control frames', () => {
         type: 'stream/error',
         error: { code: 'internal', message: 'boom', details: {} },
       }))
-    expect(errored).toEqual([])
+    expect(errored).toHaveLength(1)
+    expect(errored[0]?.payload.type).toBe('session.error')
+    expect(errored[0]?.payload.properties).toMatchObject({
+      error: { code: 'internal', message: 'boom' },
+    })
     expect(logs.some((line) => line.includes('stream/error'))).toBe(true)
   })
 })
@@ -1318,5 +1322,44 @@ describe('bridge events: SSE connection lifecycle', () => {
     await new Promise((resolve) => setTimeout(resolve, 30))
     expect(router.ctx.hub.size).toBe(0)
     expect(started).toBe(true)
+  })
+
+  it('surfaces host agent errors as session.error events', async () => {
+    const base = fakeApi()
+    const api = {
+      ...base,
+      events: {
+        ...base.events,
+        mux: async function* (_request: never, signal: AbortSignal) {
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve())
+          })
+        },
+        host: async function* () {
+          yield {
+            rpcId: 'rpc-host' as never,
+            payload: { type: 'host/agent-error', sessionId: 's1', message: 'agent crashed' },
+          }
+        },
+      },
+    }
+    const router = createBridgeRouter(api as never, { cwd: '/work' })
+    const server = await startBridgeServer(router)
+    servers.push(server)
+
+    const controller = new AbortController()
+    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    while (reader && !text.includes('session.error')) {
+      const { done, value } = await reader.read()
+      text += decoder.decode(value ?? new Uint8Array())
+      if (done) break
+    }
+    expect(text).toContain('"type":"session.error"')
+    expect(text).toContain('"sessionID":"s1"')
+    expect(text).toContain('agent crashed')
+    controller.abort()
   })
 })

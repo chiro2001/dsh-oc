@@ -31,6 +31,7 @@
 | Todo 投影 | ✅ | `GET /session/:id/todo`、`src/bridge/convert/todo.ts` | `tests/convert/todo.spec.ts`、`tests/bridge-router.spec.ts` | `f30b156` |
 | Diff / produced-files / Modified Files | ✅ | `GET /session/:id/diff`、`GET /api/session/:id/diff`、`session.diff` + Snapshot/Patch part | `tests/bridge-router.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | SSE 会话/消息事件 | ✅ | `GET /global/event`、`src/bridge/events.ts` | `tests/bridge-events.spec.ts`、`e2e-api.sh`、`e2e-tui-stream.sh` | `f30b156` |
+| Agent/流错误 → `session.error` | ✅ | `stream/error` 与 `host/agent-error` 映射 | `tests/bridge-events.spec.ts` | 本提交 |
 
 ## 3. 工具
 
@@ -116,7 +117,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`586a0d9`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`402a641`（2026-08-15）。
 
 ### 路由注册表
 
@@ -197,9 +198,9 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 27 | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
+| `tests/bridge-events.spec.ts` | 28 | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 44 | 586a0d9 feat(bridge): support text and image file attachments in prompts |
+| `tests/bridge-router.spec.ts` | 44 | 402a641 feat(bridge): add /help slash command with shared capability summary |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -235,21 +236,21 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
-| `src/bridge/router.ts` | 586a0d9 feat(bridge): support text and image file attachments in prompts |
+| `src/bridge/router.ts` | 402a641 feat(bridge): add /help slash command with shared capability summary |
 | `src/bridge/rpc.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/help.ts` | — |
+| `src/help.ts` | 402a641 feat(bridge): add /help slash command with shared capability summary |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/tui/index.ts` | 91b2ad0 feat(tui): replace OpenCode home logo with DSH OC branding plugin |
+| `src/tui/index.ts` | 402a641 feat(bridge): add /help slash command with shared capability summary |
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/e2e-api-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `scripts/e2e-api.sh` | 586a0d9 feat(bridge): support text and image file attachments in prompts |
+| `scripts/e2e-api.sh` | 402a641 feat(bridge): add /help slash command with shared capability summary |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |

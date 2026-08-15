@@ -31,7 +31,7 @@ export interface BridgeApi {
   host: Pick<ApiProxy['host'], 'describe'>
   llm: Pick<ApiProxy['llm'], 'models'>
   agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>
-  events: Pick<ApiProxy['events'], 'mux'>
+  events: Pick<ApiProxy['events'], 'mux' | 'host'>
   respond: ApiProxy['respond']
   /**
    * dsh human-command registry (`ctx.commands`). Optional so unit fixtures and

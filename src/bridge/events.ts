@@ -770,7 +770,9 @@ export class MuxEventTranslator {
         return []
       case 'stream/error':
         this.deps.log(`[bridge/events] stream/error: ${payload.error.code} ${payload.error.message}`)
-        return []
+        return [makeEvent(this.deps.cwd, 'session.error', {
+          error: { code: payload.error.code, message: payload.error.message },
+        }, projectIdFor(this.deps.cwd))]
       default:
         this.deps.log(`[bridge/events] unhandled mux frame ${String((payload as { type: string }).type)}`)
         return []
@@ -1335,4 +1337,12 @@ export function fileChangeEvents(
     )
   }
   return events
+}
+
+/** Map a dsh `host/agent-error` frame to the opencode `session.error` event. */
+export function agentErrorEvent(sessionId: string, message: string, cwd: string): BridgeGlobalEvent {
+  return makeEvent(cwd, 'session.error', {
+    sessionID: sessionId,
+    error: { code: 'agent-error', message },
+  }, projectIdFor(cwd))
 }

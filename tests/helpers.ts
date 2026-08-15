@@ -67,6 +67,9 @@ export function fakeApi(overrides: Partial<BridgeApi> = {}): BridgeApi {
       mux: async function* () {
         return
       },
+      host: async function* () {
+        return
+      },
     },
     respond: async () => ({ accepted: true }),
   }

@@ -56,7 +56,7 @@ import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertGoalTodos } from './convert/goal.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
-import { commandResultEvents, convertProducedFiles, toSnapshotFileDiffs } from './events.js'
+import { agentErrorEvent, commandResultEvents, convertProducedFiles, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { ocHelp } from '../help.js'
@@ -1566,6 +1566,25 @@ export function createBridgeRouter(
           { rpcId: randomUUID() as never, payload: {} },
           controller.signal,
         )
+        const hostStream = api.events.host(
+          { rpcId: randomUUID() as never, payload: {} },
+          controller.signal,
+        )
+        const hostLoop = (async () => {
+          for await (const frame of hostStream) {
+            const payload = frame.payload as { type?: string; sessionId?: unknown; message?: unknown }
+            if (payload.type === 'host/agent-error') {
+              const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
+              const message = typeof payload.message === 'string' ? payload.message : 'agent error'
+              if (sessionId) hub.send(client, agentErrorEvent(sessionId, message, cwd))
+            }
+          }
+        })().catch((error) => {
+          if (!controller.signal.aborted) {
+            log(`[bridge/sse] host stream ended: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        })
+        void hostLoop
         for await (const frame of stream) {
           if (frame.payload.type === 'session/event') {
             const sessionEvent = frame.payload.event as unknown as { type: string }
