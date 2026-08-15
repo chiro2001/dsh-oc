@@ -77,8 +77,8 @@ function decompressAllFrames(buffer: Buffer): Buffer {
 
 describe('perf session generator', () => {
   it('encodes project keys and session ids like the dsh jsonl backend', () => {
-    expect(projectKey('/home/chiro/projects/dsh-oc/dsh-oc/.e2e/1786786862393-tui-command/work'))
-      .toBe('--home-chiro-projects-dsh-oc-dsh-oc-.e2e-1786786862393-tui-command-work--')
+    expect(projectKey('/tmp/project/work'))
+      .toBe('--tmp-project-work--')
     expect(encodeSegment('session-9954f803-06e0-419a-a804-4dfb2eaed0de'))
       .toBe('session-9954f803-06e0-419a-a804-4dfb2eaed0de')
     expect(encodeSegment('weird/name~')).toBe('weird~002Fname~007E')

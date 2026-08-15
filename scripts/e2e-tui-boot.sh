@@ -23,7 +23,7 @@ echo "== boot dsh + real opencode attach =="
 e2e_tui_start ""
 e2e_tui_wait_attach
 
-if ps -eo args= | grep -q '/home/chiro/\.local/bin/opencode serve'; then
+if ps -eo args= | grep -q 'opencode serve'; then
   echo "e2e: opencode serve must not run" >&2
   exit 1
 fi
