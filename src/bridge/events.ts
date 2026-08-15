@@ -842,6 +842,7 @@ export class MuxEventTranslator {
     }
     if (key === 'title') {
       const title = typeof value === 'string' ? value : ''
+      this.deps.state.setSessionTitle(sessionId, title)
       return [
         makeEvent(
           directory,
@@ -1190,6 +1191,7 @@ export class MuxEventTranslator {
           const title = typeof data.title === 'string' ? data.title
             : typeof data.text === 'string' ? data.text
               : ''
+          this.deps.state.setSessionTitle(sessionId, title)
           const parentID = this.deps.state.sessionParents.get(sessionId)
           return [
             makeEvent(directory, 'session.updated', {

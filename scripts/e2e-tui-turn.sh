@@ -65,6 +65,14 @@ echo "  plain session has assistant reply"
 wait_assistant_text "$SEED_URL/session/$TOOL_SESSION/message" "mock response recovered"
 echo "  tool session has assistant reply"
 
+LIST_TITLE="$(curl -s "$SEED_URL/session" | jq -r --arg id "$TOOL_SESSION" '[.[] | select(.id == $id)][0].title')"
+WORK_BASENAME="$(basename "$E2E_WORKDIR")"
+if [[ -z "$LIST_TITLE" || "$LIST_TITLE" == "$WORK_BASENAME" ]]; then
+  echo "e2e: session list lacks a durable title (got: $LIST_TITLE)" >&2
+  exit 1
+fi
+echo "  session list shows durable title: $LIST_TITLE"
+
 TOOL_TEXT="$(curl -s "$SEED_URL/session/$TOOL_SESSION/message" | jq -r '[.. | objects | select(has("tool") and .type == "tool") | .tool] | join(" ")')"
 if [[ "$TOOL_TEXT" != *bash* ]]; then
   echo "e2e: tool session has no bash tool card: $TOOL_TEXT" >&2

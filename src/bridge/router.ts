@@ -309,6 +309,9 @@ function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
 const SESSION_LIST_CACHE_MS = 1000
 const HISTORY_CACHE_MS = 500
 const RECENT_HISTORY_PREFETCH = 5
+const LIST_TITLE_WARM_LIMIT = 12
+const LIST_TITLE_WARM_CONCURRENCY = 8
+const LIST_TITLE_WARM_ALL_MAX = 40
 const SSE_RETRY_BASE_MS = 250
 const SSE_RETRY_MAX_ATTEMPTS = 3
 
@@ -364,12 +367,47 @@ async function cachedSessionHistory(
     const value = await promise
     if (ctx.state.historyGeneration(key) === generation) {
       ctx.state.setHistoryCache(key, value)
+      const title = value.projections === undefined
+        ? undefined
+        : (value.projections.values as Partial<Record<string, unknown>>).title
+      ctx.state.setSessionTitle(sessionId, title)
       seedDerivedHistoryPage(ctx, sessionId, value, options)
     }
     return value
   } finally {
     ctx.state.clearHistoryLoading(key, promise)
   }
+}
+
+/**
+ * dsh's `session.list` rows carry no projections, so real titles only come
+ * from each session's history tail. Warm the first few visible sessions
+ * (bounded, parallel) so the list shows durable titles instead of directory
+ * basenames; blank sessions have no title and are skipped.
+ */
+async function warmListTitles(ctx: BridgeRouteContext, items: readonly SessionSummary[]): Promise<void> {
+  const missing = items
+    .filter((item) => !item.blank && ctx.state.sessionTitleFor(String(item.sessionId)) === undefined)
+  // Small homes get every title on the first list open; large homes stay
+  // bounded to the most recent page (synchronous) to avoid multi-second reads.
+  const candidates = missing.length <= LIST_TITLE_WARM_ALL_MAX
+    ? missing
+    : missing.slice(0, LIST_TITLE_WARM_LIMIT)
+  if (candidates.length === 0) return
+  let next = 0
+  const workers = Array.from({ length: Math.min(LIST_TITLE_WARM_CONCURRENCY, candidates.length) }, async () => {
+    for (;;) {
+      const index = next++
+      if (index >= candidates.length) return
+      const id = String(candidates[index]!.sessionId)
+      try {
+        await cachedSessionHistory(ctx, id, { maxMessages: 1 })
+      } catch (error) {
+        ctx.log(`[bridge/session-title] warm failed for ${id}: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  })
+  await Promise.allSettled(workers)
 }
 
 /**
@@ -1558,8 +1596,10 @@ export function createBridgeRouter(
     const list = await cachedSessionList(ctx)
     const items = filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined, cwd)
     recordSessionSummaries(ctx, items)
+    await warmListTitles(ctx, items)
     return json(200, items.map((item) => convertSessionSummary(item, {
       cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
+      title: ctx.state.sessionTitleFor(String(item.sessionId)),
     })))
   })
 
@@ -1600,6 +1640,7 @@ export function createBridgeRouter(
     const body = bodyAsRecord(req.body)
     if (typeof body.title !== 'string') throw badRequest('session update requires a string title')
     await rpc(ctx, 'session.rename', { sessionId: sid(id), title: body.title })
+    ctx.state.setSessionTitle(id, body.title)
     ctx.state.invalidateSession()
     const view = await sessionView(ctx, id)
     return json(200, toV1Session(view, id, ctx))
@@ -1793,9 +1834,11 @@ export function createBridgeRouter(
     const page = ordered.slice(offset, offset + limit)
     const nextOffset = offset + page.length
     recordSessionSummaries(ctx, page)
+    await warmListTitles(ctx, page)
     return json(200, {
       data: page.map((item) => convertSessionSummaryV2(item, {
         cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
+        title: ctx.state.sessionTitleFor(String(item.sessionId)),
       })),
       cursor: {
         ...(nextOffset < filtered.length ? { next: encodeSessionCursor(nextOffset) } : {}),

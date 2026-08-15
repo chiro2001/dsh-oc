@@ -30,6 +30,8 @@ export class InteractionState {
   readonly sessionDirectories = new Map<string, string>()
   readonly sessionParents = new Map<string, string>()
   readonly savedPermissions = new Map<string, SavedPermission>()
+  /** Real durable titles learned from history projections / title events. */
+  readonly sessionTitles = new Map<string, string>()
   sessionListCache?: { items: SessionSummary[]; at: number }
   /** In-flight session.list RPC shared by concurrent callers (incl. prefetch). */
   sessionListLoading?: Promise<SessionSummary[]>
@@ -128,6 +130,16 @@ export class InteractionState {
 
   savedPermissionsList(): SavedPermission[] {
     return [...this.savedPermissions.values()]
+  }
+
+  setSessionTitle(sessionId: string, title: unknown): void {
+    if (typeof title === 'string' && title.length > 0) {
+      this.sessionTitles.set(sessionId, title)
+    }
+  }
+
+  sessionTitleFor(sessionId: string): string | undefined {
+    return this.sessionTitles.get(sessionId)
   }
 
   registerApproval(entry: PermissionEntry): PermissionEntry {

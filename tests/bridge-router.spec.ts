@@ -233,6 +233,58 @@ describe('bridge router: session routes', () => {
     expect(v2.body).toMatchObject({ data: [{ id: 's1', title: 'Session One' }], cursor: {} })
   })
 
+  it('warms real session titles from history projections into the list', async () => {
+    let historyCalls = 0
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [{ ...item, projections: undefined }] }),
+        history: async () => {
+          historyCalls += 1
+          return okRpc({
+            events: [],
+            hasMore: false,
+            projections: { asOfSeq: 2, values: { title: 'Real Title' } as never },
+          })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const v1 = await request(server, 'GET', '/session')
+    expect((v1.body as Array<{ title: string }>).at(0)?.title).toBe('Real Title')
+    const v2 = await request(server, 'GET', '/api/session')
+    expect((v2.body as { data: Array<{ title: string }> }).data.at(0)?.title).toBe('Real Title')
+    expect(historyCalls).toBe(1)
+  })
+
+  it('skips blank sessions when warming list titles', async () => {
+    let historyCalls = 0
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({
+          items: [
+            { ...item, projections: undefined },
+            { ...item, sessionId: 's-blank' as never, blank: true, projections: undefined },
+          ],
+        }),
+        history: async () => {
+          historyCalls += 1
+          return okRpc({ events: [], hasMore: false })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'GET', '/session')
+    const titles = (result.body as Array<{ id: string; title: string }>).map((entry) => entry.title)
+    expect(titles).toEqual(['work', 'work'])
+    expect(historyCalls).toBe(1)
+  })
+
   it('filters session lists by the directory query', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }

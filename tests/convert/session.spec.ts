@@ -103,6 +103,15 @@ describe('convert/session', () => {
     expect(sessionTitleFrom(summary({ projections: undefined, cwd: undefined }))).toBe('session-1')
   })
 
+  it('prefers a real durable title override over the cwd fallback', () => {
+    const noProjection = summary({ projections: undefined })
+    expect(sessionTitleFrom(noProjection, 'Real Title')).toBe('Real Title')
+    expect(sessionTitleFrom(noProjection, '')).toBe('work')
+    expect(sessionTitleFrom(summary(), 'Other')).toBe('My Session')
+    expect(convertSessionSummary(noProjection, { cwd: '/x', title: 'Real Title' }).title).toBe('Real Title')
+    expect(convertSessionSummaryV2(noProjection, { cwd: '/x', title: 'Real Title' }).title).toBe('Real Title')
+  })
+
   it('builds a minimal session for SSE', () => {
     const session = minimalSession('s-9', {
       cwd: '/work',

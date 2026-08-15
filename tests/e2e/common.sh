@@ -15,8 +15,8 @@ case "$E2E_REPO_ROOT" in
     ;;
 esac
 E2E_BRANCH="$(git -C "$E2E_REPO_ROOT" branch --show-current)"
-if [[ -n "$E2E_BRANCH" && ! "$E2E_BRANCH" =~ ^(chore-.*|main|feat-.*)$ ]]; then
-  echo "e2e: branch must be chore-*/main/feat-* (got $E2E_BRANCH)" >&2
+if [[ -n "$E2E_BRANCH" && ! "$E2E_BRANCH" =~ ^(chore-.*|main|develop|feat-.*)$ ]]; then
+  echo "e2e: branch must be chore-*/main/develop/feat-* (got $E2E_BRANCH)" >&2
   exit 2
 fi
 

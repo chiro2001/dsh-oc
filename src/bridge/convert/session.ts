@@ -9,6 +9,8 @@ import {
 
 export interface SessionConvertOptions {
   cwd: string
+  /** Real durable title learned from a history projection / title event. */
+  title?: string
   /** Fallback creation timestamp; dsh summaries do not expose header.createdAt. */
   createdAt?: number
   /** Current dsh model selection, mapped to the opencode-facing provider. */
@@ -19,10 +21,11 @@ export interface SessionConvertOptions {
   }
 }
 
-export function sessionTitleFrom(summary: SessionSummary): string {
+export function sessionTitleFrom(summary: SessionSummary, override?: string): string {
   const values = summary.projections?.values as Partial<Record<string, unknown>> | undefined
   const title = values?.title
   if (typeof title === 'string' && title.length > 0) return title
+  if (override !== undefined && override.length > 0) return override
   if (summary.origin === 'subagent') return 'Subagent session'
   const cwd = summary.cwd
   if (typeof cwd === 'string' && cwd.length > 0) {
@@ -48,7 +51,7 @@ export function convertSessionSummary(
 ): Session {
   const directory = summary.cwd ?? options.cwd
   const createdAt = options.createdAt ?? summary.updatedAt
-  const title = sessionTitleFrom(summary)
+  const title = sessionTitleFrom(summary, options.title)
   return {
     id: String(summary.sessionId),
     slug: String(summary.sessionId),
@@ -97,7 +100,7 @@ export function convertSessionSummaryV2(
       created: createdAt,
       updated: summary.updatedAt,
     },
-    title: sessionTitleFrom(summary),
+    title: sessionTitleFrom(summary, options.title),
     location: {
       directory,
     },
