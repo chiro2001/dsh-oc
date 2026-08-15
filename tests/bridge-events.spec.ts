@@ -1662,9 +1662,16 @@ describe('bridge events: SSE connection lifecycle', () => {
     expect(reply.status).toBe(200)
 
     const saved = await (await fetch(server.url + '/api/permission/saved')).json() as {
-      data: Array<{ id: string; sessionID: string }>
+      data: Array<{ id: string; sessionID: string; action: string; resource: string }>
     }
-    expect(saved.data).toEqual([{ id: 'bash', sessionID: 's1', grantedAt: expect.any(Number) }])
+    expect(saved.data).toEqual([{
+      id: 's1:bash',
+      projectID: expect.any(String),
+      action: 'bash',
+      resource: 'bash',
+      sessionID: 's1',
+      grantedAt: expect.any(Number),
+    }])
 
     release()
     await new Promise((resolve) => setTimeout(resolve, 250))

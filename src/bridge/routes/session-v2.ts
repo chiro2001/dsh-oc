@@ -244,6 +244,16 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     return R.json(200, { data: ctx.state.permissionsForSession(id).map(toPermissionV2) })
   })
 
+  register('GET', '/api/session/:sessionID/permission/:requestID', 'json', async (req, ctx) => {
+    const sessionID = req.params.sessionID as string
+    const requestID = req.params.requestID as string
+    const entry = ctx.state.permissionByOpenCodeId(requestID)
+    if (entry === undefined || entry.sessionId !== sessionID) {
+      throw notFound('permission request not found', { requestID })
+    }
+    return R.json(200, { data: toPermissionV2(entry) })
+  })
+
   register('POST', '/api/session/:sessionID/permission/:requestID/reply', 'json', async (req, ctx) => {
     const requestID = req.params.requestID as string
     await R.permissionReply(ctx, requestID, req.body)

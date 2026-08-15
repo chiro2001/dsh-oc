@@ -143,7 +143,7 @@ fi
 wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
 curl -s "$E2E_BRIDGE_URL/permission" | jq -e 'length == 0' >/dev/null
 SAVED="$(curl -s "$E2E_BRIDGE_URL/api/permission/saved")"
-jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "bash")' <<<"$SAVED" >/dev/null
+jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "\($s):bash")' <<<"$SAVED" >/dev/null
 echo "  allow once + allow always + auto-approve verified; bash grant saved"
 
 tmux send-keys -t "$E2E_TUI_SESSION" 'permission after always' Enter
@@ -184,7 +184,7 @@ tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
 curl -s "$E2E_BRIDGE_URL/permission" | jq -e 'length == 0' >/dev/null
 SAVED="$(curl -s "$E2E_BRIDGE_URL/api/permission/saved")"
-if jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "edit")' <<<"$SAVED" >/dev/null; then
+if jq -e --arg s "$SID" '.data | any(.sessionID == $s and (.id | endswith(":edit")))' <<<"$SAVED" >/dev/null; then
   echo "e2e: reject unexpectedly saved an edit grant" >&2
   exit 1
 fi
@@ -350,7 +350,7 @@ if [[ -z "$AUTO_OK" ]]; then
 fi
 wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
 SAVED="$(curl -s "$E2E_BRIDGE_URL/api/permission/saved")"
-jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "bash")' <<<"$SAVED" >/dev/null
+jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "\($s):bash")' <<<"$SAVED" >/dev/null
 e2e_tui_capture "$E2E_RUN_DIR/perm-mini-always-reply.txt"
 REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-always-reply.txt" | wc -l)"
 if [[ "$REPLY_COUNT" != "1" ]]; then
@@ -401,7 +401,7 @@ fi
 wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
 curl -s "$E2E_BRIDGE_URL/permission" | jq -e 'length == 0' >/dev/null
 SAVED="$(curl -s "$E2E_BRIDGE_URL/api/permission/saved")"
-if jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "edit")' <<<"$SAVED" >/dev/null; then
+if jq -e --arg s "$SID" '.data | any(.sessionID == $s and (.id | endswith(":edit")))' <<<"$SAVED" >/dev/null; then
   echo "e2e: mini reject unexpectedly saved an edit grant" >&2
   exit 1
 fi

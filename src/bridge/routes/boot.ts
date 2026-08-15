@@ -2,6 +2,9 @@
 import * as R from '../router.js'
 import { convertToProviderCatalog, convertToV1Providers, convertToV2Models, convertToV2Providers } from '../convert/model.js'
 import { projectIdFor } from '../convert/common.js'
+import { permissionActionFromTool } from '../convert/permission.js'
+import { toPermissionV2 } from '../convert/permission.js'
+import { toQuestionV2 } from '../convert/question.js'
 import { notFound } from '../errors.js'
 import type { RouteRegistrar } from '../routes.js'
 
@@ -107,13 +110,34 @@ export function registerBootRoutes(register: RouteRegistrar): void {
     return R.json(200, { location: R.locationInfo(ctx), data: found })
   })
 
+  register('GET', '/api/permission/request', 'json', async (_req, ctx) => R.json(200, {
+    location: R.locationInfo(ctx),
+    data: [...ctx.state.permissions.values()].map(toPermissionV2),
+  }))
+
+  register('GET', '/api/question/request', 'json', async (_req, ctx) => R.json(200, {
+    location: R.locationInfo(ctx),
+    data: [...ctx.state.questions.values()].map(toQuestionV2),
+  }))
+
   register('GET', '/api/permission/saved', 'json', async (_req, ctx) => R.json(200, {
     data: ctx.state.savedPermissionsList().map((saved) => ({
-      id: saved.toolName,
+      id: ctx.state.savedPermissionId(saved),
+      projectID: projectIdFor(ctx.cwd),
+      action: permissionActionFromTool(saved.toolName),
+      resource: saved.toolName,
       sessionID: saved.sessionId,
       grantedAt: saved.grantedAt,
     })),
   }))
+
+  register('DELETE', '/api/permission/saved/:permissionID', 'json', async (req, ctx) => {
+    const permissionID = req.params.permissionID as string
+    if (!ctx.state.removeSavedPermission(permissionID)) {
+      throw notFound('saved permission not found', { permissionID })
+    }
+    return R.json(204)
+  })
 
   register('GET', '/api/health', 'json', async () => R.json(200, { healthy: true }))
 

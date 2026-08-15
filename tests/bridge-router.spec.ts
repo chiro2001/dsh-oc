@@ -2428,8 +2428,74 @@ describe('bridge router: permission and question replies', () => {
     expect(replied.body).toBe(true)
     expect(responses[0]?.result).toMatchObject({ ok: true, value: { outcome: 'allowed-once' } })
     const saved = await request(server, 'GET', '/api/permission/saved')
-    expect((saved.body as { data: Array<{ id: string; sessionID: string }> }).data)
-      .toMatchObject([{ id: 'bash', sessionID: 's1' }])
+    expect((saved.body as { data: Array<{ id: string; sessionID: string; action: string; resource: string }> }).data)
+      .toMatchObject([{
+        id: 's1:bash',
+        projectID: expect.any(String),
+        action: 'bash',
+        resource: 'bash',
+        sessionID: 's1',
+      }])
+  })
+
+  it('lists permission/question requests with location on the v2 aliases', async () => {
+    const base = fakeApi()
+    const { server, router } = await boot(base)
+    router.ctx.state.registerApproval({
+      opencodeId: 'p5',
+      rpcId: 'rpc-p5',
+      sessionId: 's1',
+      approvalId: 'a5',
+      toolName: 'bash',
+    })
+    router.ctx.state.registerQuestion({
+      opencodeId: 'q5',
+      rpcId: 'rpc-q5',
+      sessionId: 's1',
+      items: [{ id: 'dq5', question: 'Go?', options: [{ label: 'Yes' }] }],
+    })
+    const permissions = await request(server, 'GET', '/api/permission/request')
+    expect(permissions.status).toBe(200)
+    expect(permissions.body).toMatchObject({
+      location: { directory: '/work' },
+      data: [{ id: 'p5', sessionID: 's1', action: 'bash' }],
+    })
+    const questions = await request(server, 'GET', '/api/question/request')
+    expect(questions.status).toBe(200)
+    expect(questions.body).toMatchObject({
+      location: { directory: '/work' },
+      data: [{ id: 'q5', sessionID: 's1', questions: [{ question: 'Go?' }] }],
+    })
+  })
+
+  it('gets one session permission by request id and 404s on mismatch', async () => {
+    const base = fakeApi()
+    const { server, router } = await boot(base)
+    router.ctx.state.registerApproval({
+      opencodeId: 'p6',
+      rpcId: 'rpc-p6',
+      sessionId: 's1',
+      approvalId: 'a6',
+      toolName: 'edit',
+    })
+    const found = await request(server, 'GET', '/api/session/s1/permission/p6')
+    expect(found.status).toBe(200)
+    expect(found.body).toMatchObject({ data: { id: 'p6', sessionID: 's1', action: 'edit' } })
+    expect((await request(server, 'GET', '/api/session/s2/permission/p6')).status).toBe(404)
+    expect((await request(server, 'GET', '/api/session/s1/permission/nope')).status).toBe(404)
+  })
+
+  it('removes saved permissions via DELETE and 404s for unknown ids', async () => {
+    const base = fakeApi()
+    const { server, router } = await boot(base)
+    router.ctx.state.savePermission('s1', 'bash')
+    router.ctx.state.savePermission('s1', 'edit')
+    const removed = await request(server, 'DELETE', '/api/permission/saved/s1:bash')
+    expect(removed.status).toBe(204)
+    const saved = await request(server, 'GET', '/api/permission/saved')
+    expect((saved.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id))
+      .toEqual(['s1:edit'])
+    expect((await request(server, 'DELETE', '/api/permission/saved/s1:bash')).status).toBe(404)
   })
 
   it('replies and rejects questions on v1 and v2', async () => {

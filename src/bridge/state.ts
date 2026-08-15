@@ -138,6 +138,26 @@ export class InteractionState {
     return [...this.savedPermissions.values()]
   }
 
+  /** Wire id for `/api/permission/saved/{id}` (unique per session + tool). */
+  savedPermissionId(saved: SavedPermission): string {
+    return `${saved.sessionId}:${saved.toolName}`
+  }
+
+  /**
+   * Remove one saved grant. Prefers the composite `sessionID:toolName` id;
+   * a bare tool name is accepted for compatibility and removes the first
+   * matching grant.
+   */
+  removeSavedPermission(id: string): boolean {
+    for (const [key, saved] of this.savedPermissions) {
+      if (this.savedPermissionId(saved) === id || saved.toolName === id) {
+        this.savedPermissions.delete(key)
+        return true
+      }
+    }
+    return false
+  }
+
   setSessionTitle(sessionId: string, title: unknown): void {
     if (typeof title === 'string' && title.length > 0) {
       this.sessionTitles.set(sessionId, title)

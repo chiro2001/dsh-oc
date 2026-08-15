@@ -189,11 +189,15 @@ GET /api/integration?location[directory]=...
 | `GET /api/session/{id}/message/{messageID}` | MAP | `{ data: SessionMessage }` 单条查询；未找到 404 |
 | `GET /api/session/{id}/event` | MAP | 按会话过滤的 SSE 事件流（`/global/event` 子集） |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
+| `GET /api/session/{id}/permission/{rid}` | MAP | 单条 pending approval（session 不匹配 404） |
 | `POST /api/session/{id}/permission/{rid}/reply` | MAP | `apiProxy.respond` |
 | `GET /api/session/{id}/question` | MAP | pending questions per session |
 | `POST /api/session/{id}/question/{rid}/reply` | MAP | `apiProxy.respond` |
 | `POST /api/session/{id}/question/{rid}/reject` | MAP | `apiProxy.respond` cancelled |
-| `GET /api/permission/saved` | STUB | `[]` |
+| `GET /api/permission/request` | MAP | SDK v2 全局 pending approvals 别名，`{ location, data }` |
+| `GET /api/question/request` | MAP | SDK v2 全局 pending questions 别名，`{ location, data }` |
+| `GET /api/permission/saved` | MAP | 内存中的 always 授权列表（`PermissionSavedInfo` + `sessionID/grantedAt`） |
+| `DELETE /api/permission/saved/{id}` | MAP | 删除 `sessionID:toolName` 内存授权（不存在 404） |
 | 其他未列路由 | LATER | 501 或 schema-valid 空响应 |
 
 ---

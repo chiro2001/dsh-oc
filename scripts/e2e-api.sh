@@ -473,7 +473,7 @@ done
 echo "  session.next.tool.input.started/delta/called/progress/success seen"
 
 SAVED_CHECK="$(curl -s "$BRIDGE/api/permission/saved")"
-jq -e --arg s "$APPR_SESSION" '.data | any(.sessionID == $s and .id == "bash")' <<<"$SAVED_CHECK" >/dev/null
+jq -e --arg s "$APPR_SESSION" '.data | any(.sessionID == $s and .id == "\($s):bash")' <<<"$SAVED_CHECK" >/dev/null
 echo "  saved permission listed for bash"
 
 SECOND_PROMPT="$(curl -s -X POST "$BRIDGE/session/$APPR_SESSION/message" -H 'Content-Type: application/json' \

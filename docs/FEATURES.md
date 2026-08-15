@@ -64,7 +64,9 @@
 |---|---|---|---|---|
 | Permission ask / once / reject | ✅ | `GET /permission`、`POST /permission/:id/reply`、v2 对偶路由 | `tests/convert/permission.spec.ts`、`e2e-api.sh` | `f30b156` |
 | “Always” 会话内记忆（同会话同工具自动放行） | ✅ | `src/bridge/state.ts` `savedPermissions` + SSE 自动 approve | `tests/bridge-events.spec.ts`、`e2e-api.sh` | 本提交 |
-| Saved permissions | ✅ | `GET /api/permission/saved` 返回内存中的 always 授权 | `tests/bridge-events.spec.ts`、`e2e-api.sh` | 本提交 |
+| Saved permissions 查询/删除 | ✅ | `GET /api/permission/saved` + `DELETE /api/permission/saved/{id}`（`sessionID:toolName`），授权不跨会话泄漏 | `tests/bridge-events.spec.ts`、`scripts/e2e-api-permission.sh` | 本提交 |
+| SDK v2 权限/提问 request 别名 | ✅ | `GET /api/permission/request`、`GET /api/question/request`、`GET /api/session/{id}/permission/{rid}` | `tests/bridge-router.spec.ts`、`scripts/e2e-api-permission.sh` | 本提交 |
+| TUI 权限/提问键盘交互 | ✅ | 选项 Down 高亮移动、question Esc 取消、permission Esc=reject（standard 直接拒绝，mini 先弹确认层） | `scripts/e2e-tui-permission.sh`、`scripts/e2e-tui-permission-ext.sh` | 本提交 |
 
 ## 5. 子代理
 
@@ -259,8 +261,6 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
-
-
 
 
 

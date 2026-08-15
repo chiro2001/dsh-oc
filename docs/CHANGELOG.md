@@ -28,6 +28,11 @@
 - `GET /api/session/{id}/event`：按会话过滤的 SSE 事件流（`/global/event` 子集）。
 - `GET /api/session/{id}/message/{messageID}`：v2 单条消息查询（`{ data: SessionMessage }`）。
 - `GET /api/provider/{id}`：单 provider 查询（`{ location, data: ProviderV2Info }`）。
+- SDK v2 权限面补全：`GET /api/permission/request`、`GET /api/question/request`
+  （全局 pending 列表，`{ location, data }`）、`GET /api/session/{id}/permission/{rid}`
+  （单条查询，session 不匹配 404）、`DELETE /api/permission/saved/{id}`
+  （删除 `sessionID:toolName` 内存授权）；`GET /api/permission/saved` 输出对齐
+  SDK `PermissionSavedInfo`（`projectID/action/resource`，保留 `sessionID/grantedAt`）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温
@@ -56,6 +61,12 @@
   mock LLM 升级工具调用），覆盖 Allow once、Allow always + 会话内自动放行、
   Reject（错误回传且不落盘）、`ask_user_question` 选项对话框，以及
   `--mini` 模式下的 once/always+自动放行/reject/question 与单次回复渲染。
+- `scripts/e2e-api-permission.sh`：API 权限 e2e 补全（v1 once 不落授权、
+  v2 always/别名 reject、保存授权不跨会话泄漏、删除后重新询问、question
+  第二选项回复与 v2 reject、400/404 错误分支）。
+- `scripts/e2e-tui-permission-ext.sh`：TUI 键盘面扩展（question 选项 Down
+  高亮移动、question Esc 取消、permission Esc=reject：standard 直接拒绝、
+  `--mini` 先弹确认层）。
 - `scripts/e2e-tui-mini.sh`：`--mini` 优雅退出（三连 Ctrl+C）后断言 dsh-oc
   退出提示可见。
 - `scripts/e2e-tui-continue.sh`：种子会话带显式标题，`--continue` 恢复后断言
