@@ -30,6 +30,9 @@ jobs:
       - name: Install dsh CLI
         run: npm install -g @deepseek-ai/dsh@0.1.0-rc.6
 
+      - name: Install pnpm globally
+        run: npm install -g pnpm@11.9.0
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
