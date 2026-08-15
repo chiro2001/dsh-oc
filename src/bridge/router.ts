@@ -1764,11 +1764,13 @@ export function createBridgeRouter(
       let listRefreshTimer: NodeJS.Timeout | undefined
       try {
         const defaultModel = await defaultModelRef(ctx)
+        const replayGuard = { approvals: new Set<string>(), questions: new Set<string>() }
         const makeTranslator = (): MuxEventTranslator => new MuxEventTranslator({
           cwd,
           state,
           defaultModel,
           log,
+          replayGuard,
           onFlush: (events) => {
             for (const event of events) hub.send(client, event)
           },

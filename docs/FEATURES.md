@@ -35,6 +35,7 @@
 | SSE 会话/消息事件 | ✅ | `GET /global/event`、`src/bridge/events.ts` | `tests/bridge-events.spec.ts`、`e2e-api.sh`、`e2e-tui-stream.sh` | `f30b156` |
 | Agent/流错误 → `session.error` | ✅ | `stream/error` 与 `host/agent-error` 映射 | `tests/bridge-events.spec.ts` | 本提交 |
 | SSE mux/host 短暂错误自动重连（指数退避） | ✅ | `src/bridge/router.ts` `startSse` 重订阅（默认 250ms 起、最多 3 次） | `tests/bridge-events.spec.ts` | 本提交 |
+| 重连 approval/question 重放去重 | ✅ | `MuxEventTranslator` `replayGuard`（按 SSE 连接） | `tests/bridge-events.spec.ts` | 本提交 |
 
 ## 3. 工具
 
@@ -127,7 +128,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`39bf1a1`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`45b794e`（2026-08-15）。
 
 ### 路由注册表
 
@@ -208,7 +209,7 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 32 | 39bf1a1 feat(bridge): retry transient SSE mux errors with exponential backoff |
+| `tests/bridge-events.spec.ts` | 33 | 45b794e feat(bridge): retry transient host stream errors alongside mux |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/bridge-router.spec.ts` | 57 | d1f4186 perf(bridge): prefetch recent session histories after startup |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
@@ -246,7 +247,7 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
-| `src/bridge/router.ts` | 39bf1a1 feat(bridge): retry transient SSE mux errors with exponential backoff |
+| `src/bridge/router.ts` | 45b794e feat(bridge): retry transient host stream errors alongside mux |
 | `src/bridge/rpc.ts` | ecb00f1 feat(bridge): v2 session search with limit and directory filters |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 5743dd1 perf(bridge): short-TTL list/history caches with mutation and SSE invalidation |

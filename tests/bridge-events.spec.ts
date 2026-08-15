@@ -1276,6 +1276,39 @@ describe('bridge events: projection and control frames', () => {
     })
     expect(logs.some((line) => line.includes('stream/error'))).toBe(true)
   })
+
+  it('dedupes replayed approval and question frames per SSE connection', () => {
+    const state = new InteractionState()
+    const guard = { approvals: new Set<string>(), questions: new Set<string>() }
+    const instance = new MuxEventTranslator({
+      cwd: '/work',
+      state,
+      log: () => {},
+      replayGuard: guard,
+    })
+
+    const approvalFrame = frame({
+      type: 'approval/requested',
+      sessionId: 's1' as never,
+      approvalId: 'a1' as never,
+      toolName: 'bash',
+      callId: 'c1' as never,
+    }, 'rpc-approval')
+    const firstApproval = instance.translate(approvalFrame)
+    expect(firstApproval.map((event) => event.payload.type)).toContain('permission.asked')
+    expect(instance.translate(approvalFrame)).toEqual([])
+    expect(state.permissions.size).toBe(1)
+
+    const questionFrame = frame({
+      type: 'question/requested',
+      sessionId: 's1' as never,
+      questions: [{ id: 'q1', question: 'pick one', options: [] }],
+    }, 'rpc-question')
+    const firstQuestion = instance.translate(questionFrame)
+    expect(firstQuestion.map((event) => event.payload.type)).toContain('question.asked')
+    expect(instance.translate(questionFrame)).toEqual([])
+    expect(state.questions.size).toBe(1)
+  })
 })
 
 describe('bridge events: SSE connection lifecycle', () => {

@@ -60,6 +60,8 @@ export interface TranslateDeps {
   state: InteractionState
   defaultModel?: { providerID: string; modelID: string }
   log(message: string): void
+  /** Per-SSE-connection replay guard for approval/question frames. */
+  replayGuard?: { approvals: Set<string>; questions: Set<string> }
   /** Coalescing window for `tool-call-delta` events before flushing (ms). */
   toolFlushMs?: number
   /** Injectable timer used by the tool-input throttle. */
@@ -707,10 +709,13 @@ export class MuxEventTranslator {
       case 'session/event':
         return this.translateSessionEvent(frame.rpcId, payload.sessionId, payload.event, payload.view)
       case 'approval/requested': {
+        const approvalId = String(payload.approvalId)
+        if (this.deps.replayGuard?.approvals.has(approvalId)) return []
+        this.deps.replayGuard?.approvals.add(approvalId)
         const entry: NewApprovalEntry = {
           rpcId: String(frame.rpcId),
           sessionId: String(payload.sessionId),
-          approvalId: String(payload.approvalId),
+          approvalId,
           toolName: payload.toolName,
           callId: payload.callId === undefined ? undefined : String(payload.callId),
           reason: payload.reason,
@@ -748,8 +753,11 @@ export class MuxEventTranslator {
         ]
       }
       case 'question/requested': {
+        const questionKey = String(frame.rpcId)
+        if (this.deps.replayGuard?.questions.has(questionKey)) return []
+        this.deps.replayGuard?.questions.add(questionKey)
         const entry: NewQuestionEntry = {
-          rpcId: String(frame.rpcId),
+          rpcId: questionKey,
           sessionId: String(payload.sessionId),
           items: payload.questions,
         }
