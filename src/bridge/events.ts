@@ -72,6 +72,7 @@ interface SessionStreamState {
   lastUserMessageId?: string
   provisionalMessageIds: Map<string, string>
   blockStarts: Map<string, number>
+  finishReasons: Map<string, string>
   blocks: Map<string, StreamBlockState>
 }
 
@@ -217,6 +218,7 @@ export class MuxEventTranslator {
       state = {
         provisionalMessageIds: new Map(),
         blockStarts: new Map(),
+        finishReasons: new Map(),
         blocks: new Map(),
       }
       this.streams.set(sessionId, state)
@@ -388,6 +390,10 @@ export class MuxEventTranslator {
           )
           return []
         }
+        if (chunk.type === 'finish') {
+          this.streamState(sessionId).finishReasons.set(`${event.data.turn}:${event.data.step}`, chunk.reason.kind)
+          return []
+        }
         if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
           return this.translateStreamChunks(
             sessionId,
@@ -431,6 +437,7 @@ export class MuxEventTranslator {
             (index, blockType) => state.blockStarts.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`),
             created,
             state.lastUserMessageId,
+            state.finishReasons.get(stepKey) ?? 'stop',
           )
           return {
             info: entry.info as unknown as Record<string, unknown>,

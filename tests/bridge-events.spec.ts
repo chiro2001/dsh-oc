@@ -161,8 +161,9 @@ describe('bridge events: session event mapping', () => {
     expect(removedIndex).toBeGreaterThanOrEqual(0)
     expect(removedIndex).toBeLessThan(finalIndex)
 
-    const finalInfo = events[finalIndex]?.payload.properties.info as { time: { created: number; completed: number }; parentID?: string }
+    const finalInfo = events[finalIndex]?.payload.properties.info as { time: { created: number; completed: number }; parentID?: string; finish?: string }
     expect(finalInfo.parentID).toBe('msg-user-1')
+    expect(finalInfo.finish).toBe('stop')
     expect(finalInfo.time.created).toBe(1100)
     expect(finalInfo.time.completed).toBe(2000)
     expect(finalInfo.time.created).toBeLessThan(finalInfo.time.completed)

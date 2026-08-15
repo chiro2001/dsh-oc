@@ -110,6 +110,7 @@ function assistantMessageInfo(
   opts: MessageConvertOptions,
   usage?: TokenUsage,
   created?: number,
+  finish?: string,
 ): AssistantMessage {
   return {
     id: String(message.id),
@@ -123,6 +124,7 @@ function assistantMessageInfo(
     path: { cwd: opts.cwd, root: opts.cwd },
     cost: 0,
     tokens: usageTokens(usage),
+    ...(finish === undefined ? {} : { finish }),
   }
 }
 
@@ -403,6 +405,7 @@ export function convertMessagesV1(
   const calls = new Map<string, ToolCallInfo>()
   const blockStarts = new Map<string, number>()
   const turnStarts = new Map<number, number>()
+  const finishReasons = new Map<string, string>()
   const blocksByStep: StreamBlocksByStep = new Map()
   const pending = new Map<string, V1MessageEntry>()
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
@@ -503,6 +506,7 @@ export function convertMessagesV1(
             opts,
             data.usage,
             earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+            finishReasons.get(`${data.turn}:${data.step}`) ?? 'stop',
           ),
           parts,
         })
@@ -572,11 +576,12 @@ export function assistantMessageFromEvent(
   blockStart?: (index: number, blockType: string) => number | undefined,
   created?: number,
   parentID?: string,
+  finish?: string,
 ): V1MessageEntry {
   const id = String(event.data.message.id)
   const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart)
   return {
-    info: assistantMessageInfo(event.data.message, event.time, parentID ?? id, opts, event.data.usage, created),
+    info: assistantMessageInfo(event.data.message, event.time, parentID ?? id, opts, event.data.usage, created, finish),
     parts,
   }
 }
@@ -793,6 +798,7 @@ export function convertMessagesV2(
   const calls = new Map<string, ToolCallInfo>()
   const blockStarts = new Map<string, number>()
   const turnStarts = new Map<number, number>()
+  const finishReasons = new Map<string, string>()
   const blocksByStep: StreamBlocksByStep = new Map()
   const pending = new Map<string, SessionMessageAssistant>()
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
