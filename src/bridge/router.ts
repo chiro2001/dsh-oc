@@ -100,6 +100,8 @@ export interface BridgeRouter {
   startSse(req: BridgeRequest, res: ServerResponse): void
   /** Change the bridge working directory (e.g. from an attach `--dir`). */
   setCwd(directory: string): void
+  /** Warm the session-list cache in the background after startup. */
+  prefetchSessionList(): void
 }
 
 export interface RouterOptions {
@@ -1852,6 +1854,11 @@ export function createBridgeRouter(
     setCwd(directory: string) {
       cwd = directory
       ctx.cwd = directory
+    },
+    prefetchSessionList() {
+      void cachedSessionList(ctx).catch((error) => {
+        log(`[bridge] session list prefetch failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
     },
   }
 }

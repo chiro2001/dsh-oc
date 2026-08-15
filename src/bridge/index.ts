@@ -42,6 +42,7 @@ export class OcBridgeService extends Service implements OcBridgeValue {
     }
     const router = createBridgeRouter(api, { log: this.logger })
     this.router = router
+    router.prefetchSessionList()
     const handle = await startBridgeServer(router)
     this.handle = handle
     this.url = handle.url
