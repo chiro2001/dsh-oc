@@ -109,6 +109,7 @@
 | Help e2e | ✅ | `scripts/e2e-tui-help.sh` | `bash scripts/e2e-tui-help.sh` | 本提交 |
 | 品牌 logo e2e | ✅ | `scripts/e2e-tui-brand.sh` | `bash scripts/e2e-tui-brand.sh` | 本提交 |
 | `--dir` attach e2e | ✅ | `scripts/e2e-tui-dir.sh` | `bash scripts/e2e-tui-dir.sh` | 本提交 |
+| `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
 | 流式工具事件 API e2e | ✅ | `scripts/e2e-api.sh` 审批流断言 started/delta/called/success | `bash scripts/e2e-api.sh` | 本提交 |
 | 功能矩阵自动追踪 | ✅ | `scripts/update-feature-matrix.mjs` | `pnpm run features:update` | 本提交 |
@@ -118,7 +119,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`ad812d7`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`18741fd`（2026-08-15）。
 
 ### 路由注册表
 
@@ -201,7 +202,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 28 | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 46 | ad812d7 feat(bridge): honor limit query on v2 message history route |
+| `tests/bridge-router.spec.ts` | 46 | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -216,7 +217,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 27 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
+| `tests/tui/index.spec.ts` | 27 | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -236,8 +237,8 @@
 | `src/bridge/events.ts` | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/index.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
-| `src/bridge/router.ts` | ad812d7 feat(bridge): honor limit query on v2 message history route |
+| `src/bridge/index.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
+| `src/bridge/router.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `src/bridge/rpc.ts` | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
@@ -246,16 +247,17 @@
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/tui/index.ts` | 402a641 feat(bridge): add /help slash command with shared capability summary |
+| `src/tui/index.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/types.ts` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
+| `src/types.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `scripts/e2e-api-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-api.sh` | 402a641 feat(bridge): add /help slash command with shared capability summary |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `scripts/e2e-tui-dir.sh` | — |
+| `scripts/e2e-tui-dir.sh` | 18741fd feat(tui): make --dir switch the bridge working directory |
+| `scripts/e2e-tui-fork.sh` | — |
 | `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
