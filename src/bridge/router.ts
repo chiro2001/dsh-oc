@@ -315,10 +315,9 @@ export function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | unde
 export const SESSION_LIST_CACHE_MS = 1000
 export const HISTORY_CACHE_MS = 500
 export const RECENT_HISTORY_PREFETCH = 5
-export const LIST_TITLE_WARM_LIMIT = 12
-export const LIST_TITLE_WARM_CONCURRENCY = 8
+export const LIST_TITLE_WARM_CONCURRENCY = 2
 export const LIST_TITLE_WARM_ALL_MAX = 40
-export const LIST_TITLE_WARM_BACKGROUND_MAX = 120
+export const LIST_TITLE_WARM_BACKGROUND_MAX = 24
 export const SSE_RETRY_BASE_MS = 250
 export const SSE_RETRY_MAX_ATTEMPTS = 3
 
@@ -395,17 +394,15 @@ export async function cachedSessionHistory(
 export async function warmListTitles(ctx: BridgeRouteContext, items: readonly SessionSummary[]): Promise<void> {
   const missing = items
     .filter((item) => !item.blank && ctx.state.sessionTitleFor(String(item.sessionId)) === undefined)
-  // Small homes get every title on the first list open; large homes stay
-  // bounded to the most recent page (synchronous) to avoid multi-second reads.
-  const syncCount = missing.length <= LIST_TITLE_WARM_ALL_MAX
-    ? missing.length
-    : Math.min(LIST_TITLE_WARM_LIMIT, missing.length)
-  await warmTitles(ctx, missing.slice(0, syncCount))
-  if (missing.length > syncCount) {
-    // Warm the next pages in the background so a later list open shows more
-    // durable titles; the in-flight/cache layers keep this cheap and bounded.
-    void warmTitles(ctx, missing.slice(syncCount, LIST_TITLE_WARM_BACKGROUND_MAX))
+  if (missing.length === 0) return
+  if (missing.length <= LIST_TITLE_WARM_ALL_MAX) {
+    // Small homes get every title on the first list open.
+    await warmTitles(ctx, missing)
+    return
   }
+  // Large homes must never block the list request on per-session history
+  // reads; warm the most recent page in the background instead.
+  void warmTitles(ctx, missing.slice(0, LIST_TITLE_WARM_BACKGROUND_MAX))
 }
 
 /** Read the title-bearing history tail for candidates with bounded concurrency. */

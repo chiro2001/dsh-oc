@@ -25,7 +25,7 @@
 |---|---|---|---|---|
 | 会话列表 / 状态 | ✅ | `GET /session`、`GET /session/status`、`GET /api/session` | `tests/bridge-router.spec.ts`、`e2e-api.sh` | `f30b156` |
 | 会话列表标题回退 | ✅ | 持久标题 → 项目目录 basename → session id（对齐 dsh 客户端展示逻辑） | `tests/convert/session.spec.ts` | 本提交 |
-| 会话列表真实标题补读 | ✅ | dsh `session.list` 不携带 title 投影；bridge 按会话补读 history tail 投影并缓存，列表显示真实标题（≤40 全量同步、大列表同步 12 + 后台 120） | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-turn.sh` | 本提交 |
+| 会话列表真实标题补读 | ✅ | dsh `session.list` 不携带 title 投影；bridge 按会话补读 history tail 投影并缓存，列表显示真实标题（≤40 全量同步、大列表后台补温 24，不阻塞列表） | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-turn.sh` | 本提交 |
 | 会话搜索（v2 `?search=`）与 limit/目录过滤 | ✅ | `src/bridge/router.ts` `/api/session` 经 `session.search` | `tests/bridge-router.spec.ts` | 本提交 |
 | 会话列表分页（v2 `cursor` next/previous + order） | ✅ | `src/bridge/router.ts` `/api/session` offset 游标 | `tests/bridge-router.spec.ts` | 本提交 |
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
@@ -146,7 +146,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`eebb1a6`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`a3c779e`（2026-08-16）。
 
 ### 路由注册表
 
@@ -187,7 +187,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 32 | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
+| `tests/tui/index.spec.ts` | 32 | 5c1cdba feat(tui): allow disabling the exit hint via DSH_OC_DISABLE_EXIT_NOTE |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -222,7 +222,7 @@
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/tui/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
+| `src/tui/index.ts` | 5c1cdba feat(tui): allow disabling the exit hint via DSH_OC_DISABLE_EXIT_NOTE |
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
