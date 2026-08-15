@@ -300,6 +300,7 @@ function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
 
 const SESSION_LIST_CACHE_MS = 1000
 const HISTORY_CACHE_MS = 500
+const RECENT_HISTORY_PREFETCH = 3
 
 function historyCacheKey(sessionId: string, maxMessages?: number, beforeSeq?: number): string {
   return `${sessionId}:${maxMessages ?? 'tail'}:${beforeSeq ?? 'tail'}`
@@ -1859,9 +1860,18 @@ export function createBridgeRouter(
       ctx.cwd = directory
     },
     prefetchSessionList() {
-      void cachedSessionList(ctx).catch((error) => {
-        log(`[bridge] session list prefetch failed: ${error instanceof Error ? error.message : String(error)}`)
-      })
+      void (async () => {
+        try {
+          const items = await cachedSessionList(ctx)
+          await Promise.allSettled(
+            items.slice(0, RECENT_HISTORY_PREFETCH).map((item) =>
+              cachedSessionHistory(ctx, String(item.sessionId), { maxMessages: 100 }),
+            ),
+          )
+        } catch (error) {
+          log(`[bridge] session list prefetch failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      })()
     },
     prefetchSession(sessionId: string) {
       // Match the TUI's initial v1 message fetch (default limit 100).
