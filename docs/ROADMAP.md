@@ -246,7 +246,8 @@ opencode 版本升级后，API 路由/类型可能变化；需要用户可自助
 - 单测/探针/性能冒烟由 `scripts/check-all.sh` 一键执行；完整 e2e 用 `--e2e`。
 - GitHub Actions：`ci.yml` 自动跑 build/typecheck/test/probe；`e2e.yml` 手动触发
   API e2e 与压测。
-- e2e 分支白名单：`main` / `develop` / `chore-*` / `feat-*`。
+- e2e 分支白名单：`main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
+  `perf-*` / `test-*` / `feat-*`。
 
 ### M3 社区贡献
 

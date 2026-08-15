@@ -53,7 +53,8 @@ dsh plugin --profile oc add 'github:chiro2001/dsh-oc#<branch>'
 - 历史遗留的 `feat-*` 分支已全部并入 `main`，属于可清理分支；用
   `scripts/cleanup-merged-branches.sh` 列出/删除（默认 dry-run）。
 
-e2e 脚本只允许在 `main` / `develop` / `chore-*` / `feat-*` 上运行，防止误在临时
+e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
+`perf-*` / `test-*` / `feat-*` 上运行（与 CI 触发分支一致），防止误在临时
 分支上跑出无效结果。
 
 ## 提交规范
