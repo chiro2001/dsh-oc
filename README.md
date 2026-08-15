@@ -183,7 +183,7 @@ opencode 子进程启动时被强制关闭后台外网行为（以 1.18.18 源�
 ## 已知限制
 
 - **`always` 权限降级**：TUI 的 `Allow always` 映射为 dsh 的 `allowed-once`，并在日志中提示。
-- **文件附件**：首版只支持文本 prompt；图片/file part 后续按
-  `apiProxy.sessions.prompt` 的 `PromptContentPart` 能力补齐。
+- **文件附件**：支持 `file` part 的文本文件（data URL 或 cwd 内本地路径）与
+  图片（data URL）；PDF 等二进制附件暂不支持，会返回明确 400。
 - **未实现路由**：返回 schema-valid 空数据或显式 501，不伪造 diff。
 - **模型/权限**：由 dsh 后端管理；TUI 内模型选择器显示 dsh 模型目录。

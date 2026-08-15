@@ -44,7 +44,7 @@
 | 工具执行由 dsh 后端完成 | ✅ | `ctx.apiProxy.sessions.prompt`、dsh tool 注册表 | `e2e-api.sh`（bash 工具） | `f30b156` |
 | read/write/edit 文件变化展示 | ✅ | tool result → ToolPart metadata/diff + `session.diff` + Modified Files | `tests/convert/tool.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | dsh 多种编辑模式映射（view/create/str_replace/insert/undo_edit） | ✅ | `src/bridge/convert/tool.ts` 映射为 read/edit 卡片并保留 mode | `tests/convert/tool.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
-| 文本附件/文件 part | 🟡 | `src/bridge/router.ts` 仅接受 `data:` image part | `tests/bridge-router.spec.ts`（400 拒绝未知 part） | `f30b156` |
+| 文本附件/文件 part | ✅ | `src/bridge/router.ts` `filePartToContent`：data URL 文本/图片、cwd 内本地文件；cwd 外与二进制 400 | `tests/bridge-router.spec.ts`、`scripts/e2e-api.sh` | 本提交 |
 | MCP / LSP / formatter 等外围工具 | ❌ | `src/bridge/stubs.ts` 返回 schema-valid 空数据 | `e2e-api.sh` 路由矩阵 | `f30b156` |
 
 ## 4. 权限
@@ -115,7 +115,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`0de1c30`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`d8614f7`（2026-08-15）。
 
 ### 路由注册表
 
@@ -198,7 +198,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 27 | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 41 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `tests/bridge-router.spec.ts` | 43 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |

@@ -307,7 +307,7 @@ fallback，且每个平台使用各自 manifest 条目独立校验，不是全�
 
 1. **`always` 权限降级**：opencode TUI 提供 `Allow always`，dsh approval 只有 `allowed-once / rejected`。首版将 `always` 映射为 `allowed-once`，并在 TUI 外日志中提示。后续若 dsh 增加持久权限预设，再改回真 `always`。
 2. **attach 参数受限**：`opencode attach` 只接受 `--continue/--session/--fork/--dir/--mini/--password/--username`。`dsh --profile oc --model X` 等参数首版打印警告并忽略；模型切换走 TUI 内模型选择器。
-3. **文件附件**：P1 先支持文本 prompt；图片/file part 在 P2/P3 按 `apiProxy.sessions.prompt` 的 `PromptContentPart` 能力补齐。
+3. **文件附件**：`file` part 支持文本（data URL / cwd 内本地文件）与图片（data URL），映射为 dsh `text`/`image` part；PDF 等二进制附件返回 400。
 4. **session diff**：无 produced-files 投影时返回 `[]`，不伪造 diff。
 5. **opencode v1/v2 双协议**：任何升级必须重新跑第 2 节探针并更新本文件。
 

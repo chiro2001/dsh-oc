@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync, statSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
+import { extname, isAbsolute, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type {
   HistoryEntry,
   PromptContentPart,
@@ -266,9 +269,93 @@ interface PromptPartInput {
   url?: unknown
   mime?: unknown
   name?: unknown
+  source?: { path?: unknown; type?: unknown }
 }
 
-function parsePromptParts(raw: unknown): PromptContentPart[] {
+const TEXT_MIME_PREFIXES = new Set([
+  'application/json',
+  'application/xml',
+  'application/javascript',
+  'application/typescript',
+  'application/x-yaml',
+  'application/yaml',
+  'application/toml',
+  'application/x-toml',
+  'application/x-sh',
+  'application/x-python',
+])
+
+const TEXT_EXTENSIONS = new Set([
+  '.txt', '.md', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.json', '.jsonc', '.yaml', '.yml', '.toml', '.sh', '.py', '.rs',
+  '.go', '.c', '.h', '.cpp', '.hpp', '.java', '.sql', '.css', '.html',
+  '.xml', '.csv', '.log',
+])
+
+function isTextMime(mime: string): boolean {
+  const normalized = mime.toLowerCase().split(';')[0]?.trim() ?? ''
+  return normalized.startsWith('text/') || TEXT_MIME_PREFIXES.has(normalized)
+}
+
+function isTextFile(path: string, mime: string): boolean {
+  return isTextMime(mime) || TEXT_EXTENSIONS.has(extname(path).toLowerCase())
+}
+
+function filePartToContent(part: PromptPartInput, cwd: string): PromptContentPart {
+  const url = typeof part.url === 'string' ? part.url : ''
+  const mime = typeof part.mime === 'string' ? part.mime : ''
+  if (url.length === 0 || mime.length === 0) {
+    throw badRequest('file part requires url and mime')
+  }
+
+  const dataMatch = /^data:([^;,]+);base64,(.+)$/.exec(url)
+  if (dataMatch) {
+    const [, mediaType, data] = dataMatch
+    if (!mediaType || !data) throw badRequest('invalid file data URL')
+    if (mediaType.startsWith('image/')) {
+      return { type: 'image', mediaType: mediaType as never, data }
+    }
+    if (isTextMime(mediaType)) {
+      return { type: 'text', text: Buffer.from(data, 'base64').toString('utf8') }
+    }
+    throw badRequest(`unsupported file mime "${mediaType}" (dsh supports text and image parts)`)
+  }
+
+  // Local file: file:// URL, absolute path, or cwd-relative path.
+  let filePath: string
+  if (url.startsWith('file://')) {
+    try {
+      filePath = fileURLToPath(url)
+    } catch {
+      throw badRequest(`invalid file part url: ${url}`)
+    }
+  } else {
+    filePath = url
+  }
+  const resolved = resolve(cwd, filePath)
+  const rel = relative(cwd, resolved)
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    throw badRequest('file part path must be inside the session cwd')
+  }
+  let stat
+  try {
+    stat = statSync(resolved)
+  } catch {
+    throw badRequest(`file part path not readable: ${filePath}`)
+  }
+  if (!stat.isFile()) throw badRequest('file part path must be a file')
+
+  const mediaType = mime.split(';')[0]?.trim() ?? ''
+  if (mediaType.startsWith('image/')) {
+    return { type: 'image', mediaType: mediaType as never, data: readFileSync(resolved).toString('base64') }
+  }
+  if (isTextFile(resolved, mediaType)) {
+    return { type: 'text', text: readFileSync(resolved, 'utf8') }
+  }
+  throw badRequest(`unsupported file mime "${mediaType}" (dsh supports text and image parts)`)
+}
+
+function parsePromptParts(raw: unknown, cwd: string): PromptContentPart[] {
   if (!Array.isArray(raw)) throw badRequest('prompt body requires a parts array')
   const parts: PromptContentPart[] = []
   for (const entry of raw) {
@@ -280,14 +367,7 @@ function parsePromptParts(raw: unknown): PromptContentPart[] {
       continue
     }
     if (part.type === 'file') {
-      if (typeof part.url !== 'string' || typeof part.mime !== 'string') {
-        throw badRequest('file part requires url and mime')
-      }
-      const match = /^data:([^;,]+);base64,(.+)$/.exec(part.url)
-      if (!match) throw badRequest('file part url must be a data URL (images only in first version)')
-      const [, mediaType, data] = match
-      if (!mediaType || !data) throw badRequest('invalid file data URL')
-      parts.push({ type: 'image', mediaType: mediaType as never, data })
+      parts.push(filePartToContent(part, cwd))
       continue
     }
     throw badRequest(`unsupported prompt part type "${String(part.type)}"`)
@@ -1168,7 +1248,7 @@ export function createBridgeRouter(
 
   register('POST', '/session/:id/message', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
     const slash = slashPromptCapture(content)
     if (slash !== undefined) {
       const outcome = slash.name === 'preset'
@@ -1186,7 +1266,7 @@ export function createBridgeRouter(
   // `POST /session/:id/message` (v1) and `POST /api/session/:id/prompt` (v2).
   register('POST', '/session/:id/prompt', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
     const slash = slashPromptCapture(content)
     if (slash !== undefined) {
       const outcome = slash.name === 'preset'
@@ -1300,7 +1380,7 @@ export function createBridgeRouter(
 
   register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
-    const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    const content = parsePromptParts(bodyAsRecord(req.body).parts, cwd)
     const slash = slashPromptCapture(content)
     if (slash !== undefined) {
       const outcome = slash.name === 'preset'

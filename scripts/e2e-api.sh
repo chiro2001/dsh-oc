@@ -181,6 +181,17 @@ curl -s -X POST "$BRIDGE/session/$SESSION_V1/prompt" -H 'Content-Type: applicati
   -d '{"parts":[{"type":"text","text":"e2e: hello from dsh-oc (alias route)"}]}' | jq -e '.info.role == "assistant"' >/dev/null
 echo "  POST /session/$SESSION_V1/prompt alias accepted"
 
+FILE_PART_OUT="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/prompt" -H 'Content-Type: application/json' \
+  -d '{"parts":[{"type":"file","mime":"text/plain","filename":"hello.txt","url":"data:text/plain;base64,aGVsbG8gZnJvbSBmaWxl"}]}')"
+jq -e '.info.role == "assistant"' <<<"$FILE_PART_OUT" >/dev/null
+echo "  POST /session/$SESSION_V1/prompt text file part accepted"
+
+OUTSIDE_FILE_CODE="$(curl -s -o "$E2E_RUN/outside-file.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V1/message" \
+  -H 'Content-Type: application/json' \
+  -d '{"parts":[{"type":"file","mime":"text/plain","url":"file:///etc/passwd"}]}')"
+[[ "$OUTSIDE_FILE_CODE" == "400" ]]
+echo "  file part outside cwd rejected -> 400"
+
 curl -s -X POST "$BRIDGE/api/session/$SESSION_V2/prompt" -H 'Content-Type: application/json' \
   -d '{"parts":[{"type":"text","text":"e2e: hello from dsh-oc (v2 route)"}]}' | jq -e --arg s "$SESSION_V2" '.data.sessionID == $s and .data.delivery == "queue"' >/dev/null
 echo "  POST /api/session/$SESSION_V2/prompt accepted"

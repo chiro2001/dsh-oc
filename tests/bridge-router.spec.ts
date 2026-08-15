@@ -582,6 +582,93 @@ describe('bridge router: session routes', () => {
     expect(result.body).toMatchObject({ name: 'BadRequest' })
   })
 
+  it('accepts text and image file parts from data URLs and local paths', async () => {
+    const work = mkdtempSync(join(tmpdir(), 'dsh-oc-attach-'))
+    tempDirs.push(work)
+    writeFileSync(join(work, 'notes.txt'), 'hello from notes')
+
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        prompt: async (request: { payload: unknown }) => {
+          calls.push({ method: 'session.prompt', payload: request.payload })
+          return okRpc({ accepted: true })
+        },
+      },
+    }
+    const { server } = await boot(api, work)
+
+    const textData = await request(server, 'POST', '/session/s1/message', {
+      parts: [{
+        type: 'file',
+        mime: 'text/plain',
+        filename: 'hello.txt',
+        url: `data:text/plain;base64,${Buffer.from('hello').toString('base64')}`,
+      }],
+    })
+    expect(textData.status).toBe(200)
+    expect(calls[0]).toMatchObject({
+      method: 'session.prompt',
+      payload: { content: [{ type: 'text', text: 'hello' }] },
+    })
+
+    const local = await request(server, 'POST', '/session/s1/message', {
+      parts: [{
+        type: 'file',
+        mime: 'text/plain',
+        filename: 'notes.txt',
+        url: `file://${join(work, 'notes.txt')}`,
+      }],
+    })
+    expect(local.status).toBe(200)
+    expect(calls[1]).toMatchObject({
+      payload: { content: [{ type: 'text', text: 'hello from notes' }] },
+    })
+
+    const imageData = Buffer.from('png').toString('base64')
+    const image = await request(server, 'POST', '/session/s1/prompt', {
+      parts: [{
+        type: 'file',
+        mime: 'image/png',
+        filename: 'pic.png',
+        url: `data:image/png;base64,${imageData}`,
+      }],
+    })
+    expect(image.status).toBe(200)
+    expect(calls[2]).toMatchObject({
+      payload: { content: [{ type: 'image', mediaType: 'image/png', data: imageData }] },
+    })
+  })
+
+  it('rejects file parts outside the session cwd and unsupported binary mimes', async () => {
+    const work = mkdtempSync(join(tmpdir(), 'dsh-oc-attach-outside-'))
+    tempDirs.push(work)
+    const { server } = await boot(fakeApi(), work)
+
+    const outside = await request(server, 'POST', '/session/s1/message', {
+      parts: [{
+        type: 'file',
+        mime: 'text/plain',
+        url: `file://${join(tmpdir(), 'secret.txt')}`,
+      }],
+    })
+    expect(outside.status).toBe(400)
+    expect(outside.body).toMatchObject({ name: 'BadRequest' })
+
+    const binary = await request(server, 'POST', '/session/s1/message', {
+      parts: [{
+        type: 'file',
+        mime: 'application/pdf',
+        url: `data:application/pdf;base64,${Buffer.from('%PDF-').toString('base64')}`,
+      }],
+    })
+    expect(binary.status).toBe(400)
+    expect(binary.body).toMatchObject({ name: 'BadRequest' })
+  })
+
   it('serves todo and diff from history/projections', async () => {
     const work = gitFixture({ 'src/a.ts': 'const a = 1' })
     const base = fakeApi()
