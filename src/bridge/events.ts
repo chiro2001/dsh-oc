@@ -221,7 +221,7 @@ interface SessionStreamState {
   toolInputs: Map<string, ToolInputState>
 }
 
-function makeEvent(
+export function makeEvent(
   directory: string,
   type: string,
   properties: Record<string, unknown>,
@@ -1031,7 +1031,10 @@ export class MuxEventTranslator {
       }
       case 'turn/start':
         this.streamState(sessionId).turnStartTime = event.time
-        return [makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'busy' } }, project)]
+        return [
+          makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'busy' } }, project),
+          makeEvent(directory, 'turn.wait', { sessionID: sessionId }, project),
+        ]
       case 'turn/end': {
         this.currentAssistant.delete(sessionId)
         this.pendingCalls.delete(sessionId)
@@ -1040,6 +1043,7 @@ export class MuxEventTranslator {
         return [
           makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'idle' } }, project),
           makeEvent(directory, 'session.idle', { sessionID: sessionId }, project),
+          makeEvent(directory, 'turn.idle', { sessionID: sessionId }, project),
         ]
       }
       case 'todo/write':

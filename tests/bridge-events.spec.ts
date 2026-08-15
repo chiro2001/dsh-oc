@@ -102,14 +102,17 @@ describe('bridge events: session event mapping', () => {
     ])
     expect(events.map((event) => event.payload.type)).toEqual([
       'session.status',
+      'turn.wait',
       'session.status',
       'session.idle',
+      'turn.idle',
     ])
     expect(events[0]?.payload.properties).toEqual({
       sessionID: 's1',
       status: { type: 'busy' },
     })
-    expect(events[1]?.payload.properties).toEqual({
+    expect(events[1]?.payload.properties).toEqual({ sessionID: 's1' })
+    expect(events[2]?.payload.properties).toEqual({
       sessionID: 's1',
       status: { type: 'idle' },
     })

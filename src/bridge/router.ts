@@ -865,6 +865,7 @@ async function switchAgentPreset(
     sessionId: sid(sessionId),
     agentPreset: presetId,
   })
+  ctx.state.lastAgentPreset = agentName
 }
 
 /** All text parts of a prompt body, joined the way the TUI renders them. */
@@ -1323,7 +1324,12 @@ async function createSession(
   const sessionIdInput = typeof body.id === 'string' ? body.id : undefined
   const title = typeof body.title === 'string' ? body.title : undefined
   const agentName = typeof body.agent === 'string' ? body.agent : undefined
-  const agentPreset = agentName === undefined ? undefined : await presetIdForAgent(ctx, agentName)
+  // A new session inherits the last preset selected in this run so the
+  // `/preset X` → `/new` flow keeps the chosen agent (and its tool set).
+  const inheritedAgent = agentName ?? ctx.state.lastAgentPreset
+  const agentPreset = inheritedAgent === undefined
+    ? undefined
+    : await presetIdForAgent(ctx, inheritedAgent)
   let id: string
   if (parentID) {
     id = await forkFromSource(ctx, parentID)
@@ -1349,6 +1355,9 @@ async function createSession(
   }
   if (body.model !== undefined) {
     await applyModelSelection(ctx, id, body)
+  }
+  if (agentName !== undefined) {
+    ctx.state.lastAgentPreset = agentName
   }
   ctx.state.setCurrentSession(id)
   ctx.state.invalidateSession()

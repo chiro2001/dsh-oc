@@ -1886,6 +1886,41 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     })
   })
 
+  it('inherits the last selected preset into newly created sessions', async () => {
+    const base = fakeApi()
+    const createCalls: Array<{ agentPreset?: string }> = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => okRpc({ agentPreset: 'standard' }),
+      },
+      sessions: {
+        ...base.sessions,
+        create: async (request) => {
+          createCalls.push(request.payload as { agentPreset?: string })
+          return okRpc({ sessionId: 's-new' as never })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const switched = await request(server, 'POST', '/session/s1/command', {
+      command: 'preset',
+      arguments: 'standard',
+    })
+    expect(switched.status).toBe(200)
+    const created = await request(server, 'POST', '/session', {})
+    expect(created.status).toBe(200)
+    expect(createCalls.at(-1)?.agentPreset).toBe('standard')
+  })
+
   it('captures /preset from prompt routes without triggering a model turn', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []

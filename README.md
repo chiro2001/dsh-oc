@@ -263,6 +263,9 @@ opencode 子进程启动时被强制关闭后台外网行为（以 1.18.18 源�
   会话有内容（新输入或恢复的旧会话有历史）时于其下方补一行说明，提示其中的
   `<id>` 是 dsh 会话 id、恢复请用
   `dsh --profile oc --session <id>`，不要直接运行 opencode 的恢复命令。
+- **打断模型执行**：`--mini` 按一次 `Esc` 打断；全量 TUI 需要在运行中连按两次
+  `Esc`（官方二进制行为，第一次只是“待打断”状态）。dsh-oc 会把这些按键转成
+  `session.cancel`，停止当前 LLM 流；相关 e2e：`scripts/e2e-tui-abort.sh`。
 - **文件附件**：支持 `file` part 的文本文件（data URL 或 cwd 内本地路径）与
   图片（data URL）；PDF 等二进制附件暂不支持，会返回明确 400。
 - **未实现路由**：返回 schema-valid 空数据或显式 501，不伪造 diff。

@@ -40,6 +40,8 @@ export class InteractionState {
   newInputDuringRun = false
   /** The session the TUI most recently created/resumed/opened. */
   currentSessionId?: string
+  /** Last agent preset selected during this run (inherited by new sessions). */
+  lastAgentPreset?: string
   readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
   private readonly historyLoading = new Map<string, Promise<CachedHistory>>()
   private readonly historyGenerations = new Map<string, number>()
