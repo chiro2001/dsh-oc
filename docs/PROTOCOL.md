@@ -213,6 +213,13 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 | `session/projection: produced-files` | `session.diff` |
 | `session/queue`, `session/jobs` | P1 忽略；P3 再评估 |
 
+> **已知行为（文本 delta 成对重复）**：dsh 0.1.0-rc.6 对同一段流式文本同时下发
+> `assistant/chunk`（text-delta）与 packed `text-chunks` 两种编码，且新 mux 订阅
+> 会先重放历史再进入实时，因此 bridge 的 `message.part.delta` 可能把同一字符发送
+> 两次（两种编码分块/偏移不同，无法无损合并）。opencode 1.18.18 TUI 以最终
+> `message.updated` 的全量文本为准，实测渲染正常、无重复；`e2e-tui-abort.sh` 的
+> v2 段按“新 SSE 流出现 delta”检测，不依赖 delta 文本连续性。
+
 GlobalEvent 必需字段：
 
 ```ts

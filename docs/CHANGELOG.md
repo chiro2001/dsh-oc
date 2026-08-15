@@ -48,6 +48,8 @@
 
 ### 修复
 
+- 文档化 SSE 文本 delta 成对重复的已知行为（dsh 双编码 + mux 重放；TUI 以
+  `message.updated` 全量文本渲染，实测不受影响）。
 - Thought（reasoning）时长：`end` 改为最后一条 reasoning chunk 的时间，不再错误地
   等于整条回复的完成时间（历史读取与实时流均生效）。
 - 打断/流式转圈：text 块开始时立即关闭 reasoning part（带 end 时间）；中断
