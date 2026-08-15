@@ -1,0 +1,18 @@
+# 叠加在 dsh-base 之上；插入顺序决定依赖激活顺序。
+- insert:
+    - id: workspace
+      name: '@deepseek-ai/dsh-workspace'
+
+    - id: directory-picker
+      name: '@deepseek-ai/dsh-host-directory-picker-auto'
+
+    - id: api-proxy
+      name: '@deepseek-ai/dsh-host-apiproxy'
+
+    - id: oc-bridge
+      name: '@deepseek-ai/dsh-oc/bridge'
+      inject: [apiProxy]
+
+    - id: oc-tui
+      name: '@deepseek-ai/dsh-oc/tui'
+      inject: [ocBridge]
