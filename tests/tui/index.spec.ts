@@ -258,14 +258,12 @@ describe('ocExitNote', () => {
     const note = ocExitNote()
     expect(note).toContain('opencode 的退出提示')
     expect(note).toContain('dsh --profile oc --session')
-    expect(note).toContain('不要直接运行 opencode --mini -s')
+    expect(note).toContain('不要直接运行 opencode 的恢复命令')
   })
 
-  it('prints only for mini runs with new sessions or new input', () => {
-    expect(shouldPrintOcExitNote(['--mini'], true)).toBe(true)
-    expect(shouldPrintOcExitNote(['--mini'], false)).toBe(false)
-    expect(shouldPrintOcExitNote([], true)).toBe(false)
-    expect(shouldPrintOcExitNote(['--session', 's1'], true)).toBe(false)
+  it('prints for any TUI mode that accepted new input', () => {
+    expect(shouldPrintOcExitNote(true)).toBe(true)
+    expect(shouldPrintOcExitNote(false)).toBe(false)
   })
 })
 

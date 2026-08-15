@@ -440,19 +440,18 @@ export function requestExit(
  * id is a dsh session id and must be resumed through dsh, not opencode.
  */
 export function ocExitNote(): string {
-  return '[dsh-oc] 上面是 opencode 的退出提示；session id 是 dsh 会话 id，恢复请使用 dsh --profile oc --session <id>，不要直接运行 opencode --mini -s'
+  return '[dsh-oc] 上面是 opencode 的退出提示；session id 是 dsh 会话 id，恢复请使用 dsh --profile oc --session <id>，不要直接运行 opencode 的恢复命令'
 }
 
 /**
- * Print the exit note only for `--mini` runs that accepted new input — the
- * runs where opencode actually renders the `Session … / Continue opencode
- * --mini -s …` banner on exit (bare session creation exits without a banner).
+ * Print the exit note after runs that accepted new input — the runs where
+ * opencode actually renders the `Session … / Continue opencode -s …` banner
+ * on exit (both full TUI and `--mini`; bare session creation exits clean).
  */
 export function shouldPrintOcExitNote(
-  tuiArgs: readonly string[],
   hasNewActivity: boolean,
 ): boolean {
-  return tuiArgs.includes('--mini') && hasNewActivity
+  return hasNewActivity
 }
 
 /** Input accepted by {@link resolveOpenCodeBinary}. */
@@ -548,7 +547,7 @@ export class OcTuiService extends Service {
         cwd: process.cwd(),
         env: childEnv,
         onExit: code => {
-          if (shouldPrintOcExitNote(tuiArgs, bridge.hasNewActivity?.() ?? false)) {
+          if (shouldPrintOcExitNote(bridge.hasNewActivity?.() ?? false)) {
             process.stdout.write(`${ocExitNote()}\n`)
           }
           requestExit(this.ctx, code)

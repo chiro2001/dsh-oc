@@ -240,11 +240,11 @@ declare function requestExit(ctx: Pick<Context, 'get'>, code: number, fallback?:
  */
 declare function ocExitNote(): string;
 /**
- * Print the exit note only for `--mini` runs that accepted new input — the
- * runs where opencode actually renders the `Session … / Continue opencode
- * --mini -s …` banner on exit (bare session creation exits without a banner).
+ * Print the exit note after runs that accepted new input — the runs where
+ * opencode actually renders the `Session … / Continue opencode -s …` banner
+ * on exit (both full TUI and `--mini`; bare session creation exits clean).
  */
-declare function shouldPrintOcExitNote(tuiArgs: readonly string[], hasNewActivity: boolean): boolean;
+declare function shouldPrintOcExitNote(hasNewActivity: boolean): boolean;
 /** Input accepted by {@link resolveOpenCodeBinary}. */
 type ResolveBinaryInput = BinaryResolverDeps & {
   config?: {

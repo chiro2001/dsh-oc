@@ -257,11 +257,11 @@ opencode 子进程启动时被强制关闭后台外网行为（以 1.18.18 源�
 
 - **`always` 权限记忆**：TUI 的 `Allow always` 在 bridge 内存中保存（同会话同工具自动放行），
   当前请求仍以 dsh 的 `allowed-once` 提交；进程重启后记忆清空。
-- **`--mini` 退出 splash**：opencode 官方 `--mini` 直连模式会在退出时打印自己的
-  logo + “Session …” 与 `opencode --mini -s <id>` 恢复命令。该画面由官方二进制
-  在滚动缓冲区渲染，无法通过插件替换；dsh-oc 会在有新输入时于其下方补一行说明，
-  提示其中的 `<id>` 是 dsh 会话 id、恢复请用 `dsh --profile oc --session <id>`，
-  不要直接运行 `opencode --mini -s`。
+- **退出 splash**：opencode 官方 TUI（全量与 `--mini`）在会话有内容时退出会打印
+  自己的 logo + “Session …” 与 `opencode -s <id>` / `opencode --mini -s <id>`
+  恢复命令。该画面由官方二进制在滚动缓冲区渲染，无法通过插件替换；dsh-oc 会在
+  有新输入时于其下方补一行说明，提示其中的 `<id>` 是 dsh 会话 id、恢复请用
+  `dsh --profile oc --session <id>`，不要直接运行 opencode 的恢复命令。
 - **文件附件**：支持 `file` part 的文本文件（data URL 或 cwd 内本地路径）与
   图片（data URL）；PDF 等二进制附件暂不支持，会返回明确 400。
 - **未实现路由**：返回 schema-valid 空数据或显式 501，不伪造 diff。

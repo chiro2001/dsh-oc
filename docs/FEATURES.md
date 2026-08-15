@@ -129,7 +129,7 @@
 | `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | `--continue` attach e2e | ✅ | `scripts/e2e-tui-continue.sh`（恢复最新会话） | `bash scripts/e2e-tui-continue.sh` | 本提交 |
 | `--mini` attach + 回复 e2e | ✅ | `scripts/e2e-tui-mini.sh`：输入 prompt、断言回复且只渲染一次 | `bash scripts/e2e-tui-mini.sh` | 本提交 |
-| `--mini` 退出 splash | 🟡 | 官方二进制渲染，无法替换；有输入时 dsh-oc 在下方补一行提示（id 为 dsh 会话 id，恢复用 `dsh --profile oc --session`） | `scripts/e2e-tui-mini.sh`、`tests/tui/index.spec.ts` | 本提交 |
+| 退出 splash 说明（全量/`--mini`） | 🟡 | 官方二进制渲染，无法替换；有输入时 dsh-oc 在下方补一行提示（id 为 dsh 会话 id，恢复用 `dsh --profile oc --session`） | `scripts/e2e-tui-mini.sh`、`tests/tui/index.spec.ts` | 本提交 |
 | `--print-logs` 透传 e2e | ✅ | `scripts/e2e-tui-print-logs.sh`（fake 二进制 argv 断言） | `bash scripts/e2e-tui-print-logs.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
 | 一键自测入口 | ✅ | `scripts/check-all.sh`（typecheck+单测+探针+性能冒烟；`--e2e` 全量 e2e；`--scale N` 压测） | `bash scripts/check-all.sh` | 本提交 |
@@ -305,7 +305,6 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
-
 
 
 
