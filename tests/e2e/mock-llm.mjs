@@ -22,8 +22,10 @@ const sequence = String(option('--sequence', 'success'))
   .map((item) => item.trim())
   .filter(Boolean)
 const repeatLast = option('--repeat-last', '0') === '1'
-const successText = option('--success-text', 'mock response recovered')
+const successText = option('--success-text', process.env.DSH_OC_E2E_SUCCESS_TEXT ?? 'mock response recovered')
 const toolName = option('--tool-name', 'bash')
+const chunkDelayMs = option('--chunk-delay-ms', process.env.DSH_OC_E2E_CHUNK_DELAY_MS ?? '')
+const chunkSize = option('--chunk-size', process.env.DSH_OC_E2E_CHUNK_SIZE ?? '')
 const toolArguments = option(
   '--tool-arguments',
   '{"command":"echo dsh-oc-e2e-tool","description":"e2e tool call","sandbox_permissions":"danger-full-access","justification":"e2e approval flow"}',
@@ -48,6 +50,8 @@ const server = await startMockLlmServer({
   sequence,
   ...(repeatLast ? { repeatLast: true } : {}),
   successText,
+  ...(chunkDelayMs === '' ? {} : { chunkDelayMs: Number(chunkDelayMs) }),
+  ...(chunkSize === '' ? {} : { chunkSize: Number(chunkSize) }),
   toolName,
   toolArguments,
   onEvent(event) {

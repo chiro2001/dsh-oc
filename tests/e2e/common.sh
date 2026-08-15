@@ -125,13 +125,14 @@ e2e_stop_run() {
 # command through oc-tui's arg filter.
 e2e_tui_start() {
   local extra="${1:-}"
+  local extra_env="${2:-}"
   local exit_file="$E2E_RUN_DIR/dsh-exit.txt"
   tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
   tmux new-session -d -s "$E2E_TUI_SESSION" -x 240 -y 60
   tmux send-keys -t "$E2E_TUI_SESSION" "stty -a > '$E2E_RUN_DIR/stty-before.txt'" Enter
   sleep 1
   local cmd
-  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' && dsh --profile oc --patch '$E2E_OVERLAY' --print-logs $extra; echo DSH_EXIT=\$? > '$exit_file'"
+  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' $extra_env && dsh --profile oc --patch '$E2E_OVERLAY' --print-logs $extra; echo DSH_EXIT=\$? > '$exit_file'"
   tmux send-keys -t "$E2E_TUI_SESSION" "$cmd" Enter
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import {
   assistantMessageFromEvent,
   convertMessagesV1,
@@ -8,6 +9,30 @@ import {
 import { makeAssistantEvent, makeUserEvent, sessionEvent } from '../helpers.js'
 
 const opts = { sessionId: 's1', cwd: '/work' }
+
+function chunkRow(
+  type: 'text-chunks' | 'reasoning-chunks',
+  texts: string[],
+  time0: number,
+  seq = 10,
+  index = 0,
+  turn = 1,
+  step = 1,
+): SessionEvent {
+  return {
+    type,
+    seq,
+    time: time0,
+    time0,
+    data: {
+      turn,
+      step,
+      index,
+      dt: texts.length > 1 ? texts.slice(1).map(() => 0) : [],
+      texts,
+    },
+  } as unknown as SessionEvent
+}
 
 describe('convert/message (v1)', () => {
   it('folds a user message into info + text part', () => {
@@ -72,6 +97,93 @@ describe('convert/message (v1)', () => {
     const [entry] = convertMessagesV1(events, opts)
     expect(entry?.parts[0]).toMatchObject({ type: 'reasoning', time: { start: 1000, end: 1200 } })
     expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1200, end: 1200 } })
+  })
+
+  it('uses turn/start and block-start times for assistant history durations', () => {
+    const events = [
+      sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+      sessionEvent('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'block-start', index: 0, blockType: 'reasoning' },
+      }, 2, 1100),
+      sessionEvent('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'block-start', index: 1, blockType: 'text' },
+      }, 3, 1100),
+      makeAssistantEvent([
+        { type: 'reasoning', text: 'think' },
+        { type: 'text', text: 'answer' },
+      ], 'm-duration', 2000),
+    ]
+    const [entry] = convertMessagesV1(events, opts)
+    expect(entry?.info.role).toBe('assistant')
+    if (entry?.info.role === 'assistant') {
+      expect(entry.info.time).toEqual({ created: 1100, completed: 2000 })
+    }
+    expect(entry?.parts[0]).toMatchObject({ type: 'reasoning', time: { start: 1100, end: 2000 } })
+    expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1100, end: 2000 } })
+  })
+
+  it('hydrates in-flight text/reasoning chunks as a provisional assistant message', () => {
+    const events = [
+      makeUserEvent('hello', 'm-user', 1000),
+      sessionEvent('turn/start', { turn: 1 }, 1, 1010),
+      chunkRow('text-chunks', ['hel'], 1020, 10, 0),
+      chunkRow('text-chunks', ['lo '], 1030, 11, 0),
+      chunkRow('reasoning-chunks', ['think'], 1040, 12, 1),
+    ]
+    const entries = convertMessagesV1(events, opts)
+    expect(entries.map((entry) => entry.info.role)).toEqual(['user', 'assistant'])
+    const partial = entries[1]
+    expect(partial?.info.role).toBe('assistant')
+    if (partial?.info.role === 'assistant') {
+      expect(partial.info.id).toBe('msg_pending:s1:1:1')
+      expect(partial.info.parentID).toBe('m-user')
+      expect(partial.info.time).toEqual({ created: 1020 })
+      expect(partial.info.time.completed).toBeUndefined()
+    }
+    expect(partial?.parts.map((part) => part.type)).toEqual(['text', 'reasoning'])
+    const text = partial?.parts[0]
+    expect(text?.type).toBe('text')
+    if (text?.type === 'text') {
+      expect(text.id).toBe('prt_stream:s1:1:1:text:0')
+      expect(text.text).toBe('hello ')
+      expect(text.time).toEqual({ start: 1020 })
+      expect(text.time?.end).toBeUndefined()
+    }
+    const reasoning = partial?.parts[1]
+    expect(reasoning?.type).toBe('reasoning')
+    if (reasoning?.type === 'reasoning') {
+      expect(reasoning.id).toBe('prt_stream:s1:1:1:reasoning:1')
+      expect(reasoning.text).toBe('think')
+      expect(reasoning.time).toEqual({ start: 1040 })
+      expect(reasoning.time.end).toBeUndefined()
+    }
+  })
+
+  it('replaces the provisional assistant message once the final message arrives', () => {
+    const events = [
+      makeUserEvent('hello', 'm-user', 1000),
+      sessionEvent('turn/start', { turn: 1 }, 1, 1010),
+      chunkRow('text-chunks', ['hel'], 1020, 10, 0),
+      chunkRow('text-chunks', ['lo '], 1030, 11, 0),
+      chunkRow('reasoning-chunks', ['think'], 1040, 12, 1),
+      makeAssistantEvent([
+        { type: 'reasoning', text: 'think' },
+        { type: 'text', text: 'hello ' },
+      ], 'm-final', 2000),
+    ]
+    const entries = convertMessagesV1(events, opts)
+    expect(entries.map((entry) => entry.info.role)).toEqual(['user', 'assistant'])
+    expect(entries[1]?.info.id).toBe('m-final')
+    expect(entries.some((entry) => String(entry.info.id).startsWith('msg_pending:'))).toBe(false)
+    expect(entries[1]?.parts.some((part) => part.id.startsWith('prt_stream:'))).toBe(false)
+    const final = entries[1]
+    if (final?.info.role === 'assistant') {
+      expect(final.info.time).toEqual({ created: 1020, completed: 2000 })
+    }
   })
 
   it('pairs tool/result with the assistant tool part', () => {
@@ -211,6 +323,87 @@ describe('convert/message (v2)', () => {
         expect(tool.time.completed).toBe(1200)
       }
     }
+  })
+
+  it('fixes v2 assistant created/completed and reasoning part times', () => {
+    const messages = convertMessagesV2([
+      sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+      sessionEvent('assistant/chunk', {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'block-start', index: 0, blockType: 'reasoning' },
+      }, 2, 1100),
+      makeAssistantEvent([
+        { type: 'reasoning', text: 'think' },
+        { type: 'text', text: 'answer' },
+      ], 'm-v2-duration', 2000),
+    ], opts)
+    const assistant = messages[0]
+    expect(assistant?.type).toBe('assistant')
+    if (assistant?.type === 'assistant') {
+      expect(assistant.time).toEqual({ created: 1100, completed: 2000 })
+      const reasoning = assistant.content.find((part) => part.type === 'reasoning')
+      expect(reasoning?.type).toBe('reasoning')
+      if (reasoning?.type === 'reasoning') {
+        expect(reasoning.time).toEqual({ created: 1100, completed: 2000 })
+      }
+    }
+  })
+
+  it('hydrates v2 in-flight text/reasoning chunks as a provisional assistant message', () => {
+    const events = [
+      makeUserEvent('hello', 'm-user', 1000),
+      sessionEvent('turn/start', { turn: 1 }, 1, 1010),
+      chunkRow('text-chunks', ['hel'], 1020, 10, 0),
+      chunkRow('text-chunks', ['lo '], 1030, 11, 0),
+      chunkRow('reasoning-chunks', ['think'], 1040, 12, 1),
+    ]
+    const messages = convertMessagesV2(events, opts)
+    expect(messages.map((message) => message.type)).toEqual(['user', 'assistant'])
+    const assistant = messages[1]
+    expect(assistant?.type).toBe('assistant')
+    if (assistant?.type === 'assistant') {
+      expect(assistant.id).toBe('msg_pending:s1:1:1')
+      expect(assistant.time).toEqual({ created: 1020 })
+      expect(assistant.time.completed).toBeUndefined()
+      expect(assistant.content.map((part) => part.type)).toEqual(['text', 'reasoning'])
+      const text = assistant.content[0]
+      expect(text?.type).toBe('text')
+      if (text?.type === 'text') {
+        expect(text.id).toBe('prt_stream:s1:1:1:text:0')
+        expect(text.text).toBe('hello ')
+      }
+      const reasoning = assistant.content[1]
+      expect(reasoning?.type).toBe('reasoning')
+      if (reasoning?.type === 'reasoning') {
+        expect(reasoning.id).toBe('prt_stream:s1:1:1:reasoning:1')
+        expect(reasoning.text).toBe('think')
+        expect(reasoning.time).toEqual({ created: 1040 })
+        expect(reasoning.time?.completed).toBeUndefined()
+      }
+    }
+  })
+
+  it('replaces the v2 provisional assistant message once the final message arrives', () => {
+    const events = [
+      makeUserEvent('hello', 'm-user', 1000),
+      sessionEvent('turn/start', { turn: 1 }, 1, 1010),
+      chunkRow('text-chunks', ['hel'], 1020, 10, 0),
+      chunkRow('text-chunks', ['lo '], 1030, 11, 0),
+      chunkRow('reasoning-chunks', ['think'], 1040, 12, 1),
+      makeAssistantEvent([
+        { type: 'reasoning', text: 'think' },
+        { type: 'text', text: 'hello ' },
+      ], 'm-final', 2000),
+    ]
+    const messages = convertMessagesV2(events, opts)
+    expect(messages.map((message) => message.type)).toEqual(['user', 'assistant'])
+    expect(messages[1]?.type).toBe('assistant')
+    if (messages[1]?.type === 'assistant') {
+      expect(messages[1].id).toBe('m-final')
+      expect(messages[1].time).toEqual({ created: 1020, completed: 2000 })
+    }
+    expect(messages.some((message) => message.id.startsWith('msg_pending:'))).toBe(false)
   })
 
   it('returns [] for empty history', () => {

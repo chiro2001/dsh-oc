@@ -65,7 +65,9 @@ async function newRun(argv) {
   const permissionMode = option(argv, '--permission') ?? 'danger-full-access'
   const sequence = option(argv, '--sequence') ?? 'success'
   const repeatLast = option(argv, '--repeat-last') ?? '1'
-  const successText = option(argv, '--success-text') ?? 'mock response recovered'
+  const successText = option(argv, '--success-text') ?? process.env.DSH_OC_E2E_SUCCESS_TEXT ?? 'mock response recovered'
+  const chunkDelayMs = option(argv, '--chunk-delay-ms') ?? process.env.DSH_OC_E2E_CHUNK_DELAY_MS
+  const chunkSize = option(argv, '--chunk-size') ?? process.env.DSH_OC_E2E_CHUNK_SIZE
   const toolName = option(argv, '--tool-name') ?? 'bash'
   const toolArguments = option(argv, '--tool-arguments')
     ?? '{"command":"echo dsh-oc-e2e-tool","description":"e2e tool call","sandbox_permissions":"danger-full-access","justification":"e2e approval flow"}'
@@ -129,6 +131,8 @@ async function newRun(argv) {
       '--sequence', sequence,
       '--repeat-last', repeatLast,
       '--success-text', successText,
+      ...(chunkDelayMs === undefined ? [] : ['--chunk-delay-ms', String(chunkDelayMs)]),
+      ...(chunkSize === undefined ? [] : ['--chunk-size', String(chunkSize)]),
       '--tool-name', toolName,
       '--tool-arguments', toolArguments,
       '--port-file', mockPortFile,
@@ -191,6 +195,8 @@ async function newRun(argv) {
     sequence,
     repeatLast,
     successText,
+    ...(chunkDelayMs === undefined ? {} : { chunkDelayMs: Number(chunkDelayMs) }),
+    ...(chunkSize === undefined ? {} : { chunkSize: Number(chunkSize) }),
     addSpec,
   }
   writeFileSync(join(runDir, 'run.json'), `${JSON.stringify(facts, null, 2)}\n`)

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { MuxEventTranslator, type BridgeGlobalEvent } from '../src/bridge/events.js'
 import { InteractionState } from '../src/bridge/state.js'
 import { createBridgeRouter } from '../src/bridge/router.js'
@@ -8,6 +9,30 @@ import { fakeApi, makeAssistantEvent, makeUserEvent, sessionEvent } from './help
 
 function frame(payload: MuxFrame, rpcId = 'rpc-1'): RpcRequest<MuxFrame> {
   return { rpcId: rpcId as never, payload }
+}
+
+function chunkRow(
+  type: 'text-chunks' | 'reasoning-chunks',
+  texts: string[],
+  time0: number,
+  seq = 10,
+  index = 0,
+  turn = 1,
+  step = 1,
+): SessionEvent {
+  return {
+    type,
+    seq,
+    time: time0,
+    time0,
+    data: {
+      turn,
+      step,
+      index,
+      dt: texts.length > 1 ? texts.slice(1).map(() => 0) : [],
+      texts,
+    },
+  } as unknown as SessionEvent
 }
 
 function translator(state = new InteractionState(), logs: string[] = []) {
@@ -54,6 +79,213 @@ describe('bridge events: session event mapping', () => {
       expect(event.payload.id).toBeTypeOf('string')
       expect(event.payload.data).toEqual(event.payload.properties)
     }
+  })
+
+  it('streams text chunks through a provisional message and reports real duration', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('text-chunks', [' the'], 1100, 10),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('text-chunks', [' attention'], 1200, 11),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: ' the attention mechanism,' },
+        ], 'm-final', 2000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 20, 2100),
+      }),
+    ])
+
+    const provisionalIndex = events.findIndex((event) =>
+      event.payload.type === 'message.updated'
+      && String((event.payload.properties.info as { id?: unknown }).id).startsWith('msg_pending:'))
+    expect(provisionalIndex).toBeGreaterThanOrEqual(0)
+    const provisionalInfo = events[provisionalIndex]?.payload.properties.info as Record<string, unknown>
+    expect(provisionalInfo).toMatchObject({
+      role: 'assistant',
+      agent: 'build',
+      mode: 'build',
+      providerID: 'deepseek',
+      modelID: 'deepseek-chat',
+      cost: 0,
+    })
+    expect(provisionalInfo.id).toBe('msg_pending:s1:1:1')
+    expect((provisionalInfo.time as { created: number }).created).toBe(1100)
+
+    const firstPartIndex = events.findIndex((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { type?: string }).type === 'text')
+    expect(firstPartIndex).toBeGreaterThan(provisionalIndex)
+    expect(events[firstPartIndex]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      time: 1100,
+      part: { type: 'text', text: '', time: { start: 1100 } },
+    })
+    expect((events[firstPartIndex]?.payload.properties.part as { time: { end?: number } }).time.end).toBeUndefined()
+    expect((events[firstPartIndex]?.payload.properties.part as { id: string }).id).toBe('prt_stream:s1:1:1:text:0')
+
+    const deltas = events
+      .filter((event) => event.payload.type === 'message.part.delta')
+      .map((event) => event.payload.properties.delta)
+    expect(deltas).toEqual([' the', ' attention'])
+
+    const removedIndex = events.findIndex((event) =>
+      event.payload.type === 'message.removed'
+      && String(event.payload.properties.messageID).startsWith('msg_pending:'))
+    const finalIndex = events.findIndex((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { id?: string }).id === 'm-final')
+    expect(removedIndex).toBeGreaterThanOrEqual(0)
+    expect(removedIndex).toBeLessThan(finalIndex)
+
+    const finalInfo = events[finalIndex]?.payload.properties.info as { time: { created: number; completed: number } }
+    expect(finalInfo.time.created).toBe(1100)
+    expect(finalInfo.time.completed).toBe(2000)
+    expect(finalInfo.time.created).toBeLessThan(finalInfo.time.completed)
+
+    const finalTextPart = events.filter((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { messageID?: string }).messageID === 'm-final'
+      && (event.payload.properties.part as { type?: string }).type === 'text')
+    expect(finalTextPart).toHaveLength(1)
+    expect(finalTextPart[0]?.payload.properties.part).toMatchObject({
+      text: ' the attention mechanism,',
+      time: { start: 1100, end: 2000 },
+    })
+  })
+
+  it('streams reasoning chunks as reasoning parts without an end until the final message', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('reasoning-chunks', [' think'], 1100, 10),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'reasoning', text: ' think' },
+        ], 'm-reason', 2000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 20, 2100),
+      }),
+    ])
+
+    const provisionalIndex = events.findIndex((event) =>
+      event.payload.type === 'message.updated'
+      && String((event.payload.properties.info as { id?: unknown }).id).startsWith('msg_pending:'))
+    expect(provisionalIndex).toBeGreaterThanOrEqual(0)
+    const firstPart = events.find((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { type?: string }).type === 'reasoning')
+    expect(firstPart).toBeDefined()
+    const part = firstPart?.payload.properties.part as { id: string; text: string; time: { start: number; end?: number } }
+    expect(part.text).toBe('')
+    expect(part.time.start).toBe(1100)
+    expect(part.time.end).toBeUndefined()
+    expect(part.id).toBe('prt_stream:s1:1:1:reasoning:0')
+    const delta = events.find((event) => event.payload.type === 'message.part.delta')
+    expect(delta?.payload.properties).toMatchObject({
+      partID: 'prt_stream:s1:1:1:reasoning:0',
+      field: 'text',
+      delta: ' think',
+    })
+
+    const finalPart = events.filter((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { messageID?: string }).messageID === 'm-reason'
+      && (event.payload.properties.part as { type?: string }).type === 'reasoning')
+    expect(finalPart).toHaveLength(1)
+    expect(finalPart[0]?.payload.properties.part).toMatchObject({
+      text: ' think',
+      time: { start: 1100, end: 2000 },
+    })
+  })
+
+  it('streams raw assistant/chunk text deltas incrementally', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: { type: 'block-start', index: 0, blockType: 'text' },
+        }, 5, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: { type: 'text-delta', index: 0, text: 'st' },
+        }, 6, 1100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: { type: 'text-delta', index: 0, text: 're' },
+        }, 7, 1200),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: 'stream' },
+        ], 'm-raw', 2000),
+      }),
+    ])
+
+    const partUpdatedTexts = events
+      .filter((event) => event.payload.type === 'message.part.updated')
+      .map((event) => (event.payload.properties.part as { text?: string }).text)
+    expect(partUpdatedTexts).toEqual(['', 'stream'])
+    const deltaTexts = events
+      .filter((event) => event.payload.type === 'message.part.delta')
+      .map((event) => event.payload.properties.delta)
+    expect(deltaTexts).toEqual(['st', 're'])
+    const firstPart = events.find((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { type?: string }).type === 'text')
+    expect(firstPart?.payload.properties.part).toMatchObject({
+      type: 'text',
+      text: '',
+      messageID: 'msg_pending:s1:1:1',
+      time: { start: 1000 },
+    })
+    expect((firstPart?.payload.properties.part as { id: string }).id).toBe('prt_stream:s1:1:1:text:0')
   })
 
   it('rebuilds complete messages for user/assistant events', () => {

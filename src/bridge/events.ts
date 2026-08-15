@@ -7,7 +7,7 @@ import {
   userMessageFromEvent,
   type MessageConvertOptions,
 } from './convert/message.js'
-import { projectIdFor } from './convert/common.js'
+import { projectIdFor, provisionalMessageId, provisionalPartId } from './convert/common.js'
 import { toPermissionRequest } from './convert/permission.js'
 import { toQuestionRequest } from './convert/question.js'
 import { convertTodos } from './convert/todo.js'
@@ -37,6 +37,42 @@ export interface TranslateDeps {
   state: InteractionState
   defaultModel?: { providerID: string; modelID: string }
   log(message: string): void
+}
+
+/**
+ * Packed dsh chunk rows (`text-chunks` / `reasoning-chunks`) arrive through
+ * the session event stream. They carry the first member's time at `time0`
+ * plus per-member texts/gaps in `data`.
+ */
+interface StreamChunkRowEvent {
+  type: 'text-chunks' | 'reasoning-chunks'
+  seq: number
+  time: number
+  time0: number
+  data: {
+    turn: number
+    step: number
+    index: number
+    dt?: number[]
+    texts: string[]
+  }
+}
+
+interface StreamBlockState {
+  blockType: 'text' | 'reasoning'
+  partId: string
+  messageId: string
+  start: number
+  text: string
+  sent: number
+}
+
+interface SessionStreamState {
+  turnStartTime?: number
+  lastUserMessageId?: string
+  provisionalMessageIds: Map<string, string>
+  blockStarts: Map<string, number>
+  blocks: Map<string, StreamBlockState>
 }
 
 function makeEvent(
@@ -97,6 +133,72 @@ function toolCallId(resultEvent: SessionEvent<'tool/result'>): string {
   return String(block?.toolCallId ?? resultEvent.data.message.source.callId)
 }
 
+function earliestBlockStart(
+  blockStarts: Map<string, number>,
+  turn: number,
+  step: number,
+): number | undefined {
+  let earliest: number | undefined
+  for (const [key, value] of blockStarts) {
+    const [keyTurn, keyStep] = key.split(':')
+    if (Number(keyTurn) === turn && Number(keyStep) === step) {
+      if (earliest === undefined || value < earliest) earliest = value
+    }
+  }
+  return earliest
+}
+
+function zeroTokens(): Record<string, unknown> {
+  return {
+    input: 0,
+    output: 0,
+    reasoning: 0,
+    cache: { read: 0, write: 0 },
+  }
+}
+
+function provisionalAssistantMessage(
+  sessionId: string,
+  deps: TranslateDeps,
+  id: string,
+  created: number,
+  parentID: string,
+): Record<string, unknown> {
+  const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  return {
+    id,
+    sessionID: sessionId,
+    role: 'assistant',
+    agent: 'build',
+    time: { created },
+    parentID,
+    modelID: model.modelID,
+    providerID: model.providerID,
+    mode: 'build',
+    path: { cwd: deps.cwd, root: deps.cwd },
+    cost: 0,
+    tokens: zeroTokens(),
+  }
+}
+
+function streamPart(
+  blockType: 'text' | 'reasoning',
+  sessionId: string,
+  messageId: string,
+  partId: string,
+  text: string,
+  start: number,
+): Record<string, unknown> {
+  return {
+    id: partId,
+    sessionID: sessionId,
+    messageID: messageId,
+    type: blockType,
+    text,
+    time: { start },
+  }
+}
+
 /**
  * Per-stream translator: converts one mux frame into zero or more opencode
  * GlobalEvents. One instance is created per SSE client because tool/result
@@ -105,9 +207,22 @@ function toolCallId(resultEvent: SessionEvent<'tool/result'>): string {
 export class MuxEventTranslator {
   private currentAssistant = new Map<string, string>()
   private pendingCalls = new Map<string, Map<string, ToolCallInfo>>()
-  private blockStarts = new Map<string, number>()
+  private streams = new Map<string, SessionStreamState>()
 
   constructor(private deps: TranslateDeps) {}
+
+  private streamState(sessionId: string): SessionStreamState {
+    let state = this.streams.get(sessionId)
+    if (!state) {
+      state = {
+        provisionalMessageIds: new Map(),
+        blockStarts: new Map(),
+        blocks: new Map(),
+      }
+      this.streams.set(sessionId, state)
+    }
+    return state
+  }
 
   translate(frame: RpcRequest<MuxFrame>): BridgeGlobalEvent[] {
     const payload = frame.payload
@@ -253,33 +368,83 @@ export class MuxEventTranslator {
     const directory = directoryFor(sessionId, this.deps)
     const project = projectIdFor(directory)
     switch (event.type) {
-      case 'user/message':
-        return messageEvents(sessionId, this.deps, () => {
+      case 'user/message': {
+        const events = messageEvents(sessionId, this.deps, () => {
           const entry = userMessageFromEvent(event, messageOptions(sessionId, this.deps))
           return {
             info: entry.info as unknown as Record<string, unknown>,
             parts: entry.parts as unknown as Array<Record<string, unknown>>,
           }
         })
+        this.streamState(sessionId).lastUserMessageId = String(event.data.id)
+        return events
+      }
       case 'assistant/chunk': {
         const chunk = event.data.chunk
         if (chunk.type === 'block-start') {
-          this.blockStarts.set(`${event.data.turn}:${event.data.step}:${chunk.index}:${chunk.blockType}`, event.time)
+          this.streamState(sessionId).blockStarts.set(
+            `${event.data.turn}:${event.data.step}:${chunk.index}:${chunk.blockType}`,
+            event.time,
+          )
+          return []
+        }
+        if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+          return this.translateStreamChunks(
+            sessionId,
+            {
+              type: chunk.type === 'text-delta' ? 'text-chunks' : 'reasoning-chunks',
+              seq: event.seq,
+              time: event.time,
+              time0: event.time,
+              data: {
+                turn: event.data.turn,
+                step: event.data.step,
+                index: chunk.index,
+                texts: [chunk.text],
+              },
+            },
+            directory,
+            project,
+          )
         }
         return []
       }
+      case 'text-chunks' as SessionEvent['type']:
+      case 'reasoning-chunks' as SessionEvent['type']:
+        return this.translateStreamChunks(
+          sessionId,
+          event as unknown as StreamChunkRowEvent,
+          directory,
+          project,
+        )
       case 'assistant/message': {
+        const state = this.streamState(sessionId)
+        const stepKey = `${event.data.turn}:${event.data.step}`
+        const provisionalId = state.provisionalMessageIds.get(stepKey)
+        const created = earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
+          ?? state.turnStartTime
+          ?? event.time
         const events = messageEvents(sessionId, this.deps, () => {
           const entry = assistantMessageFromEvent(
             event,
             messageOptions(sessionId, this.deps),
-            (index, blockType) => this.blockStarts.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`),
+            (index, blockType) => state.blockStarts.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`),
+            created,
           )
           return {
             info: entry.info as unknown as Record<string, unknown>,
             parts: entry.parts as unknown as Array<Record<string, unknown>>,
           }
         })
+        if (provisionalId) {
+          events.unshift(
+            makeEvent(directory, 'message.removed', {
+              sessionID: sessionId,
+              messageID: provisionalId,
+            }, project),
+          )
+          state.provisionalMessageIds.delete(stepKey)
+        }
         this.currentAssistant.set(sessionId, String(event.data.message.id))
         let calls = this.pendingCalls.get(sessionId)
         if (!calls) {
@@ -298,12 +463,17 @@ export class MuxEventTranslator {
         return events
       }
       case 'turn/start':
+        this.streamState(sessionId).turnStartTime = event.time
         return [makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'busy' } }, project)]
-      case 'turn/end':
+      case 'turn/end': {
+        this.currentAssistant.delete(sessionId)
+        this.pendingCalls.delete(sessionId)
+        this.streams.delete(sessionId)
         return [
           makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'idle' } }, project),
           makeEvent(directory, 'session.idle', { sessionID: sessionId }, project),
         ]
+      }
       case 'todo/write':
         return [makeEvent(directory, 'todo.updated', { sessionID: sessionId, todos: convertTodos(event.data.todos) }, project)]
       case 'tool/call': {
@@ -319,7 +489,9 @@ export class MuxEventTranslator {
           this.pendingCalls.set(sessionId, calls)
         }
         calls.set(call.callId, call)
-        const messageID = this.currentAssistant.get(sessionId) ?? `assistant:${data.turn}:${data.step}`
+        const messageID = this.currentAssistant.get(sessionId)
+          ?? this.streamState(sessionId).provisionalMessageIds.get(`${data.turn}:${data.step}`)
+          ?? `assistant:${data.turn}:${data.step}`
         return [
           makeEvent(directory, 'message.part.updated', {
             sessionID: sessionId,
@@ -337,7 +509,9 @@ export class MuxEventTranslator {
           this.deps.log(`[bridge/events] tool/result without tool/call for ${callId}`)
           return []
         }
-        const messageID = this.currentAssistant.get(sessionId) ?? `assistant:${data.turn}:${data.step}`
+        const messageID = this.currentAssistant.get(sessionId)
+          ?? this.streamState(sessionId).provisionalMessageIds.get(`${data.turn}:${data.step}`)
+          ?? `assistant:${data.turn}:${data.step}`
         const part = data.error === undefined
           ? completedToolPart(call, {
               callId,
@@ -387,6 +561,82 @@ export class MuxEventTranslator {
         return []
       }
     }
+  }
+
+  private translateStreamChunks(
+    sessionId: string,
+    event: StreamChunkRowEvent,
+    directory: string,
+    project: string,
+  ): BridgeGlobalEvent[] {
+    const state = this.streamState(sessionId)
+    const blockType = event.type === 'text-chunks' ? 'text' : 'reasoning'
+    const blockKey = `${event.data.turn}:${event.data.step}:${event.data.index}`
+    const blockStartKey = `${blockKey}:${blockType}`
+    const time0 = event.time0 ?? event.time
+    let block = state.blocks.get(blockKey)
+    if (block && block.blockType !== blockType) {
+      this.deps.log(`[bridge/events] chunk block type changed for ${blockKey} (${block.blockType} -> ${blockType})`)
+      return []
+    }
+    const events: BridgeGlobalEvent[] = []
+    if (!block) {
+      if (!state.blockStarts.has(blockStartKey)) {
+        state.blockStarts.set(blockStartKey, time0)
+      }
+      const stepKey = `${event.data.turn}:${event.data.step}`
+      let provisionalId = state.provisionalMessageIds.get(stepKey)
+      if (!provisionalId) {
+        provisionalId = provisionalMessageId(sessionId, event.data.turn, event.data.step)
+        state.provisionalMessageIds.set(stepKey, provisionalId)
+        events.push(
+          makeEvent(directory, 'message.updated', {
+            sessionID: sessionId,
+            info: provisionalAssistantMessage(
+              sessionId,
+              this.deps,
+              provisionalId,
+              state.blockStarts.get(blockStartKey) ?? state.turnStartTime ?? time0,
+              state.lastUserMessageId ?? `pending:${sessionId}:user`,
+            ),
+          }, project),
+        )
+      }
+      block = {
+        blockType,
+        partId: provisionalPartId(sessionId, event.data.turn, event.data.step, blockType, event.data.index),
+        messageId: provisionalId,
+        start: state.blockStarts.get(blockStartKey) ?? time0,
+        text: '',
+        sent: 0,
+      }
+      state.blocks.set(blockKey, block)
+    }
+    const sent = block.sent
+    block.text += event.data.texts.join('')
+    block.sent = block.text.length
+    if (sent === 0) {
+      events.push(
+        makeEvent(directory, 'message.part.updated', {
+          sessionID: sessionId,
+          part: streamPart(block.blockType, sessionId, block.messageId, block.partId, '', block.start),
+          time: time0,
+        }, project),
+      )
+    }
+    if (block.sent > sent) {
+      events.push(
+        makeEvent(directory, 'message.part.delta', {
+          sessionID: sessionId,
+          messageID: block.messageId,
+          partID: block.partId,
+          field: 'text',
+          delta: block.text.slice(sent),
+          time: time0,
+        }, project),
+      )
+    }
+    return events
   }
 }
 

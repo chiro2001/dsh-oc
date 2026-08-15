@@ -15,11 +15,18 @@ import type {
   ModelRef,
   SessionMessage,
   SessionMessageAssistant,
+  SessionMessageAssistantReasoning,
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionMessageUser,
 } from '@opencode-ai/sdk/v2/types'
-import { DEFAULT_AGENT, externalProviderId, textFromBlocks } from './common.js'
+import {
+  DEFAULT_AGENT,
+  externalProviderId,
+  provisionalMessageId,
+  provisionalPartId,
+  textFromBlocks,
+} from './common.js'
 import {
   completedToolPart,
   errorToolPart,
@@ -43,6 +50,26 @@ export interface MessageConvertOptions {
 export interface V1MessageEntry {
   info: Message
   parts: Part[]
+}
+
+/**
+ * Packed dsh chunk rows surface through the session event feed as
+ * `text-chunks` / `reasoning-chunks`. They are not part of the strict
+ * `SessionEventMap` union, so the converter treats them as a narrow runtime
+ * shape instead of extending the public type.
+ */
+interface StreamChunkRowEvent {
+  type: 'text-chunks' | 'reasoning-chunks'
+  seq: number
+  time: number
+  time0: number
+  data: {
+    turn: number
+    step: number
+    index: number
+    dt?: number[]
+    texts: string[]
+  }
 }
 
 const ZERO_TOKENS = {
@@ -82,12 +109,13 @@ function assistantMessageInfo(
   parentID: string,
   opts: MessageConvertOptions,
   usage?: TokenUsage,
+  created?: number,
 ): AssistantMessage {
   return {
     id: String(message.id),
     sessionID: opts.sessionId,
     role: 'assistant',
-    time: { created: time, completed: time },
+    time: { created: created ?? time, completed: time },
     parentID,
     modelID: message.source.model,
     providerID: externalProviderId(message.source.provider),
@@ -102,7 +130,7 @@ function textPart(
   id: string,
   messageID: string,
   text: string,
-  time: { start: number; end: number },
+  time: { start: number; end?: number },
   opts: MessageConvertOptions,
 ): TextPart {
   return {
@@ -111,7 +139,7 @@ function textPart(
     messageID,
     type: 'text',
     text,
-    time: { start: time.start, end: time.end },
+    time: { start: time.start, ...(time.end === undefined ? {} : { end: time.end }) },
   }
 }
 
@@ -179,6 +207,151 @@ function userPartsFromMessage(
   return parts
 }
 
+function earliestBlockStart(
+  blockStarts: Map<string, number>,
+  turn: number,
+  step: number,
+): number | undefined {
+  let earliest: number | undefined
+  for (const [key, value] of blockStarts) {
+    const [keyTurn, keyStep] = key.split(':')
+    if (Number(keyTurn) === turn && Number(keyStep) === step) {
+      if (earliest === undefined || value < earliest) earliest = value
+    }
+  }
+  return earliest
+}
+
+type StreamBlockType = 'text' | 'reasoning'
+
+interface StreamBlockAccumulator {
+  blockType: StreamBlockType
+  start: number
+  text: string
+}
+
+type StreamBlocksByStep = Map<string, Map<string, StreamBlockAccumulator>>
+
+function accumulateStreamBlock(
+  blocksByStep: StreamBlocksByStep,
+  turn: number,
+  step: number,
+  index: number,
+  blockType: StreamBlockType,
+  text: string,
+  start: number,
+): void {
+  const stepKey = `${turn}:${step}`
+  let blocks = blocksByStep.get(stepKey)
+  if (!blocks) {
+    blocks = new Map()
+    blocksByStep.set(stepKey, blocks)
+  }
+  const blockKey = `${index}:${blockType}`
+  const existing = blocks.get(blockKey)
+  if (existing) {
+    existing.text += text
+  } else {
+    blocks.set(blockKey, { blockType, start, text })
+  }
+}
+
+function partialAssistantMessageInfo(
+  id: string,
+  created: number,
+  parentID: string,
+  opts: MessageConvertOptions,
+): AssistantMessage {
+  const model = opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  return {
+    id,
+    sessionID: opts.sessionId,
+    role: 'assistant',
+    time: { created },
+    parentID,
+    modelID: model.modelID,
+    providerID: model.providerID,
+    mode: DEFAULT_AGENT,
+    path: { cwd: opts.cwd, root: opts.cwd },
+    cost: 0,
+    tokens: ZERO_TOKENS,
+  }
+}
+
+function v1StreamPart(
+  block: StreamBlockAccumulator,
+  messageID: string,
+  partId: string,
+  opts: MessageConvertOptions,
+): Part {
+  if (block.blockType === 'text') {
+    return textPart(partId, messageID, block.text, { start: block.start }, opts)
+  }
+  return {
+    id: partId,
+    sessionID: opts.sessionId,
+    messageID,
+    type: 'reasoning',
+    text: block.text,
+    time: { start: block.start },
+  }
+}
+
+function upsertPartialV1(
+  entries: V1MessageEntry[],
+  pending: Map<string, V1MessageEntry>,
+  blocksByStep: StreamBlocksByStep,
+  pendingCallsByStep: Map<string, Map<string, ToolCallInfo>>,
+  opts: MessageConvertOptions,
+  turn: number,
+  step: number,
+  created: number,
+  parentID: string,
+): V1MessageEntry {
+  const stepKey = `${turn}:${step}`
+  let entry = pending.get(stepKey)
+  if (!entry) {
+    entry = {
+      info: partialAssistantMessageInfo(
+        provisionalMessageId(opts.sessionId, turn, step),
+        created,
+        parentID,
+        opts,
+      ),
+      parts: [],
+    }
+    pending.set(stepKey, entry)
+    entries.push(entry)
+  }
+  const blocks = blocksByStep.get(stepKey)
+  if (blocks) {
+    for (const [blockKey, block] of blocks) {
+      const blockIndex = Number(blockKey.slice(0, blockKey.indexOf(':')))
+      const partId = provisionalPartId(opts.sessionId, turn, step, block.blockType, blockIndex)
+      const partIndex = entry.parts.findIndex((part) => part.id === partId)
+      const replacement = v1StreamPart(block, entry.info.id, partId, opts)
+      if (partIndex === -1) {
+        entry.parts.push(replacement)
+      } else {
+        entry.parts[partIndex] = replacement
+      }
+    }
+  }
+  const calls = pendingCallsByStep.get(stepKey)
+  if (calls) {
+    for (const call of calls.values()) {
+      if (!entry.parts.some((part) => part.type === 'tool' && part.callID === call.callId)) {
+        entry.parts.push(pendingToolPart(call, {
+          sessionID: opts.sessionId,
+          messageID: entry.info.id,
+          time: created,
+        }))
+      }
+    }
+  }
+  return entry
+}
+
 function applyToolResultV1(
   entries: V1MessageEntry[],
   calls: Map<string, ToolCallInfo>,
@@ -229,9 +402,17 @@ export function convertMessagesV1(
   const entries: V1MessageEntry[] = []
   const calls = new Map<string, ToolCallInfo>()
   const blockStarts = new Map<string, number>()
+  const turnStarts = new Map<number, number>()
+  const blocksByStep: StreamBlocksByStep = new Map()
+  const pending = new Map<string, V1MessageEntry>()
+  const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastMessageId = ''
   for (const event of events) {
     switch (event.type) {
+      case 'turn/start': {
+        turnStarts.set(event.data.turn, event.time)
+        break
+      }
       case 'user/message': {
         const data = event.data
         const id = String(data.id)
@@ -243,15 +424,66 @@ export function convertMessagesV1(
         break
       }
       case 'assistant/chunk': {
-        const chunk = event.data.chunk
+        const data = event.data
+        const chunk = data.chunk
         if (chunk.type === 'block-start') {
-          blockStarts.set(`${event.data.turn}:${event.data.step}:${chunk.index}:${chunk.blockType}`, event.time)
+          blockStarts.set(`${data.turn}:${data.step}:${chunk.index}:${chunk.blockType}`, event.time)
+        } else if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+          const blockType = chunk.type === 'text-delta' ? 'text' : 'reasoning'
+          const key = `${data.turn}:${data.step}:${chunk.index}:${blockType}`
+          if (!blockStarts.has(key)) blockStarts.set(key, event.time)
+          const start = blockStarts.get(key) ?? event.time
+          accumulateStreamBlock(blocksByStep, data.turn, data.step, chunk.index, blockType, chunk.text, start)
+          upsertPartialV1(
+            entries,
+            pending,
+            blocksByStep,
+            pendingCallsByStep,
+            opts,
+            data.turn,
+            data.step,
+            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+            lastMessageId || `pending:${opts.sessionId}:user`,
+          )
         }
+        break
+      }
+      case 'text-chunks' as SessionEvent['type']:
+      case 'reasoning-chunks' as SessionEvent['type']: {
+        const chunk = event as unknown as StreamChunkRowEvent
+        const blockType = chunk.type === 'text-chunks' ? 'text' : 'reasoning'
+        const key = `${chunk.data.turn}:${chunk.data.step}:${chunk.data.index}:${blockType}`
+        const time0 = chunk.time0 ?? chunk.time
+        if (!blockStarts.has(key)) {
+          blockStarts.set(key, time0)
+        }
+        const start = blockStarts.get(key) ?? time0
+        accumulateStreamBlock(
+          blocksByStep,
+          chunk.data.turn,
+          chunk.data.step,
+          chunk.data.index,
+          blockType,
+          chunk.data.texts.join(''),
+          start,
+        )
+        upsertPartialV1(
+          entries,
+          pending,
+          blocksByStep,
+          pendingCallsByStep,
+          opts,
+          chunk.data.turn,
+          chunk.data.step,
+          earliestBlockStart(blockStarts, chunk.data.turn, chunk.data.step) ?? turnStarts.get(chunk.data.turn) ?? time0,
+          lastMessageId || `pending:${opts.sessionId}:user`,
+        )
         break
       }
       case 'assistant/message': {
         const data = event.data
         const id = String(data.message.id)
+        const stepKey = `${data.turn}:${data.step}`
         const { parts, calls: messageCalls } = assistantPartsFromMessage(
           data.message,
           event.time,
@@ -259,20 +491,53 @@ export function convertMessagesV1(
           (index, blockType) => blockStarts.get(`${data.turn}:${data.step}:${index}:${blockType}`),
         )
         for (const [callId, call] of messageCalls) calls.set(callId, call)
+        const pendingEntry = pending.get(stepKey)
+        const pendingIndex = pendingEntry === undefined
+          ? -1
+          : entries.findIndex((entry) => entry.info.id === pendingEntry.info.id)
         entries.push({
-          info: assistantMessageInfo(data.message, event.time, lastMessageId || id, opts, data.usage),
+          info: assistantMessageInfo(
+            data.message,
+            event.time,
+            lastMessageId || id,
+            opts,
+            data.usage,
+            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+          ),
           parts,
         })
+        if (pendingIndex !== -1) entries.splice(pendingIndex, 1)
+        pending.delete(stepKey)
+        pendingCallsByStep.delete(stepKey)
         lastMessageId = id
         break
       }
       case 'tool/call': {
         const data = event.data
-        calls.set(String(data.callId), {
+        const call: ToolCallInfo = {
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
-        })
+        }
+        calls.set(call.callId, call)
+        const stepKey = `${data.turn}:${data.step}`
+        let stepCalls = pendingCallsByStep.get(stepKey)
+        if (!stepCalls) {
+          stepCalls = new Map()
+          pendingCallsByStep.set(stepKey, stepCalls)
+        }
+        stepCalls.set(call.callId, call)
+        const pendingEntry = pending.get(stepKey)
+        if (
+          pendingEntry
+          && !pendingEntry.parts.some((part) => part.type === 'tool' && part.callID === call.callId)
+        ) {
+          pendingEntry.parts.push(pendingToolPart(call, {
+            sessionID: opts.sessionId,
+            messageID: pendingEntry.info.id,
+            time: event.time,
+          }))
+        }
         break
       }
       case 'tool/result': {
@@ -305,11 +570,12 @@ export function assistantMessageFromEvent(
   event: SessionEvent<'assistant/message'>,
   opts: MessageConvertOptions,
   blockStart?: (index: number, blockType: string) => number | undefined,
+  created?: number,
 ): V1MessageEntry {
   const id = String(event.data.message.id)
   const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart)
   return {
-    info: assistantMessageInfo(event.data.message, event.time, id, opts, event.data.usage),
+    info: assistantMessageInfo(event.data.message, event.time, id, opts, event.data.usage, created),
     parts,
   }
 }
@@ -319,6 +585,90 @@ export function assistantMessageFromEvent(
 interface V2AssistantState {
   info: SessionMessageAssistant
   calls: Map<string, ToolCallInfo>
+}
+
+function partialV2Assistant(
+  id: string,
+  created: number,
+  opts: MessageConvertOptions,
+): SessionMessageAssistant {
+  const model = opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  return {
+    id,
+    time: { created },
+    type: 'assistant',
+    agent: DEFAULT_AGENT,
+    model: { id: model.modelID, providerID: model.providerID },
+    content: [],
+    cost: 0,
+    tokens: ZERO_TOKENS,
+  }
+}
+
+function v2StreamPart(
+  block: StreamBlockAccumulator,
+  partId: string,
+): SessionMessageAssistantText | SessionMessageAssistantReasoning {
+  if (block.blockType === 'text') {
+    return {
+      type: 'text',
+      id: partId,
+      text: block.text,
+    }
+  }
+  return {
+    type: 'reasoning',
+    id: partId,
+    text: block.text,
+    time: { created: block.start },
+  }
+}
+
+function upsertPartialV2(
+  messages: SessionMessage[],
+  pending: Map<string, SessionMessageAssistant>,
+  blocksByStep: StreamBlocksByStep,
+  pendingCallsByStep: Map<string, Map<string, ToolCallInfo>>,
+  opts: MessageConvertOptions,
+  turn: number,
+  step: number,
+  created: number,
+): V2AssistantState {
+  const stepKey = `${turn}:${step}`
+  let info = pending.get(stepKey)
+  if (!info) {
+    info = partialV2Assistant(provisionalMessageId(opts.sessionId, turn, step), created, opts)
+    pending.set(stepKey, info)
+    messages.push(info)
+  }
+  const blocks = blocksByStep.get(stepKey)
+  if (blocks) {
+    for (const [blockKey, block] of blocks) {
+      const blockIndex = Number(blockKey.slice(0, blockKey.indexOf(':')))
+      const partId = provisionalPartId(opts.sessionId, turn, step, block.blockType, blockIndex)
+      const replacement = v2StreamPart(block, partId)
+      const partIndex = info.content.findIndex((part) => part.id === partId)
+      if (partIndex === -1) {
+        info.content.push(replacement)
+      } else {
+        info.content[partIndex] = replacement
+      }
+    }
+  }
+  const calls = pendingCallsByStep.get(stepKey) ?? new Map<string, ToolCallInfo>()
+  for (const call of calls.values()) {
+    if (!info.content.some((part) => part.type === 'tool' && part.id === `tool:${call.callId}`)) {
+      const tool: SessionMessageAssistantTool = {
+        type: 'tool',
+        id: `tool:${call.callId}`,
+        name: call.name,
+        state: { status: 'pending', input: call.arguments },
+        time: { created },
+      }
+      info.content.push(tool)
+    }
+  }
+  return { info, calls }
 }
 
 function toV2ModelRef(message: DshAssistantMessage): ModelRef {
@@ -331,6 +681,8 @@ function toV2ModelRef(message: DshAssistantMessage): ModelRef {
 function toV2Assistant(
   event: SessionEvent<'assistant/message'>,
   opts: MessageConvertOptions,
+  created?: number,
+  blockStart?: (index: number, blockType: string) => number | undefined,
 ): V2AssistantState {
   const data = event.data
   const messageID = String(data.message.id)
@@ -345,11 +697,12 @@ function toV2Assistant(
       }
       content.push(part)
     } else if (block.type === 'reasoning') {
+      const start = blockStart?.(index, block.type) ?? event.time
       content.push({
         type: 'reasoning',
         id: `${messageID}:${index}`,
         text: block.text,
-        time: { created: event.time, completed: event.time },
+        time: { created: start, completed: event.time },
       })
     } else if (block.type === 'tool-call') {
       const call: ToolCallInfo = {
@@ -372,7 +725,7 @@ function toV2Assistant(
   })
   const info: SessionMessageAssistant = {
     id: messageID,
-    time: { created: event.time, completed: event.time },
+    time: { created: created ?? event.time, completed: event.time },
     type: 'assistant',
     agent: DEFAULT_AGENT,
     model: toV2ModelRef(data.message),
@@ -437,9 +790,18 @@ export function convertMessagesV2(
 ): SessionMessage[] {
   const messages: SessionMessage[] = []
   const calls = new Map<string, ToolCallInfo>()
+  const blockStarts = new Map<string, number>()
+  const turnStarts = new Map<number, number>()
+  const blocksByStep: StreamBlocksByStep = new Map()
+  const pending = new Map<string, SessionMessageAssistant>()
+  const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastAssistant: V2AssistantState | undefined
   for (const event of events) {
     switch (event.type) {
+      case 'turn/start': {
+        turnStarts.set(event.data.turn, event.time)
+        break
+      }
       case 'user/message': {
         const data = event.data
         const message: SessionMessageUser = {
@@ -451,20 +813,111 @@ export function convertMessagesV2(
         messages.push(message)
         break
       }
+      case 'assistant/chunk': {
+        const data = event.data
+        const chunk = data.chunk
+        if (chunk.type === 'block-start') {
+          blockStarts.set(`${data.turn}:${data.step}:${chunk.index}:${chunk.blockType}`, event.time)
+        } else if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+          const blockType = chunk.type === 'text-delta' ? 'text' : 'reasoning'
+          const key = `${data.turn}:${data.step}:${chunk.index}:${blockType}`
+          if (!blockStarts.has(key)) blockStarts.set(key, event.time)
+          const start = blockStarts.get(key) ?? event.time
+          accumulateStreamBlock(blocksByStep, data.turn, data.step, chunk.index, blockType, chunk.text, start)
+          lastAssistant = upsertPartialV2(
+            messages,
+            pending,
+            blocksByStep,
+            pendingCallsByStep,
+            opts,
+            data.turn,
+            data.step,
+            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+          )
+        }
+        break
+      }
+      case 'text-chunks' as SessionEvent['type']:
+      case 'reasoning-chunks' as SessionEvent['type']: {
+        const chunk = event as unknown as StreamChunkRowEvent
+        const blockType = chunk.type === 'text-chunks' ? 'text' : 'reasoning'
+        const key = `${chunk.data.turn}:${chunk.data.step}:${chunk.data.index}:${blockType}`
+        const time0 = chunk.time0 ?? chunk.time
+        if (!blockStarts.has(key)) {
+          blockStarts.set(key, time0)
+        }
+        const start = blockStarts.get(key) ?? time0
+        accumulateStreamBlock(
+          blocksByStep,
+          chunk.data.turn,
+          chunk.data.step,
+          chunk.data.index,
+          blockType,
+          chunk.data.texts.join(''),
+          start,
+        )
+        lastAssistant = upsertPartialV2(
+          messages,
+          pending,
+          blocksByStep,
+          pendingCallsByStep,
+          opts,
+          chunk.data.turn,
+          chunk.data.step,
+          earliestBlockStart(blockStarts, chunk.data.turn, chunk.data.step) ?? turnStarts.get(chunk.data.turn) ?? time0,
+        )
+        break
+      }
       case 'assistant/message': {
-        const state = toV2Assistant(event, opts)
+        const data = event.data
+        const stepKey = `${data.turn}:${data.step}`
+        const state = toV2Assistant(
+          event,
+          opts,
+          earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+          (index, blockType) => blockStarts.get(`${data.turn}:${data.step}:${index}:${blockType}`),
+        )
+        const pendingMessage = pending.get(stepKey)
+        const pendingIndex = pendingMessage === undefined
+          ? -1
+          : messages.findIndex((message) => message.id === pendingMessage.id)
         messages.push(state.info)
+        if (pendingIndex !== -1) messages.splice(pendingIndex, 1)
+        pending.delete(stepKey)
+        pendingCallsByStep.delete(stepKey)
         for (const [callId, call] of state.calls) calls.set(callId, call)
         lastAssistant = state
         break
       }
       case 'tool/call': {
         const data = event.data
-        calls.set(String(data.callId), {
+        const call: ToolCallInfo = {
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
-        })
+        }
+        calls.set(call.callId, call)
+        const stepKey = `${data.turn}:${data.step}`
+        let stepCalls = pendingCallsByStep.get(stepKey)
+        if (!stepCalls) {
+          stepCalls = new Map()
+          pendingCallsByStep.set(stepKey, stepCalls)
+        }
+        stepCalls.set(call.callId, call)
+        const pendingMessage = pending.get(stepKey)
+        if (
+          pendingMessage
+          && !pendingMessage.content.some((part) => part.type === 'tool' && part.id === `tool:${call.callId}`)
+        ) {
+          pendingMessage.content.push({
+            type: 'tool',
+            id: `tool:${call.callId}`,
+            name: call.name,
+            state: { status: 'pending', input: call.arguments },
+            time: { created: event.time },
+          })
+        }
+        if (pendingMessage) lastAssistant = { info: pendingMessage, calls: stepCalls }
         break
       }
       case 'tool/result': {
