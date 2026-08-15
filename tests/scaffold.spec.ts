@@ -109,7 +109,7 @@ describe('cordis.patch.yml', () => {
 describe('package.json', () => {
   it('points dsh.bundle.patch at the cordis patch', () => {
     const pkg = JSON.parse(read('package.json'))
-    expect(pkg.name).toBe('@deepseek-ai/dsh-oc')
+    expect(pkg.name).toBe('@chiro2001/dsh-oc')
     expect(pkg.dsh.bundle.patch).toBe('./cordis.patch.yml')
   })
 })

@@ -3,7 +3,7 @@ import { startBridgeServer, type BridgeServerHandle } from './http.js'
 import { createBridgeRouter, type BridgeRouter } from './router.js'
 import type { BridgeAgents, BridgeApi, BridgeCommands } from './rpc.js'
 
-export const name = '@deepseek-ai/dsh-oc/bridge'
+export const name = '@chiro2001/dsh-oc/bridge'
 export const inject = ['apiProxy'] as const
 
 export interface OcBridgeValue {

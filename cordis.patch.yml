@@ -34,9 +34,9 @@
       name: '@deepseek-ai/dsh-host-apiproxy'
 
     - id: oc-bridge
-      name: '@deepseek-ai/dsh-oc/bridge'
+      name: '@chiro2001/dsh-oc/bridge'
       inject: [apiProxy]
 
     - id: oc-tui
-      name: '@deepseek-ai/dsh-oc/tui'
+      name: '@chiro2001/dsh-oc/tui'
       inject: [ocBridge]

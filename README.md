@@ -58,8 +58,8 @@ dsh plugin --profile oc add chiro2001/dsh-oc
 dsh --profile oc --help            # 验证新版本已生效
 ```
 
-> 注意：仓库 `package.json` 里的 npm 包名是 `@deepseek-ai/dsh-oc@0.1.0-rc.1`，
-> 但该包**没有发布到 npm registry**；安装与更新一律走 GitHub 源
+> 注意：仓库 `package.json` 里的 npm 包名是 `@chiro2001/dsh-oc@0.1.0-rc.1`，
+> 目前**没有发布到 npm registry**；安装与更新一律走 GitHub 源
 > `chiro2001/dsh-oc`。
 
 本地开发时（仓库已 clone 到本地），重新构建并指向本地路径即可：
@@ -210,7 +210,7 @@ tarball 验证模式（用 npm tarball 而不是本地路径安装）：
 
 ```bash
 pnpm pack --pack-destination /tmp/dsh-oc-pack-release
-TGZ="$(echo /tmp/dsh-oc-pack-release/deepseek-ai-dsh-oc-0.1.0-rc.1.tgz)"
+TGZ="$(echo /tmp/dsh-oc-pack-release/chiro2001-dsh-oc-0.1.0-rc.1.tgz)"
 DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-api.sh
 DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-boot.sh
 DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-turn.sh

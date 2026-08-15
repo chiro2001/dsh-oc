@@ -89,8 +89,8 @@ async function newRun(argv) {
 
   const profileDir = join(dshHome, 'profiles', 'oc')
   const dump = run('dsh', ['--profile', 'oc', '--dump-config'], { env: dshEnv })
-  const ocBlock = dump.split('# == @deepseek-ai/dsh-oc')[1]
-  if (!ocBlock) fail('dump-config: missing @deepseek-ai/dsh-oc bundle block')
+  const ocBlock = dump.split('# == @chiro2001/dsh-oc')[1]
+  if (!ocBlock) fail('dump-config: missing @chiro2001/dsh-oc bundle block')
   for (const id of [
     'storage',
     'storage-json',

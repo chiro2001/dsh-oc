@@ -163,7 +163,7 @@ dsh-oc/
 
 ```json
 {
-  "name": "@deepseek-ai/dsh-oc",
+  "name": "@chiro2001/dsh-oc",
   "version": "0.1.0-rc.1",
   "type": "module",
   "exports": {
@@ -208,11 +208,11 @@ dsh-oc/
       name: '@deepseek-ai/dsh-host-apiproxy'
 
     - id: oc-bridge
-      name: '@deepseek-ai/dsh-oc/bridge'
+      name: '@chiro2001/dsh-oc/bridge'
       inject: [apiProxy]
 
     - id: oc-tui
-      name: '@deepseek-ai/dsh-oc/tui'
+      name: '@chiro2001/dsh-oc/tui'
       inject: [ocBridge]
 ```
 
@@ -230,11 +230,11 @@ dsh plugin --profile oc add .
 dsh --profile oc
 
 # 发布后
-dsh plugin --profile oc add @deepseek-ai/dsh-oc
+dsh plugin --profile oc add chiro2001/dsh-oc
 dsh --profile oc
 ```
 
-`dsh plugin` 会初始化 `$DSH_HOME/profiles/oc`，先写 `["@deepseek-ai/dsh-base"]`，检测到本包声明 `dsh.bundle` 后追加为 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-oc"]`。
+`dsh plugin` 会初始化 `$DSH_HOME/profiles/oc`，先写 `["@deepseek-ai/dsh-base"]`，检测到本包声明 `dsh.bundle` 后追加为 `["@deepseek-ai/dsh-base", "@chiro2001/dsh-oc"]`。
 
 ---
 
@@ -650,7 +650,7 @@ spawn(opencodeBin, ['attach', bridgeUrl, ...tuiArgs], {
 
 首版完成的判据：
 
-1. `dsh plugin --profile oc add @deepseek-ai/dsh-oc` 后 `dsh --profile oc` 可启动官方 opencode TUI。
+1. `dsh plugin --profile oc add chiro2001/dsh-oc` 后 `dsh --profile oc` 可启动官方 opencode TUI。
 2. TUI 只连接 dsh-oc bridge；不出现 opencode 本地 server/agent 路径。
 3. 会话创建、列表、历史、prompt、cancel 全部由 dsh 执行，TUI 正确渲染。
 4. approval、ask_user_question、模型选择在 TUI 中可操作并回写 dsh。

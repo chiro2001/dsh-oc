@@ -1,6 +1,6 @@
 import { Context, Service } from "@deepseek-ai/cordis";
 //#region src/bridge/index.d.ts
-declare const name = "@deepseek-ai/dsh-oc/bridge";
+declare const name = "@chiro2001/dsh-oc/bridge";
 declare const inject: readonly ['apiProxy'];
 interface OcBridgeValue {
   url: string;

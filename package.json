@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-oc",
+  "name": "@chiro2001/dsh-oc",
   "version": "0.1.0-rc.1",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
