@@ -282,6 +282,22 @@ describe('bridge router: session routes', () => {
     })
   })
 
+  it('honors order=asc on the v2 session list', async () => {
+    const base = fakeApi()
+    const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
+    const api = {
+      ...base,
+      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, other] }) },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'GET', '/api/session?order=asc')
+    expect(result.status).toBe(200)
+    expect((result.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id)).toEqual([
+      's2',
+      's1',
+    ])
+  })
+
   it('lists child sessions with parentID and inherits the parent cwd', async () => {
     const base = fakeApi()
     const parent = {

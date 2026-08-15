@@ -1509,9 +1509,10 @@ export function createBridgeRouter(
     const limitRaw = req.query.get('limit')
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
     const items = limit === undefined ? filtered : filtered.slice(0, limit)
-    recordSessionSummaries(ctx, items)
+    const ordered = req.query.get('order') === 'asc' ? [...items].reverse() : items
+    recordSessionSummaries(ctx, ordered)
     return json(200, {
-      data: items.map((item) => convertSessionSummaryV2(item, {
+      data: ordered.map((item) => convertSessionSummaryV2(item, {
         cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
       })),
       cursor: {},
