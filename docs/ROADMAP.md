@@ -230,7 +230,7 @@ opencode 版本升级后，API 路由/类型可能变化；需要用户可自助
 | 编号 | 方向 | 状态 |
 |---|---|---|
 | M1 | 文档与已知限制同步 | ✅ 进行中：README/FEATURES 已同步退出 splash 说明；`features:update` 自动追踪 |
-| M2 | 开发流程与 CI | ✅ CI 覆盖 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/`chore-*`；`check-all.sh --e2e` 全量回归 |
+| M2 | 开发流程与 CI | ✅ CI 覆盖 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/`chore-*`；push 自动跑 API e2e 子集，手动触发全量 e2e + 压测 |
 | M3 | 社区贡献流程 | ✅ 新增 `CONTRIBUTING.md`、PR 模板、Issue 模板（bug/feature） |
 | M4 | 分支策略与清理 | ✅ `scripts/cleanup-merged-branches.sh`（dry-run 默认）；历史 `feat-*` 已全部并入 main |
 | M5 | 重构（router 拆分/缓存统一） | ⬜ 待排期：`src/bridge/router.ts` 按路由域拆分，状态/缓存管理收敛 |

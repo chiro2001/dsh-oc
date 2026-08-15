@@ -1,6 +1,16 @@
 name: e2e
 
 on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feat-**'
+      - 'fix-**'
+      - 'docs-**'
+      - 'perf-**'
+      - 'test-**'
+      - 'chore-**'
   workflow_dispatch:
     inputs:
       sessions:
@@ -58,7 +68,12 @@ jobs:
           echo "--- manual pnpm add mock-server ---"
           (cd "$DSH_HOME/profiles/oc" && pnpm add @deepseek-ai/dsh-llm-mock-server@0.1.0-rc.6 2>&1 | tail -60) || true
 
-      - name: Full e2e + perf scale
+      - name: API e2e (push regression)
+        if: github.event_name == 'push'
         env:
           CI_E2E_SUBSET: "api"
+        run: bash scripts/check-all.sh --e2e
+
+      - name: Full e2e + perf scale (manual)
+        if: github.event_name == 'workflow_dispatch'
         run: bash scripts/check-all.sh --e2e --scale ${{ github.event.inputs.sessions }}
