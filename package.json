@@ -29,6 +29,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "probe": "node scripts/probe-opencode.mjs",
     "features:update": "node scripts/update-feature-matrix.mjs",
     "pack:dry": "pnpm pack --dry-run"
   },

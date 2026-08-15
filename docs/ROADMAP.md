@@ -11,7 +11,7 @@
 | N2 | 流式 toolcall / progress | P0 | `feat-stream-tool` | 待开始 |
 | N3 | Goal 功能完整支持 | P0 | `feat-goal` | 待开始 |
 | N4 | 会话性能测试（临时 DB + 生成历史） | P1 | `feat-perf` | 待开始 |
-| N5 | 协议自测 UT / 升级探针 | P1 | `feat-protocol-ut` | 待开始 |
+| N5 | 协议自测 UT / 升级探针 | P1 | `feat-protocol-ut` | ✅ 已完成（2026-08-15） |
 | N6 | README 与 `/help` 展示能力矩阵 | P1 | `feat-capability-help` | ✅ 已完成（2026-08-15） |
 
 建议执行顺序：`N1` 单独先做（影响稳定性和外网）；`N2`/`N3` 可并行；`N4`/`N5`/`N6` 可并行或紧随其后。

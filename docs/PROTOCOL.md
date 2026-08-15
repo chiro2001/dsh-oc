@@ -331,3 +331,25 @@ dsh 0.1.0-rc.6 + opencode 1.18.18，TUI 与 bridge 均实际跑通）：
 | `--print-logs` | 透传 | oc-tui 已把 `--print-logs` 传给 `opencode attach`（opencode 顶层全局选项，设置 `OPENCODE_PRINT_LOGS=1`） |
 | 时间戳 | 默认开启 | `DSH_OC_TUI_TIMESTAMPS=1` 写入 `kv.json` 的 `timestamps: show` 并绑定 `ctrl+shift+t` / `/timestamps`；e2e 见 `scripts/e2e-tui-timestamps.sh` |
 | tarball 安装 e2e | PASSED | `DSH_OC_E2E_ADD_SPEC=<tgz>` 下 `e2e-api.sh` / `e2e-tui-boot.sh` / `e2e-tui-turn.sh` / `e2e-tui-timestamps.sh` 全部通过；profile 安装的是 npm tarball，不再使用本地路径 |
+
+---
+
+## 10. 自动化协议探针
+
+`scripts/probe-opencode.mjs` 对照 `tests/fixtures/opencode/routes.json`
+（本文件 §3/§4 的 TUI 真实请求清单）检查 oc-bridge 是否注册了全部路由，并校验
+opencode 二进制与 `@opencode-ai/sdk` 的版本锁定：
+
+```bash
+pnpm run probe
+node scripts/probe-opencode.mjs --version 1.18.18 --bin /path/to/opencode \
+  --out .e2e/protocol-probe.json
+```
+
+输出：缺失路由（`FAIL missing-route` + 修复建议）、二进制/SDK 版本不匹配；
+全绿时退出码 0 并打印 `PASSED`。升级 opencode 的流程：
+
+1. 更新 `opencode-version.json`；
+2. `node scripts/update-opencode-assets.mjs` 重新生成 asset manifest；
+3. `pnpm install`（SDK 版本）后运行 `pnpm run probe`；
+4. 按探针结果补齐路由或 stub，并更新本文件的兼容矩阵。

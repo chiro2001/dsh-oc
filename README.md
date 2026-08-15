@@ -131,6 +131,7 @@ bash scripts/e2e-tui-offline.sh     # 代理不可达 + 清空缓存时 TUI 仍�
 bash scripts/e2e-tui-version-lock.sh  # 显式二进制版本不匹配时明确报错退出
 bash scripts/e2e-tui-help.sh        # dsh --profile oc --help 输出能力摘要并退出
 bash scripts/e2e-tui-brand.sh       # TUI 首页显示 DSH OC 品牌 logo（替换 OpenCode 字符画）
+pnpm run probe                     # 协议路由清单 + 二进制/SDK 版本校验
 ```
 
 tarball 验证模式（用 npm tarball 而不是本地路径安装）：
