@@ -25,7 +25,7 @@
 |---|---|---|---|---|
 | 会话列表 / 状态 | ✅ | `GET /session`、`GET /session/status`、`GET /api/session` | `tests/bridge-router.spec.ts`、`e2e-api.sh` | `f30b156` |
 | 会话列表标题回退 | ✅ | 持久标题 → 项目目录 basename → session id（对齐 dsh 客户端展示逻辑） | `tests/convert/session.spec.ts` | 本提交 |
-| 会话列表真实标题补读 | ✅ | dsh `session.list` 不携带 title 投影；bridge 按会话补读 history tail 投影并缓存，列表显示真实标题（小规模全量、大规模限最近页） | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-turn.sh` | 本提交 |
+| 会话列表真实标题补读 | ✅ | dsh `session.list` 不携带 title 投影；bridge 按会话补读 history tail 投影并缓存，列表显示真实标题（≤40 全量同步、大列表同步 12 + 后台 120） | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-turn.sh` | 本提交 |
 | 会话搜索（v2 `?search=`）与 limit/目录过滤 | ✅ | `src/bridge/router.ts` `/api/session` 经 `session.search` | `tests/bridge-router.spec.ts` | 本提交 |
 | 会话列表分页（v2 `cursor` next/previous + order） | ✅ | `src/bridge/router.ts` `/api/session` offset 游标 | `tests/bridge-router.spec.ts` | 本提交 |
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
@@ -144,7 +144,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`f021570`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`153f781`（2026-08-15）。
 
 ### 路由注册表
 
@@ -228,7 +228,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 36 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 74 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `tests/bridge-router.spec.ts` | 74 | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -243,7 +243,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 31 | 520735c fix(tui): print exit hint for full TUI too, not only --mini |
+| `tests/tui/index.spec.ts` | 31 | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -263,20 +263,20 @@
 | `src/bridge/events.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/index.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
-| `src/bridge/router.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
+| `src/bridge/router.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `src/bridge/state.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `src/bridge/state.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/help.ts` | e256572 feat(bridge): session-scoped always permission memory |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/tui/index.ts` | 520735c fix(tui): print exit hint for full TUI too, not only --mini |
+| `src/tui/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/types.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `scripts/check-all.sh` | de6e601 test(e2e): verify --dir scopes new sessions and filters the list |
 | `scripts/cleanup-merged-branches.sh` | f021570 docs(contrib): add contribution guide, issue/PR templates and branch cleanup tooling |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |

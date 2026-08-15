@@ -317,6 +317,7 @@ const RECENT_HISTORY_PREFETCH = 5
 const LIST_TITLE_WARM_LIMIT = 12
 const LIST_TITLE_WARM_CONCURRENCY = 8
 const LIST_TITLE_WARM_ALL_MAX = 40
+const LIST_TITLE_WARM_BACKGROUND_MAX = 120
 const SSE_RETRY_BASE_MS = 250
 const SSE_RETRY_MAX_ATTEMPTS = 3
 
@@ -395,9 +396,19 @@ async function warmListTitles(ctx: BridgeRouteContext, items: readonly SessionSu
     .filter((item) => !item.blank && ctx.state.sessionTitleFor(String(item.sessionId)) === undefined)
   // Small homes get every title on the first list open; large homes stay
   // bounded to the most recent page (synchronous) to avoid multi-second reads.
-  const candidates = missing.length <= LIST_TITLE_WARM_ALL_MAX
-    ? missing
-    : missing.slice(0, LIST_TITLE_WARM_LIMIT)
+  const syncCount = missing.length <= LIST_TITLE_WARM_ALL_MAX
+    ? missing.length
+    : Math.min(LIST_TITLE_WARM_LIMIT, missing.length)
+  await warmTitles(ctx, missing.slice(0, syncCount))
+  if (missing.length > syncCount) {
+    // Warm the next pages in the background so a later list open shows more
+    // durable titles; the in-flight/cache layers keep this cheap and bounded.
+    void warmTitles(ctx, missing.slice(syncCount, LIST_TITLE_WARM_BACKGROUND_MAX))
+  }
+}
+
+/** Read the title-bearing history tail for candidates with bounded concurrency. */
+async function warmTitles(ctx: BridgeRouteContext, candidates: readonly SessionSummary[]): Promise<void> {
   if (candidates.length === 0) return
   let next = 0
   const workers = Array.from({ length: Math.min(LIST_TITLE_WARM_CONCURRENCY, candidates.length) }, async () => {
