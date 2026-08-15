@@ -1564,4 +1564,54 @@ describe('bridge events: SSE connection lifecycle', () => {
     expect(subscriptions).toBe(2)
     controller.abort()
   })
+
+  it('retries a transient host stream error', async () => {
+    let subscriptions = 0
+    let threw = false
+    const base = fakeApi()
+    const api = {
+      ...base,
+      events: {
+        ...base.events,
+        mux: async function* (_request: never, signal: AbortSignal) {
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve())
+          })
+        },
+        host: async function* () {
+          subscriptions += 1
+          if (!threw) {
+            threw = true
+            throw new Error('transient host failure')
+          }
+          yield {
+            rpcId: 'rpc-host' as never,
+            payload: { type: 'host/agent-error', sessionId: 's1', message: 'after retry' },
+          }
+        },
+      },
+    }
+    const router = createBridgeRouter(api as never, {
+      cwd: '/work',
+      sseRetryBaseMs: 10,
+      sseRetryMaxAttempts: 3,
+    })
+    const server = await startBridgeServer(router)
+    servers.push(server)
+
+    const controller = new AbortController()
+    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline && !text.includes('after retry')) {
+      const { done, value } = await reader?.read() ?? { done: true, value: undefined }
+      text += decoder.decode(value ?? new Uint8Array())
+      if (done) break
+    }
+    expect(text).toContain('after retry')
+    expect(subscriptions).toBe(2)
+    controller.abort()
+  })
 })

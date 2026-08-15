@@ -5,6 +5,7 @@ import { extname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
   HistoryEntry,
+  HostFrame,
   MuxFrame,
   PromptContentPart,
   RequestPayload,
@@ -1773,6 +1774,8 @@ export function createBridgeRouter(
           },
         })
         translator = makeTranslator()
+        const retryBaseMs = options.sseRetryBaseMs ?? SSE_RETRY_BASE_MS
+        const retryMaxAttempts = options.sseRetryMaxAttempts ?? SSE_RETRY_MAX_ATTEMPTS
         const scheduleListRefresh = (): void => {
           if (listRefreshTimer !== undefined) return
           listRefreshTimer = setTimeout(() => {
@@ -1788,12 +1791,8 @@ export function createBridgeRouter(
             })()
           }, 250)
         }
-        const hostStream = api.events.host(
-          { rpcId: randomUUID() as never, payload: {} },
-          controller.signal,
-        )
-        const hostLoop = (async () => {
-          for await (const frame of hostStream) {
+        const consumeHost = async (stream: AsyncIterable<RpcRequest<HostFrame>>): Promise<void> => {
+          for await (const frame of stream) {
             const payload = frame.payload as { type?: string; sessionId?: unknown; message?: unknown }
             if (payload.type === 'host/agent-error') {
               const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
@@ -1805,12 +1804,34 @@ export function createBridgeRouter(
               scheduleListRefresh()
             }
           }
-        })().catch((error) => {
-          if (!controller.signal.aborted) {
-            log(`[bridge/sse] host stream ended: ${error instanceof Error ? error.message : String(error)}`)
+        }
+        const startHostLoop = async (): Promise<void> => {
+          let attempt = 0
+          let delay = retryBaseMs
+          while (!controller.signal.aborted) {
+            attempt += 1
+            const stream = api.events.host(
+              { rpcId: randomUUID() as never, payload: {} },
+              controller.signal,
+            )
+            try {
+              await consumeHost(stream)
+              return
+            } catch (error) {
+              if (controller.signal.aborted) return
+              if (attempt >= retryMaxAttempts) {
+                log(`[bridge/sse] host stream ended: ${error instanceof Error ? error.message : String(error)}`)
+                return
+              }
+              log(`[bridge/sse] host stream error, retry ${attempt}/${retryMaxAttempts} in ${delay}ms: ${error instanceof Error ? error.message : String(error)}`)
+              await new Promise((resolve) => setTimeout(resolve, delay))
+              delay = Math.min(delay * 2, 8000)
+            }
           }
+        }
+        void startHostLoop().catch((error) => {
+          log(`[bridge/sse] host loop failed: ${error instanceof Error ? error.message : String(error)}`)
         })
-        void hostLoop
         const consumeStream = async (stream: AsyncIterable<RpcRequest<MuxFrame>>): Promise<void> => {
           for await (const frame of stream) {
             if (frame.payload.type === 'approval/requested') {
@@ -1844,8 +1865,6 @@ export function createBridgeRouter(
             }
           }
         }
-        const retryBaseMs = options.sseRetryBaseMs ?? SSE_RETRY_BASE_MS
-        const retryMaxAttempts = options.sseRetryMaxAttempts ?? SSE_RETRY_MAX_ATTEMPTS
         let attempt = 0
         let delay = retryBaseMs
         while (true) {
