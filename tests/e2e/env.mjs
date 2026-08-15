@@ -51,8 +51,8 @@ function run(command, args, options = {}) {
 
 function assertBranch() {
   const branch = run('git', ['branch', '--show-current'], { cwd: repoRoot }).trim()
-  if (!/^(chore-.*|main|develop|feat-.*)$/.test(branch)) {
-    fail(`branch must be chore-*/main/develop/feat-*, got ${branch}`)
+  if (!/^(chore-.*|fix-.*|docs-.*|perf-.*|test-.*|main|develop|feat-.*)$/.test(branch)) {
+    fail(`branch must be chore-*/fix-*/docs-*/perf-*/test-*/main/develop/feat-*, got ${branch}`)
   }
 }
 

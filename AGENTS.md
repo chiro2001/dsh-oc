@@ -113,8 +113,9 @@ dsh --profile oc --help                                            # 验证版�
 5. `lib/` 构建产物随提交；检查机器相关绝对路径：
    `rg -n --hidden -g '!node_modules' -g '!.git' 'chiro' . | rg -v 'chiro2001|/home/chiro/'`
 
-e2e 脚本只允许在 `main` / `develop` / `chore-*` / `feat-*` 分支运行（白名单在
-`tests/e2e/common.sh` 与 `tests/e2e/env.mjs`）。
+e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
+`perf-*` / `test-*` / `feat-*` 分支运行（白名单在 `tests/e2e/common.sh` 与
+`tests/e2e/env.mjs`，与 CI 触发分支保持一致）。
 
 ## 分支与发布
 
