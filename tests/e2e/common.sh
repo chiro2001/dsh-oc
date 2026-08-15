@@ -7,15 +7,15 @@ export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:14514}"
 
 E2E_REPO_ROOT="$(git rev-parse --show-toplevel)"
 case "$E2E_REPO_ROOT" in
-  /home/chiro/projects/dsh-oc/dsh-oc|/home/chiro/projects/dsh-oc/dsh-oc-*)
+  */dsh-oc|*/dsh-oc-*)
     ;;
   *)
-    echo "e2e: must run from /home/chiro/projects/dsh-oc/dsh-oc-* (got $E2E_REPO_ROOT)" >&2
+    echo "e2e: must run from a dsh-oc checkout (got $E2E_REPO_ROOT)" >&2
     exit 2
     ;;
 esac
 E2E_BRANCH="$(git -C "$E2E_REPO_ROOT" branch --show-current)"
-if [[ ! "$E2E_BRANCH" =~ ^(chore-.*|main|feat-.*)$ ]]; then
+if [[ -n "$E2E_BRANCH" && ! "$E2E_BRANCH" =~ ^(chore-.*|main|feat-.*)$ ]]; then
   echo "e2e: branch must be chore-*/main/feat-* (got $E2E_BRANCH)" >&2
   exit 2
 fi
