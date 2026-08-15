@@ -4,8 +4,9 @@ DeepSeek Harness 的 OpenCode TUI 前端。
 
 [![CI](https://github.com/chiro2001/dsh-oc/actions/workflows/ci.yml/badge.svg)](https://github.com/chiro2001/dsh-oc/actions/workflows/ci.yml)
 
-全量 TUI/API e2e 可在 GitHub Actions 手动触发：
-`Actions → e2e → Run workflow`（可选 `sessions` 压测规模）。
+GitHub Actions 手动触发的 `e2e` 工作流运行 API e2e（`e2e-api.sh` +
+`e2e-api-goal.sh`）与可选压测；完整 TUI e2e 因 CI 终端时序限制保留在本地
+`bash scripts/check-all.sh --e2e` 运行。
 
 - **前端**：opencode 官方 CLI，以 `attach` 模式运行，只做 TUI。
 - **后端**：DeepSeek Harness（dsh）负责 Agent、Session、工具、模型、权限和用户提问。

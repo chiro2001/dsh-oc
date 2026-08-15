@@ -39,7 +39,9 @@ if [[ "$E2E" == "1" ]]; then
     e2e-tui-command.sh e2e-api-goal.sh e2e-tui-goal.sh e2e-tui-brand.sh \
     e2e-tui-dir.sh e2e-tui-fork.sh e2e-tui-offline.sh e2e-tui-version-lock.sh \
     e2e-tui-help.sh e2e-tui-print-logs.sh"
-  if [[ "${CI_E2E_SUBSET:-}" == "1" ]]; then
+  if [[ "${CI_E2E_SUBSET:-}" == "api" ]]; then
+    E2E_SCRIPTS="e2e-api.sh e2e-api-goal.sh"
+  elif [[ "${CI_E2E_SUBSET:-}" == "1" ]]; then
     E2E_SCRIPTS="$STABLE_E2E"
   else
     E2E_SCRIPTS="$STABLE_E2E e2e-tui-timestamps.sh e2e-tui-mini.sh e2e-tui-skill.sh e2e-tui-continue.sh"

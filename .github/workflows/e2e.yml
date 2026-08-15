@@ -60,5 +60,5 @@ jobs:
 
       - name: Full e2e + perf scale
         env:
-          CI_E2E_SUBSET: "1"
+          CI_E2E_SUBSET: "api"
         run: bash scripts/check-all.sh --e2e --scale ${{ github.event.inputs.sessions }}
