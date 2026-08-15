@@ -4,7 +4,7 @@ import type { SessionMessagesResponse } from '@opencode-ai/sdk/v2/types'
 import type { SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { badRequest } from '../errors.js'
 import { convertMessagesV2 } from '../convert/message.js'
-import { convertSessionSummaryV2 } from '../convert/session.js'
+import { convertSessionSummary, convertSessionSummaryV2 } from '../convert/session.js'
 import { filterGitTrackedDiffs } from '../git.js'
 import { randomUUID } from 'node:crypto'
 import { toPermissionV2 } from '../convert/permission.js'
@@ -44,6 +44,26 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
         ...(offset > 0 ? { previous: R.encodeSessionCursor(Math.max(0, offset - limit)) } : {}),
       },
     })
+  })
+
+  register('GET', '/experimental/session', 'json', async (req, ctx) => {
+    const search = req.query.get('search')
+    let all: SessionSummary[] = await R.cachedSessionList(ctx)
+    if (search !== null && search.length > 0) {
+      const results = await R.rpc(ctx, 'session.search', { query: search })
+      const ids = new Set(results.items.map((item) => String(item.sessionId)))
+      all = all.filter((item) => ids.has(String(item.sessionId)))
+    }
+    const filtered = R.filterSessionsByDirectory(all, req.query.get('directory') ?? undefined, ctx.cwd)
+    const limitRaw = req.query.get('limit')
+    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
+    const page = filtered.slice(0, limit)
+    R.recordSessionSummaries(ctx, page)
+    await R.warmListTitles(ctx, page)
+    return R.json(200, page.map((item) => convertSessionSummary(item, {
+      cwd: ctx.state.sessionDirectories.get(String(item.sessionId)) ?? ctx.cwd,
+      title: ctx.state.sessionTitleFor(String(item.sessionId)),
+    })))
   })
 
   register('POST', '/api/session', 'json', (req, ctx) => R.createSession(req, ctx, true))

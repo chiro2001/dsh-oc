@@ -62,6 +62,7 @@ for path in \
   "/config" \
   "/project/global/directories" \
   "/session?start=$(( $(date +%s%3N) - 2592000000 ))&path=.&scope=project" \
+  "/experimental/session" \
   "/api/location" \
   "/api/agent" \
   "/api/integration" \

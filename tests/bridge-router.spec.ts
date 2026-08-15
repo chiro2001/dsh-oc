@@ -871,6 +871,12 @@ describe('bridge router: session routes', () => {
     const noChildren = await request(server, 'GET', '/session/missing/children')
     expect(noChildren.status).toBe(200)
     expect(noChildren.body).toEqual([])
+    const experimental = await request(server, 'GET', '/experimental/session')
+    expect(experimental.status).toBe(200)
+    expect(experimental.body).toMatchObject([
+      { id: 'child-1', parentID: 'parent-1', metadata: { origin: 'subagent' } },
+      { id: 'parent-1' },
+    ])
   })
 
   it('gets a session and its messages for v1 and v2', async () => {
