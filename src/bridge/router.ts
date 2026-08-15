@@ -632,20 +632,43 @@ async function forkSession(
  * user-visible `(fork #N)` title from the source session and the number of
  * existing non-subagent forks before calling `session.rename`.
  */
+function forkChainBase(title: string): string {
+  let base = title
+  for (;;) {
+    const match = /^(.*?)\s+\(fork #\d+\)$/.exec(base)
+    if (!match?.[1]) return base
+    base = match[1]
+  }
+}
+
+function forkNumberInTitle(title: string): number {
+  let max = 0
+  for (const match of title.matchAll(/\(fork #(\d+)\)/g)) {
+    const value = Number(match[1])
+    if (Number.isFinite(value) && value > max) max = value
+  }
+  return max
+}
+
 async function forkTitleForSource(
   ctx: BridgeRouteContext,
   sourceId: string,
 ): Promise<string> {
   const list = await rpc(ctx, 'session.list', {})
   const source = list.items.find((item) => String(item.sessionId) === sourceId)
+  const sourceTitle = source === undefined ? 'Session' : sessionTitleFrom(source) || 'Session'
+  const base = forkChainBase(sourceTitle)
+  const sourceForkNumber = forkNumberInTitle(sourceTitle)
+  if (sourceForkNumber > 0) {
+    return `${base} (fork #${sourceForkNumber + 1})`
+  }
   const existingForks = list.items.filter(
     (item) =>
       String(item.sessionId) !== sourceId
       && String(item.parentSessionId) === sourceId
       && item.origin !== 'subagent',
   )
-  const sourceTitle = source === undefined ? undefined : sessionTitleFrom(source)
-  return `${sourceTitle || 'Session'} (fork #${existingForks.length + 1})`
+  return `${base} (fork #${existingForks.length + 1})`
 }
 
 async function forkFromSource(
