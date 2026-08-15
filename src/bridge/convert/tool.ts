@@ -29,6 +29,13 @@ export interface ToolPartOptions {
   time: number
 }
 
+/** Partial call info while tool-call delta chunks are still streaming. */
+export interface StreamingToolCall {
+  callId: string
+  name?: string
+  arguments?: string
+}
+
 /**
  * One file change translated from dsh's tool view/meta vocabulary into the
  * opencode SnapshotFileDiff shape.
@@ -403,6 +410,29 @@ function resultText(content: readonly ContentBlock[]): string {
   return textFromBlocks(blocks as readonly { type: string; text?: unknown }[])
 }
 
+/** Model-facing result text for one tool/result event (used by v2 events). */
+export function toolResultText(result: ToolResultInfo): string {
+  return resultText(result.content)
+}
+
+/**
+ * Structured v2 progress payload derived from the dsh result view: terminal
+ * cards carry output/exitCode/signal; everything else is folded into a
+ * generic `output` field when content exists.
+ */
+export function toolResultStructured(result: ToolResultInfo): Record<string, unknown> {
+  const present = resultView(result.view)
+  if (present?.card === 'terminal') {
+    return {
+      ...(present.output === undefined ? {} : { output: present.output }),
+      ...(present.exitCode === undefined ? {} : { exitCode: present.exitCode }),
+      ...(present.signal === undefined ? {} : { signal: present.signal }),
+    }
+  }
+  const text = resultText(result.content)
+  return text.length > 0 ? { output: text } : {}
+}
+
 /** A `tool/call` event alone becomes a pending ToolPart. */
 export function pendingToolPart(call: ToolCallInfo, options: ToolPartOptions): ToolPart {
   const input = safeJsonParse(call.arguments)
@@ -418,6 +448,31 @@ export function pendingToolPart(call: ToolCallInfo, options: ToolPartOptions): T
       status: 'pending',
       input: normalizedInput(call.name, input),
       raw: call.arguments,
+    },
+    metadata: { start: options.time },
+  }
+}
+
+/**
+ * A partially-streamed tool call becomes a pending ToolPart whose `raw`
+ * input grows with every tool-call delta. The TUI upserts by part id, so
+ * repeated updates progressively reveal the command/arguments.
+ */
+export function streamingToolPart(call: StreamingToolCall, options: ToolPartOptions): ToolPart {
+  const input = safeJsonParse(call.arguments ?? '')
+  const name = call.name ?? 'tool'
+  const tool = opencodeToolName(name, input)
+  return {
+    id: `tool:${call.callId}`,
+    sessionID: options.sessionID,
+    messageID: options.messageID,
+    type: 'tool',
+    callID: call.callId,
+    tool,
+    state: {
+      status: 'pending',
+      input: normalizedInput(name, input),
+      raw: call.arguments ?? '',
     },
     metadata: { start: options.time },
   }

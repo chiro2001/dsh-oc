@@ -24,10 +24,15 @@ import {
   completedToolPart,
   errorToolPart,
   fileChangesFromToolResult,
+  opencodeToolName,
   pendingToolPart,
+  streamingToolPart,
+  toolResultStructured,
+  toolResultText,
   type FileChange,
   type ToolCallInfo,
 } from './convert/tool.js'
+import { safeJsonParse } from './convert/common.js'
 import { convertGoalTodos } from './convert/goal.js'
 import { minimalSession } from './convert/session.js'
 import { filterGitTrackedDiffs } from './git.js'
@@ -55,6 +60,19 @@ export interface TranslateDeps {
   state: InteractionState
   defaultModel?: { providerID: string; modelID: string }
   log(message: string): void
+  /** Coalescing window for `tool-call-delta` events before flushing (ms). */
+  toolFlushMs?: number
+  /** Injectable timer used by the tool-input throttle. */
+  setTimeoutImpl?: (callback: () => void, ms: number) => TimerHandle
+  /** Injectable timer clearer used by the tool-input throttle. */
+  clearTimeoutImpl?: (handle: TimerHandle | undefined) => void
+  /** Called with events flushed asynchronously by the tool-input throttle. */
+  onFlush?: (events: BridgeGlobalEvent[]) => void
+}
+
+/** Structural timer handle so tests can inject a fake scheduler. */
+interface TimerHandle {
+  unref?(): unknown
 }
 
 /**
@@ -175,6 +193,19 @@ interface CompactionStreamState {
   ended: boolean
 }
 
+/** Accumulated streamed tool input for one `tool-call-delta` index. */
+interface ToolInputState {
+  key: string
+  callId: string
+  name: string
+  messageID: string
+  text: string
+  pendingDelta: string
+  lastTime: number
+  timer?: TimerHandle
+  ended: boolean
+}
+
 interface SessionStreamState {
   turnStartTime?: number
   lastUserMessageId?: string
@@ -183,6 +214,7 @@ interface SessionStreamState {
   finishReasons: Map<string, string>
   blocks: Map<string, StreamBlockState>
   compactions: Map<string, CompactionStreamState>
+  toolInputs: Map<string, ToolInputState>
 }
 
 function makeEvent(
@@ -320,8 +352,17 @@ export class MuxEventTranslator {
   private streams = new Map<string, SessionStreamState>()
   private sessionGoals = new Map<string, unknown>()
   private sessionTodos = new Map<string, unknown>()
+  private readonly flushMs: number
+  private readonly setTimer: (callback: () => void, ms: number) => TimerHandle
+  private readonly clearTimer: (handle: TimerHandle | undefined) => void
 
-  constructor(private deps: TranslateDeps) {}
+  constructor(private deps: TranslateDeps) {
+    this.flushMs = deps.toolFlushMs ?? 32
+    this.setTimer = deps.setTimeoutImpl ?? ((callback, ms) => setTimeout(callback, ms))
+    this.clearTimer = deps.clearTimeoutImpl ?? ((handle) => {
+      if (handle !== undefined) clearTimeout(handle as NodeJS.Timeout)
+    })
+  }
 
   private streamState(sessionId: string): SessionStreamState {
     let state = this.streams.get(sessionId)
@@ -332,6 +373,7 @@ export class MuxEventTranslator {
         finishReasons: new Map(),
         blocks: new Map(),
         compactions: new Map(),
+        toolInputs: new Map(),
       }
       this.streams.set(sessionId, state)
     }
@@ -350,6 +392,215 @@ export class MuxEventTranslator {
         todos: convertGoalTodos(this.sessionGoals.get(sessionId), this.sessionTodos.get(sessionId)),
       }, project),
     ]
+  }
+
+  private toolKey(turn: number, step: number, index: number): string {
+    return `${turn}:${step}:${index}`
+  }
+
+  private assistantMessageId(sessionId: string, turn: number, step: number): string {
+    return this.currentAssistant.get(sessionId)
+      ?? this.streamState(sessionId).provisionalMessageIds.get(`${turn}:${step}`)
+      ?? `assistant:${turn}:${step}`
+  }
+
+  private findToolInput(sessionId: string, callId: string): ToolInputState | undefined {
+    for (const state of this.streamState(sessionId).toolInputs.values()) {
+      if (state.callId === callId) return state
+    }
+    return undefined
+  }
+
+  /**
+   * Register a streamed tool input on its first `tool-call-delta` and emit the
+   * v2 `input.started` event plus a v1 running ToolPart placeholder.
+   */
+  private startToolInput(
+    sessionId: string,
+    turn: number,
+    step: number,
+    index: number,
+    chunk: { id: string; name?: string },
+    time: number,
+    directory: string,
+    project: string,
+  ): { state: ToolInputState; events: BridgeGlobalEvent[] } {
+    const key = this.toolKey(turn, step, index)
+    const existing = this.streamState(sessionId).toolInputs.get(key)
+    if (existing !== undefined) return { state: existing, events: [] }
+
+    const callId = String(chunk.id)
+    const messageID = this.assistantMessageId(sessionId, turn, step)
+    const state: ToolInputState = {
+      key,
+      callId,
+      name: chunk.name ?? '',
+      messageID,
+      text: '',
+      pendingDelta: '',
+      lastTime: time,
+      ended: false,
+    }
+    this.streamState(sessionId).toolInputs.set(key, state)
+    const events: BridgeGlobalEvent[] = [
+      makeEvent(directory, 'session.next.tool.input.started', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: messageID,
+        callID: callId,
+        name: state.name,
+      }, project),
+      makeEvent(directory, 'message.part.updated', {
+        sessionID: sessionId,
+        part: streamingToolPart(
+          { callId, name: state.name, arguments: '' },
+          { sessionID: sessionId, messageID, time },
+        ),
+        time,
+      }, project),
+    ]
+    return { state, events }
+  }
+
+  /** Coalesce deltas for one tool input into a single pending flush. */
+  private queueToolDelta(
+    sessionId: string,
+    state: ToolInputState,
+    delta: string,
+    time: number,
+    directory: string,
+    project: string,
+  ): void {
+    state.pendingDelta += delta
+    state.lastTime = time
+    if (state.timer !== undefined) return
+    state.timer = this.setTimer(() => {
+      state.timer = undefined
+      const events = this.flushToolDelta(sessionId, state, directory, project)
+      if (events.length > 0) this.deps.onFlush?.(events)
+    }, this.flushMs)
+  }
+
+  /** Flush one coalesced input delta as v2 delta + v1 running part update. */
+  private flushToolDelta(
+    sessionId: string,
+    state: ToolInputState,
+    directory: string,
+    project: string,
+  ): BridgeGlobalEvent[] {
+    if (state.timer !== undefined) {
+      this.clearTimer(state.timer)
+      state.timer = undefined
+    }
+    if (state.ended || state.pendingDelta.length === 0) return []
+    const delta = state.pendingDelta
+    state.pendingDelta = ''
+    return [
+      makeEvent(directory, 'session.next.tool.input.delta', {
+        timestamp: state.lastTime,
+        sessionID: sessionId,
+        assistantMessageID: state.messageID,
+        callID: state.callId,
+        delta,
+      }, project),
+      makeEvent(directory, 'message.part.updated', {
+        sessionID: sessionId,
+        part: streamingToolPart(
+          { callId: state.callId, name: state.name, arguments: state.text },
+          { sessionID: sessionId, messageID: state.messageID, time: state.lastTime },
+        ),
+        time: state.lastTime,
+      }, project),
+    ]
+  }
+
+  /**
+   * Finish a streamed tool input: flush remaining deltas, emit `input.ended`
+   * plus `called` with the full parsed input.
+   */
+  private endToolInput(
+    sessionId: string,
+    state: ToolInputState,
+    directory: string,
+    project: string,
+    time: number,
+  ): BridgeGlobalEvent[] {
+    const events = this.flushToolDelta(sessionId, state, directory, project)
+    if (state.ended) return events
+    state.ended = true
+    const input = safeJsonParse(state.text)
+    events.push(
+      makeEvent(directory, 'session.next.tool.input.ended', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: state.messageID,
+        callID: state.callId,
+        text: state.text,
+      }, project),
+      makeEvent(directory, 'session.next.tool.called', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: state.messageID,
+        callID: state.callId,
+        tool: opencodeToolName(state.name, input),
+        input,
+        provider: { executed: false },
+      }, project),
+    )
+    return events
+  }
+
+  /** Non-streamed fallback: emit started/ended/called in one batch. */
+  private completeToolInputImmediately(
+    sessionId: string,
+    call: ToolCallInfo,
+    messageID: string,
+    directory: string,
+    project: string,
+    time: number,
+  ): BridgeGlobalEvent[] {
+    const input = safeJsonParse(call.arguments)
+    return [
+      makeEvent(directory, 'session.next.tool.input.started', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: messageID,
+        callID: call.callId,
+        name: call.name,
+      }, project),
+      makeEvent(directory, 'session.next.tool.input.ended', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: messageID,
+        callID: call.callId,
+        text: call.arguments,
+      }, project),
+      makeEvent(directory, 'session.next.tool.called', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: messageID,
+        callID: call.callId,
+        tool: opencodeToolName(call.name, input),
+        input,
+        provider: { executed: false },
+      }, project),
+    ]
+  }
+
+  private clearToolTimers(sessionId: string): void {
+    for (const state of this.streamState(sessionId).toolInputs.values()) {
+      if (state.timer !== undefined) {
+        this.clearTimer(state.timer)
+        state.timer = undefined
+      }
+    }
+  }
+
+  /** Clear any pending throttle timers; safe to call when the SSE ends. */
+  dispose(): void {
+    for (const sessionId of [...this.streams.keys()]) {
+      this.clearToolTimers(sessionId)
+    }
   }
 
   /**
@@ -656,6 +907,23 @@ export class MuxEventTranslator {
             project,
           )
         }
+        if (chunk.type === 'tool-call-delta') {
+          const { state, events } = this.startToolInput(
+            sessionId,
+            event.data.turn,
+            event.data.step,
+            chunk.index,
+            { id: chunk.id, name: chunk.name },
+            event.time,
+            directory,
+            project,
+          )
+          if (state.name === '' && chunk.name !== undefined) state.name = chunk.name
+          state.text += chunk.argumentsDelta
+          state.lastTime = event.time
+          this.queueToolDelta(sessionId, state, chunk.argumentsDelta, event.time, directory, project)
+          return events
+        }
         return []
       }
       case 'text-chunks' as SessionEvent['type']:
@@ -709,6 +977,10 @@ export class MuxEventTranslator {
               name: block.name,
               arguments: block.arguments,
             })
+            const inputState = this.findToolInput(sessionId, String(block.id))
+            if (inputState !== undefined && !inputState.ended) {
+              events.push(...this.endToolInput(sessionId, inputState, directory, project, event.time))
+            }
           }
         }
         return events
@@ -719,6 +991,7 @@ export class MuxEventTranslator {
       case 'turn/end': {
         this.currentAssistant.delete(sessionId)
         this.pendingCalls.delete(sessionId)
+        this.clearToolTimers(sessionId)
         this.streams.delete(sessionId)
         return [
           makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'idle' } }, project),
@@ -756,7 +1029,12 @@ export class MuxEventTranslator {
         const messageID = this.currentAssistant.get(sessionId)
           ?? this.streamState(sessionId).provisionalMessageIds.get(`${data.turn}:${data.step}`)
           ?? `assistant:${data.turn}:${data.step}`
+        const inputState = this.findToolInput(sessionId, call.callId)
+        const inputEvents = inputState === undefined
+          ? this.completeToolInputImmediately(sessionId, call, messageID, directory, project, event.time)
+          : this.endToolInput(sessionId, inputState, directory, project, event.time)
         return [
+          ...inputEvents,
           makeEvent(directory, 'message.part.updated', {
             sessionID: sessionId,
             part: pendingToolPart(call, { sessionID: sessionId, messageID, time: event.time }),
@@ -776,6 +1054,10 @@ export class MuxEventTranslator {
         const messageID = this.currentAssistant.get(sessionId)
           ?? this.streamState(sessionId).provisionalMessageIds.get(`${data.turn}:${data.step}`)
           ?? `assistant:${data.turn}:${data.step}`
+        const inputState = this.findToolInput(sessionId, callId)
+        const inputEvents = inputState === undefined
+          ? this.completeToolInputImmediately(sessionId, call, messageID, directory, project, event.time)
+          : this.endToolInput(sessionId, inputState, directory, project, event.time)
         const resultInfo = {
           callId,
           content: data.message.content,
@@ -800,13 +1082,35 @@ export class MuxEventTranslator {
             time: event.time,
           }, project),
         ]
+        const output = toolResultText(resultInfo)
+        const tail = data.error === undefined
+          ? [makeEvent(directory, 'session.next.tool.success', {
+              timestamp: event.time,
+              sessionID: sessionId,
+              assistantMessageID: messageID,
+              callID: callId,
+              structured: toolResultStructured(resultInfo),
+              content: [{ type: 'text', text: output }],
+              provider: { executed: true },
+            }, project)]
+          : [makeEvent(directory, 'session.next.tool.failed', {
+              timestamp: event.time,
+              sessionID: sessionId,
+              assistantMessageID: messageID,
+              callID: callId,
+              error: {
+                code: data.error.code,
+                message: data.error.name,
+              },
+              provider: { executed: true },
+            }, project)]
         if (data.error === undefined) {
           const changes = fileChangesFromToolResult(call, resultInfo)
           if (changes.length > 0) {
             events.push(...fileChangeEvents(sessionId, messageID, changes, project, directory, event.time))
           }
         }
-        return events
+        return [...inputEvents, ...events, ...tail]
       }
       default: {
         const type = event.type as string

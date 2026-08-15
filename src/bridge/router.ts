@@ -1433,9 +1433,18 @@ export function createBridgeRouter(
     const client = hub.add(res)
     const controller = client.controller
     void (async () => {
+      let translator: MuxEventTranslator | undefined
       try {
         const defaultModel = await defaultModelRef(ctx)
-        const translator = new MuxEventTranslator({ cwd, state, defaultModel, log })
+        translator = new MuxEventTranslator({
+          cwd,
+          state,
+          defaultModel,
+          log,
+          onFlush: (events) => {
+            for (const event of events) hub.send(client, event)
+          },
+        })
         const stream = api.events.mux(
           { rpcId: randomUUID() as never, payload: {} },
           controller.signal,
@@ -1460,6 +1469,7 @@ export function createBridgeRouter(
         if (controller.signal.aborted) return
         log(`[bridge/sse] mux stream ended: ${error instanceof Error ? error.message : String(error)}`)
       } finally {
+        translator?.dispose()
         hub.remove(client)
       }
     })()

@@ -116,6 +116,7 @@ dsh --profile oc --dir ~/project --mini
 | 会话列表/新建/续聊/fork/compact、SSE 流式消息 | ✅ |
 | 模型目录、reasoning effort、agent preset 切换 | ✅ |
 | 工具卡片（bash/read/write/edit）、diff 与 Modified Files | ✅ |
+| 工具参数流式显示（v1 ToolPart + v2 tool input/lifecycle 事件） | ✅ |
 | 权限/提问流、子代理会话树 | ✅ |
 | Goal 创建/查看（sidebar 状态 + `/goal` 命令） | ✅ |
 | 自动更新关闭、二进制版本锁定 | ✅ |

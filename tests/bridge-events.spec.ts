@@ -65,8 +65,18 @@ function chunkRow(
   } as unknown as SessionEvent
 }
 
-function translator(state = new InteractionState(), logs: string[] = [], cwd = '/work') {
-  const instance = new MuxEventTranslator({ cwd, state, log: (message) => logs.push(message) })
+function translator(
+  state = new InteractionState(),
+  logs: string[] = [],
+  cwd = '/work',
+  options: {
+    toolFlushMs?: number
+    setTimeoutImpl?: (callback: () => void, ms: number) => { unref?(): unknown }
+    clearTimeoutImpl?: (handle: { unref?(): unknown } | undefined) => void
+    onFlush?: (events: BridgeGlobalEvent[]) => void
+  } = {},
+) {
+  const instance = new MuxEventTranslator({ cwd, state, log: (message) => logs.push(message), ...options })
   return {
     state,
     logs,
@@ -576,6 +586,220 @@ describe('bridge events: session event mapping', () => {
     if (second.state.status === 'completed') {
       expect(second.state.output).toBe('done')
     }
+  })
+
+  it('streams tool input deltas and emits the v2 tool lifecycle', () => {
+    const flushed: BridgeGlobalEvent[] = []
+    let timer: (() => void) | undefined
+    const { translate } = translator(new InteractionState(), [], '/work', {
+      toolFlushMs: 1000,
+      setTimeoutImpl: (callback): { unref?(): unknown } => {
+        timer = callback
+        return {}
+      },
+      clearTimeoutImpl: () => {
+        timer = undefined
+      },
+      onFlush: (events) => flushed.push(...events),
+    })
+
+    const started = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'tool-call-delta',
+            index: 0,
+            id: 'c1' as never,
+            name: 'bash',
+            argumentsDelta: '{"command":"echo ',
+          },
+        }, 2, 100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'tool-call-delta',
+            index: 0,
+            id: 'c1' as never,
+            argumentsDelta: 'hello"}',
+          },
+        }, 3, 110),
+      }),
+    ])
+    expect(started.map((event) => event.payload.type)).toEqual([
+      'session.next.tool.input.started',
+      'message.part.updated',
+    ])
+    expect(started[0]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      callID: 'c1',
+      name: 'bash',
+    })
+    expect(flushed).toEqual([])
+
+    timer?.()
+    expect(flushed.map((event) => event.payload.type)).toEqual([
+      'session.next.tool.input.delta',
+      'message.part.updated',
+    ])
+    expect(flushed[0]?.payload.properties).toMatchObject({
+      callID: 'c1',
+      delta: '{"command":"echo hello"}',
+    })
+
+    const done = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/call', {
+          turn: 1,
+          step: 1,
+          callId: 'c1' as never,
+          name: 'bash',
+          arguments: '{"command":"echo hello"}',
+        }, 4, 120),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/result', {
+          turn: 1,
+          step: 1,
+          message: {
+            id: 't1' as never,
+            role: 'user',
+            content: [{
+              type: 'tool-result',
+              toolCallId: 'c1' as never,
+              content: [{ type: 'text', text: 'hello' }],
+            }],
+            source: { kind: 'tool', callId: 'c1' as never },
+          },
+        }, 5, 150),
+      }),
+    ])
+    const types = done.map((event) => event.payload.type)
+    expect(types).toContain('session.next.tool.input.ended')
+    expect(types).toContain('session.next.tool.called')
+    expect(types).toContain('message.part.updated')
+    expect(types).toContain('session.next.tool.success')
+    expect(done.find((event) => event.payload.type === 'session.next.tool.called')?.payload.properties)
+      .toMatchObject({
+        callID: 'c1',
+        tool: 'bash',
+        input: { command: 'echo hello' },
+      })
+    expect(done.find((event) => event.payload.type === 'session.next.tool.success')?.payload.properties)
+      .toMatchObject({
+        callID: 'c1',
+        content: [{ type: 'text', text: 'hello' }],
+        provider: { executed: true },
+      })
+  })
+
+  it('coalesces bursts of deltas into one delta at tool/call and maps failures', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'tool-call-delta',
+            index: 0,
+            id: 'c2' as never,
+            name: 'bash',
+            argumentsDelta: '{"command":"',
+          },
+        }, 2, 100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'tool-call-delta',
+            index: 0,
+            id: 'c2' as never,
+            argumentsDelta: 'fail"}',
+          },
+        }, 3, 105),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/call', {
+          turn: 1,
+          step: 1,
+          callId: 'c2' as never,
+          name: 'bash',
+          arguments: '{"command":"fail"}',
+        }, 4, 110),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/result', {
+          turn: 1,
+          step: 1,
+          message: {
+            id: 't2' as never,
+            role: 'user',
+            content: [{
+              type: 'tool-result',
+              toolCallId: 'c2' as never,
+              content: [{ type: 'text', text: '' }],
+            }],
+            source: { kind: 'tool', callId: 'c2' as never },
+          },
+          error: { name: 'command exited 1', code: 'TOOL_EXIT_CODE' },
+        }, 5, 150),
+      }),
+    ])
+    const deltas = events.filter((event) => event.payload.type === 'session.next.tool.input.delta')
+    expect(deltas).toHaveLength(1)
+    expect(deltas[0]?.payload.properties).toMatchObject({ callID: 'c2', delta: '{"command":"fail"}' })
+    const failed = events.find((event) => event.payload.type === 'session.next.tool.failed')
+    expect(failed?.payload.properties).toMatchObject({
+      callID: 'c2',
+      error: { code: 'TOOL_EXIT_CODE', message: 'command exited 1' },
+    })
+  })
+
+  it('emits started/ended/called immediately for non-streamed tool calls', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/call', {
+          turn: 1,
+          step: 1,
+          callId: 'c3' as never,
+          name: 'read',
+          arguments: JSON.stringify({ file_path: '/tmp/a.txt' }),
+        }, 2, 100),
+      }),
+    ])
+    const types = events.map((event) => event.payload.type)
+    expect(types).toEqual([
+      'session.next.tool.input.started',
+      'session.next.tool.input.ended',
+      'session.next.tool.called',
+      'message.part.updated',
+    ])
   })
 
   it('emits snapshot/patch parts and session.diff after a file-changing tool', () => {

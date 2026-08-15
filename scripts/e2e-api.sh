@@ -374,6 +374,26 @@ wait_assistant "$BRIDGE/session/$APPR_SESSION/message" "mock response recovered"
 curl -s "$BRIDGE/permission" | jq -e 'length == 0' >/dev/null
 echo "  permission cleared after reply"
 
+echo "== streamed tool event assertions =="
+APPROVAL_SSE_DATA="$E2E_RUN/approval-sse-data.txt"
+deadline=$((SECONDS + 30))
+while (( SECONDS < deadline )); do
+  grep '^data: ' "$APPROVAL_SSE" | sed 's/^data: //' > "$APPROVAL_SSE_DATA"
+  if grep -q '"type":"session.next.tool.success"' "$APPROVAL_SSE_DATA"; then break; fi
+  sleep 1
+done
+for pattern in \
+  '"type":"session.next.tool.input.started"' \
+  '"type":"session.next.tool.input.delta"' \
+  '"type":"session.next.tool.called"' \
+  '"type":"session.next.tool.success"'; do
+  if ! grep -q "$pattern" "$APPROVAL_SSE_DATA"; then
+    echo "e2e: missing streamed tool event $pattern" >&2
+    exit 1
+  fi
+done
+echo "  session.next.tool.input.started/delta/called/success seen"
+
 kill "$APPROVAL_SSE_PID" 2>/dev/null || true
 wait "$APPROVAL_SSE_PID" 2>/dev/null || true
 

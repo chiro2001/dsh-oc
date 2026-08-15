@@ -8,7 +8,7 @@
 | 编号 | 需求 | 优先级 | 建议分支 | 状态 |
 |---|---|---|---|---|
 | N1 | 关闭 opencode 子进程自动更新/热更新 | P0 | `feat-no-autoupdate` | ✅ 已完成（2026-08-15） |
-| N2 | 流式 toolcall / progress | P0 | `feat-stream-tool` | 待开始 |
+| N2 | 流式 toolcall / progress | P0 | `feat-stream-tool` | ✅ 已完成（2026-08-15） |
 | N3 | Goal 功能完整支持 | P0 | `feat-goal` | ✅ 已完成（2026-08-15） |
 | N4 | 会话性能测试（临时 DB + 生成历史） | P1 | `feat-perf` | ✅ 已完成（2026-08-15） |
 | N5 | 协议自测 UT / 升级探针 | P1 | `feat-protocol-ut` | ✅ 已完成（2026-08-15） |
