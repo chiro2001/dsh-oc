@@ -19,6 +19,8 @@
 - `POST /session/{id}/init`：no-op 成功 `true`（dsh 会话创建即初始化）。
 - `GET /session/{id}/message/{messageID}`：单条消息查询（v1 转换复用，
   未找到返回 404）。
+- `POST /session/{id}/permissions/{permissionID}`：SDK v2 权限回复别名
+  （body 用 `response` 字段），映射到同一 `permissionReply`。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温

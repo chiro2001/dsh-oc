@@ -2,6 +2,7 @@
 import * as R from '../router.js'
 import { toPermissionRequest } from '../convert/permission.js'
 import { toQuestionRequest } from '../convert/question.js'
+import { badRequest } from '../errors.js'
 import type { RouteRegistrar } from '../routes.js'
 
 export function registerPermissionRoutes(register: RouteRegistrar): void {
@@ -13,6 +14,17 @@ export function registerPermissionRoutes(register: RouteRegistrar): void {
   register('POST', '/permission/:requestID/reply', 'json', async (req, ctx) => {
     const requestID = req.params.requestID as string
     await R.permissionReply(ctx, requestID, req.body)
+    return R.json(200, true)
+  })
+
+  // SDK v2 permission reply alias: /session/{id}/permissions/{permissionID}
+  // with the `response` field ("once" | "always" | "reject").
+  register('POST', '/session/:sessionID/permissions/:permissionID', 'json', async (req, ctx) => {
+    const permissionID = req.params.permissionID as string
+    const record = R.bodyAsRecord(req.body)
+    const response = typeof record.response === 'string' ? record.response : ''
+    if (response === '') throw badRequest('permission response requires a string response', { response })
+    await R.permissionReply(ctx, permissionID, { reply: response })
     return R.json(200, true)
   })
 

@@ -142,6 +142,7 @@ GET /api/integration?location[directory]=...
 | `GET /session/{id}/diff` | MAP/LATER | produced-files 投影或 `[]` |
 | `GET /permission` | MAP | pending approval map |
 | `POST /permission/{id}/reply` | MAP | `apiProxy.respond` |
+| `POST /session/{id}/permissions/{permissionID}` | MAP | SDK v2 权限回复别名（body `response`：once/always/reject），同 `permissionReply` |
 | `GET /question` | MAP | pending question map |
 | `POST /question/{id}/reply` | MAP | `apiProxy.respond` |
 | `POST /question/{id}/reject` | MAP | `apiProxy.respond` cancelled |

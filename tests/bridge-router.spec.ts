@@ -2350,6 +2350,29 @@ describe('bridge router: permission and question replies', () => {
     expect(responses[0]?.result).toMatchObject({ ok: true, value: { outcome: 'rejected' } })
   })
 
+  it('answers the SDK permission alias route with the response field', async () => {
+    const responses: ClientResponse[] = []
+    const base = fakeApi({ respond: async (message) => {
+      responses.push(message)
+      return { accepted: true }
+    } })
+    const { server, router } = await boot(base)
+    router.ctx.state.registerApproval({
+      opencodeId: 'p4',
+      rpcId: 'rpc-p4',
+      sessionId: 's1',
+      approvalId: 'a4',
+      toolName: 'bash',
+    })
+    const replied = await request(server, 'POST', '/session/s1/permissions/p4', { response: 'always' })
+    expect(replied.status).toBe(200)
+    expect(replied.body).toBe(true)
+    expect(responses[0]?.result).toMatchObject({ ok: true, value: { outcome: 'allowed-once' } })
+    const saved = await request(server, 'GET', '/api/permission/saved')
+    expect((saved.body as { data: Array<{ id: string; sessionID: string }> }).data)
+      .toMatchObject([{ id: 'bash', sessionID: 's1' }])
+  })
+
   it('replies and rejects questions on v1 and v2', async () => {
     const responses: ClientResponse[] = []
     const base = fakeApi({ respond: async (message) => {
