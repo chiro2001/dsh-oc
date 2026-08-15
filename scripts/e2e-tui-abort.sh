@@ -37,7 +37,7 @@ const server = await startMockLlmServer({
   host: "127.0.0.1",
   port: 0,
   sequence: ["partial_disconnect"],
-  repeatLast: false,
+  repeatLast: true,
   successText: "mock response recovered",
   chunkDelayMs: 100,
   chunkSize: 1,
@@ -159,10 +159,26 @@ if [[ -z "$REACHED" ]]; then
   echo "e2e: mini TUI did not render" >&2
   exit 1
 fi
+SSE_PID=""
+curl -sN "$E2E_BRIDGE_URL/global/event" > "$E2E_RUN_DIR/mini-sse.log" 2>/dev/null &
+SSE_PID=$!
 tmux send-keys -t "$E2E_TUI_SESSION" 'mini interrupt e2e' Enter
-sleep 3
+deadline=$((SECONDS + 25))
+while (( SECONDS < deadline )); do
+  if rg -q 'message.part.delta' "$E2E_RUN_DIR/mini-sse.log" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if ! rg -q 'message.part.delta' "$E2E_RUN_DIR/mini-sse.log" 2>/dev/null; then
+  echo "e2e: mini stream did not start before Esc" >&2
+  kill "$SSE_PID" 2>/dev/null || true
+  exit 1
+fi
+sleep 1
 tmux send-keys -t "$E2E_TUI_SESSION" Escape
 sleep 5
+kill "$SSE_PID" 2>/dev/null || true
 MINI_LINES="$(wc -l < "$MOCK_ERR")"
 if (( MINI_LINES <= BEFORE_LINES )); then
   echo "e2e: mini Esc did not close the mock stream" >&2
@@ -170,8 +186,8 @@ if (( MINI_LINES <= BEFORE_LINES )); then
   exit 1
 fi
 MINI_CHUNKS="$(tail -1 "$MOCK_ERR" | sed -E 's/.* ([0-9]+)$/\1/')"
-if [[ "${MINI_CHUNKS:-999}" -ge 200 ]]; then
-  echo "e2e: mini stream ran too long (chunks=$MINI_CHUNKS)" >&2
+if [[ -z "${MINI_CHUNKS:-}" || "${MINI_CHUNKS:-0}" -eq 0 || "${MINI_CHUNKS:-999}" -ge 200 ]]; then
+  echo "e2e: mini interrupt chunk count out of range (chunks=$MINI_CHUNKS)" >&2
   exit 1
 fi
 echo "  mini Esc closed the stream after $MINI_CHUNKS chunks"

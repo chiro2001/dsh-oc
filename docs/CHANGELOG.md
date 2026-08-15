@@ -33,6 +33,8 @@
   （默认 dry-run，`--apply` 本地删除，`--remote` 同步删除远端）。
 - `pnpm run e2e` / `pnpm run e2e:api`：一键跑全量或 API 子集 e2e。
 - `scripts/perf.mjs` 新增 `measurements.titleCoverage`：量化列表真实标题覆盖率。
+- `e2e-tui-abort.sh`：mini 分支改为等 SSE 出现真实流式增量后再按 Esc，断言确实
+  打断进行中的流（长 mock 开启 `repeatLast`，修复此前第二次请求被 500 拒绝的假通过）。
 
 ## [0.1.0-rc.1] - 2026-08-15
 
