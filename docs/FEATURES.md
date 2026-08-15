@@ -137,7 +137,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`abc8b70`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`160b07f`（2026-08-15）。
 
 ### 路由注册表
 
@@ -220,7 +220,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 35 | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 61 | 7b7fa5b feat(bridge): support DSH_OC_E2E_FAKE_SKILLS test seam |
+| `tests/bridge-router.spec.ts` | 62 | 7b7fa5b feat(bridge): support DSH_OC_E2E_FAKE_SKILLS test seam |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -274,7 +274,7 @@
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
 | `scripts/e2e-tui-boot.sh` | 776d145 test(e2e): remove remaining machine-specific absolute paths |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
-| `scripts/e2e-tui-command.sh` | d57039e test(e2e): verify /help slash command inside the real TUI pane |
+| `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
 | `scripts/e2e-tui-continue.sh` | 9cf9fb8 test(e2e): cover attach --continue resuming the newest session |
 | `scripts/e2e-tui-dir.sh` | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
@@ -296,6 +296,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

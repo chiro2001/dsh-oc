@@ -255,6 +255,19 @@ describe('bridge router: session routes', () => {
     expect((all.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s1', 's2'])
   })
 
+  it('resolves relative directory queries against the bridge cwd', async () => {
+    const base = fakeApi()
+    const sub = { ...item, sessionId: 's-sub' as never, cwd: '/work/sub' }
+    const api = {
+      ...base,
+      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, sub] }) },
+    }
+    const { server } = await boot(api, '/work')
+    const result = await request(server, 'GET', '/session?directory=sub')
+    expect(result.status).toBe(200)
+    expect((result.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s-sub'])
+  })
+
   it('caches the session list within TTL and invalidates on rename', async () => {
     const calls: string[] = []
     const base = fakeApi()

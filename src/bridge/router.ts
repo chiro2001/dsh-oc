@@ -214,12 +214,13 @@ function recordSessionSummaries(
 function filterSessionsByDirectory(
   items: readonly SessionSummary[],
   directory: string | undefined,
+  base: string,
 ): SessionSummary[] {
   if (directory === undefined || directory.length === 0) return [...items]
-  const normalized = resolve(directory)
+  const normalized = resolve(base, directory)
   return items.filter((item) => {
     if (typeof item.cwd !== 'string') return true
-    return resolve(item.cwd) === normalized
+    return resolve(base, item.cwd) === normalized
   })
 }
 
@@ -354,8 +355,8 @@ async function sessionForDirectory(
 ): Promise<SessionSummary | undefined> {
   const items = await cachedSessionList(ctx)
   if (directory !== undefined && directory.length > 0) {
-    const normalized = resolve(directory)
-    return items.find((item) => typeof item.cwd === 'string' && resolve(item.cwd) === normalized)
+    const normalized = resolve(ctx.cwd, directory)
+    return items.find((item) => typeof item.cwd === 'string' && resolve(ctx.cwd, item.cwd) === normalized)
   }
   return items[0]
 }
@@ -1500,7 +1501,7 @@ export function createBridgeRouter(
   // ---- v1 sessions ----
   register('GET', '/session', 'json', async (_req, ctx) => {
     const list = await cachedSessionList(ctx)
-    const items = filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined)
+    const items = filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined, cwd)
     recordSessionSummaries(ctx, items)
     return json(200, items.map((item) => convertSessionSummary(item, {
       cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
@@ -1510,7 +1511,7 @@ export function createBridgeRouter(
   register('GET', '/session/status', 'json', async (_req, ctx) => {
     const list = await cachedSessionList(ctx)
     const status: Record<string, SessionStatus> = {}
-    for (const item of filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined)) {
+    for (const item of filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined, cwd)) {
       status[String(item.sessionId)] = item.running ? { type: 'busy' } : { type: 'idle' }
     }
     return json(200, status)
@@ -1703,7 +1704,7 @@ export function createBridgeRouter(
     } else {
       all = await cachedSessionList(ctx)
     }
-    const filtered = filterSessionsByDirectory(all, req.query.get('directory') ?? undefined)
+    const filtered = filterSessionsByDirectory(all, req.query.get('directory') ?? undefined, cwd)
     const limitRaw = req.query.get('limit')
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
     const cursorRaw = req.query.get('cursor')
