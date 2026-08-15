@@ -115,6 +115,7 @@ export function minimalSession(
     createdAt?: number
     parentID?: string
     metadata?: Record<string, unknown>
+    agent?: string
   },
 ): Session {
   const directory = options.cwd
@@ -125,7 +126,7 @@ export function minimalSession(
     projectID: projectIdFor(directory),
     directory,
     title: options.title ?? '',
-    agent: DEFAULT_AGENT,
+    agent: options.agent ?? DEFAULT_AGENT,
     version: OPENCODE_VERSION,
     ...(options.parentID === undefined ? {} : { parentID: options.parentID }),
     ...(options.metadata === undefined ? {} : { metadata: options.metadata }),

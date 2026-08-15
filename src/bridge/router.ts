@@ -59,7 +59,7 @@ import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertGoalTodos } from './convert/goal.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
-import { agentErrorEvent, commandResultEvents, convertProducedFiles, toSnapshotFileDiffs } from './events.js'
+import { agentErrorEvent, commandResultEvents, convertProducedFiles, makeEvent, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { ocHelp } from '../help.js'
@@ -940,6 +940,26 @@ function broadcastCommandResult(
   ))
 }
 
+/** Push a `session.updated` carrying the new agent so the TUI label refreshes. */
+function broadcastSessionAgent(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  agent: string,
+): void {
+  const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
+  const project = projectIdFor(directory)
+  ctx.hub.broadcast([
+    makeEvent(directory, 'session.updated', {
+      sessionID: sessionId,
+      info: minimalSession(sessionId, {
+        cwd: directory,
+        title: ctx.state.sessionTitleFor(sessionId),
+        agent,
+      }),
+    }, project),
+  ])
+}
+
 /** Run a `/preset` list/switch with visible TUI progress and result. */
 async function runPresetCommand(
   ctx: BridgeRouteContext,
@@ -948,6 +968,9 @@ async function runPresetCommand(
 ): Promise<PresetCommandOutcome> {
   broadcastCommandResult(ctx, sessionId, 'Running /preset…', 'busy')
   const outcome = await presetCommandOutcome(ctx, sessionId, argument)
+  if (outcome.kind === 'success' && argument.trim() !== '') {
+    broadcastSessionAgent(ctx, sessionId, argument.trim())
+  }
   ctx.state.invalidateSession(sessionId)
   broadcastCommandResult(ctx, sessionId, outcome.text, 'idle')
   return outcome
@@ -1741,6 +1764,7 @@ export function createBridgeRouter(
     if (agent !== undefined && agent !== DEFAULT_AGENT_NAME) {
       try {
         await switchAgentPreset(ctx, id, agent)
+        broadcastSessionAgent(ctx, id, agent)
       } catch (error) {
         ctx.log(`[bridge] prompt_async agent switch failed: ${error instanceof Error ? error.message : String(error)}`)
       }
@@ -1940,6 +1964,7 @@ export function createBridgeRouter(
       : ''
     if (agent === '') throw badRequest('agent switch requires a string agent')
     await switchAgentPreset(ctx, id, agent)
+    broadcastSessionAgent(ctx, id, agent)
     ctx.state.invalidateSession(id)
     return json(204)
   })

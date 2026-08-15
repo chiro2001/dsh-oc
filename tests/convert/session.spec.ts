@@ -119,6 +119,7 @@ describe('convert/session', () => {
       createdAt: 42,
       parentID: 's-parent',
       metadata: { origin: 'subagent' },
+      agent: 'standard',
     })
     expect(session.id).toBe('s-9')
     expect(session.directory).toBe('/work')
@@ -126,5 +127,6 @@ describe('convert/session', () => {
     expect(session.time.created).toBe(42)
     expect(session.parentID).toBe('s-parent')
     expect(session.metadata).toEqual({ origin: 'subagent' })
+    expect(session.agent).toBe('standard')
   })
 })

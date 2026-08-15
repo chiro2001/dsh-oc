@@ -146,7 +146,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`21abfbb`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`a6de6ce`（2026-08-15）。
 
 ### 路由注册表
 
@@ -228,9 +228,9 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 36 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `tests/bridge-events.spec.ts` | 36 | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 75 | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
+| `tests/bridge-router.spec.ts` | 76 | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -262,14 +262,14 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `src/bridge/events.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | 21abfbb perf(bridge): background-warm more session titles on large lists |
+| `src/bridge/router.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `src/bridge/state.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
+| `src/bridge/state.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/help.ts` | e256572 feat(bridge): session-scoped always permission memory |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
@@ -279,11 +279,11 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `scripts/check-all.sh` | de6e601 test(e2e): verify --dir scopes new sessions and filters the list |
+| `scripts/check-all.sh` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `scripts/cleanup-merged-branches.sh` | f021570 docs(contrib): add contribution guide, issue/PR templates and branch cleanup tooling |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
-| `scripts/e2e-tui-abort.sh` | — |
+| `scripts/e2e-tui-abort.sh` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
@@ -309,6 +309,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

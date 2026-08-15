@@ -83,7 +83,7 @@ REACHED=""
 deadline=$((SECONDS + 45))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-ready.txt"
-  if grep -qaE 'Ask anything|OpenCode|opencode|1.18.18' "$E2E_RUN_DIR/tui-ready.txt"; then
+  if grep -qa 'Ask anything' "$E2E_RUN_DIR/tui-ready.txt"; then
     REACHED="1"
     break
   fi
@@ -101,6 +101,19 @@ fi
 echo "  TUI ready"
 
 tmux send-keys -t "$E2E_TUI_SESSION" 'interrupt e2e test' Enter
+sleep 1
+SESSION_ID=""
+deadline=$((SECONDS + 30))
+while (( SECONDS < deadline )); do
+  SESSION_ID="$(curl -s "$E2E_BRIDGE_URL/session" | jq -r '.[0].id // empty' 2>/dev/null || true)"
+  if [[ -n "$SESSION_ID" ]]; then break; fi
+  sleep 1
+done
+if [[ -z "$SESSION_ID" ]]; then
+  echo "e2e: prompt did not create a session" >&2
+  exit 1
+fi
+echo "  session $SESSION_ID"
 sleep 3
 
 echo "== press Esc twice to interrupt =="
@@ -136,7 +149,7 @@ REACHED=""
 deadline=$((SECONDS + 45))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-mini-ready.txt"
-  if grep -qaE 'Ask anything|OpenCode|opencode|1.18.18' "$E2E_RUN_DIR/tui-mini-ready.txt"; then
+  if grep -qa 'Ask anything' "$E2E_RUN_DIR/tui-mini-ready.txt"; then
     REACHED="1"
     break
   fi

@@ -1921,6 +1921,45 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     expect(createCalls.at(-1)?.agentPreset).toBe('standard')
   })
 
+  it('broadcasts the new agent through session.updated after /preset switch', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => okRpc({ agentPreset: 'standard' }),
+      },
+    }
+    const { server, router } = await boot(api)
+    const hub = router.ctx.hub
+    const originalBroadcast = hub.broadcast.bind(hub)
+    const broadcasts: Array<{ type?: string; agent?: string }> = []
+    ;(hub as unknown as {
+      broadcast(events: Array<{ payload: { type?: string; properties?: { info?: { agent?: string } } } }>): void
+    }).broadcast = (events) => {
+      for (const event of events) {
+        broadcasts.push({
+          type: event.payload.type,
+          agent: event.payload.properties?.info?.agent,
+        })
+      }
+      originalBroadcast(events as never)
+    }
+    const switched = await request(server, 'POST', '/session/s1/command', {
+      command: 'preset',
+      arguments: 'standard',
+    })
+    expect(switched.status).toBe(200)
+    expect(broadcasts).toContainEqual({ type: 'session.updated', agent: 'standard' })
+  })
+
   it('captures /preset from prompt routes without triggering a model turn', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []
