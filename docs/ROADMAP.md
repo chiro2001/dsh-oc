@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | N1 | 关闭 opencode 子进程自动更新/热更新 | P0 | `feat-no-autoupdate` | ✅ 已完成（2026-08-15） |
 | N2 | 流式 toolcall / progress | P0 | `feat-stream-tool` | 待开始 |
-| N3 | Goal 功能完整支持 | P0 | `feat-goal` | 待开始 |
+| N3 | Goal 功能完整支持 | P0 | `feat-goal` | ✅ 已完成（2026-08-15） |
 | N4 | 会话性能测试（临时 DB + 生成历史） | P1 | `feat-perf` | 待开始 |
 | N5 | 协议自测 UT / 升级探针 | P1 | `feat-protocol-ut` | ✅ 已完成（2026-08-15） |
 | N6 | README 与 `/help` 展示能力矩阵 | P1 | `feat-capability-help` | ✅ 已完成（2026-08-15） |
@@ -99,6 +99,19 @@ Goal 是 dsh 高频功能，opencode TUI 没有原生 goal UI；dsh-oc 需要把
    - `GET /session/:id/message` 中 goal 事件映射为系统消息/压缩摘要。
 4. 与 plan mode / todo 协作：
    - 当前 todo projection 继续工作，goal 不覆盖 todo。
+
+### 实现状态（2026-08-15）
+
+- `goal/change` 与 `goal` 投影 → 合并 `todo.updated`（goal 为首条 sidebar todo，
+  `active → in_progress`、`paused/blocked → pending`、`complete → completed`）。
+- `GET /session/:id/todo` 优先返回 goal（投影或历史事件折叠），dsh todos 保留在后。
+- `GET /command` / `GET /api/command` 注册 `/goal`；`POST /session/:id/command` 与
+  prompt 路由捕获 `/goal [objective|clear|edit ...|pause|resume]`，经 dsh command
+  registry 执行并广播 busy/idle 结果。
+- v1/v2 历史消息把 `goal/change` 折叠为 assistant 文本 note。
+- 验收：`tests/convert/goal.spec.ts`、`tests/bridge-events.spec.ts`、
+  `tests/bridge-router.spec.ts`、`scripts/e2e-api-goal.sh`、
+  `scripts/e2e-tui-goal.sh`（真实 TUI sidebar 可见 goal）全部通过。
 
 ### 验收
 - 单测：goal 事件 → todo/session 消息。

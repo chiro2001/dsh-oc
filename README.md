@@ -100,6 +100,7 @@ dsh --profile oc --dir ~/project --mini
 | 模型目录、reasoning effort、agent preset 切换 | ✅ |
 | 工具卡片（bash/read/write/edit）、diff 与 Modified Files | ✅ |
 | 权限/提问流、子代理会话树 | ✅ |
+| Goal 创建/查看（sidebar 状态 + `/goal` 命令） | ✅ |
 | 自动更新关闭、二进制版本锁定 | ✅ |
 | DSH OC 品牌启动 logo（替换 OpenCode 字符画） | ✅ |
 | 文本/data image 附件 | 🟡 |

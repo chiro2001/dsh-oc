@@ -123,19 +123,20 @@ GET /api/integration?location[directory]=...
 | `GET /provider` | MAP | `apiProxy.llm.models` |
 | `GET /provider/auth` | STUB | `{}` |
 | `GET /agent` | STUB/MAP | 首版 `[]` |
-| `GET /command` | STUB/LATER | 首版 `[]` |
+| `GET /command` | MAP | 注册 `/preset`、`/goal`（TUI slash 弹层） |
 | `GET /session` | MAP | `apiProxy.sessions.list` |
 | `GET /session/status` | MAP | list 的 running 状态 |
 | `POST /session` | MAP | `apiProxy.sessions.create` |
 | `POST /session/{id}/fork` | MAP | `apiProxy.sessions.fork`（opencode `messageID` 换算为 dsh `atSeq`） |
 | `POST /session/{id}/summarize` | MAP | dsh `/compact` command registry（TUI `/compact` 实际调用此路由） |
 | `POST /session/{id}/compact` | MAP | 同上（v1 兼容别名） |
+| `POST /session/{id}/command` | MAP | `/preset`、`/goal`（dsh command registry） |
 | `GET /session/{id}` | MAP | history + summary |
 | `PATCH /session/{id}` | MAP | `apiProxy.sessions.rename` |
 | `GET /session/{id}/message` | MAP | `apiProxy.sessions.history` |
 | `POST /session/{id}/prompt` | MAP | `apiProxy.sessions.prompt` |
 | `POST /session/{id}/abort` | MAP | `apiProxy.sessions.cancel` |
-| `GET /session/{id}/todo` | MAP | dsh `todos` projection |
+| `GET /session/{id}/todo` | MAP | dsh `todos` projection + `goal` 投影/事件（goal 为首条） |
 | `GET /session/{id}/diff` | MAP/LATER | produced-files 投影或 `[]` |
 | `GET /permission` | MAP | pending approval map |
 | `POST /permission/{id}/reply` | MAP | `apiProxy.respond` |
@@ -164,12 +165,13 @@ GET /api/integration?location[directory]=...
 | `GET /api/model` | MAP | `apiProxy.llm.models` |
 | `GET /api/provider` | MAP | `apiProxy.llm.models/providers` |
 | `GET /api/reference` | STUB | `[]` |
-| `GET /api/command` | STUB/LATER | `[]` |
+| `GET /api/command` | MAP | 注册 `/preset`、`/goal` |
 | `GET /api/skill` | STUB/LATER | `[]` |
 | `GET /api/session` | MAP | 同 v1 |
 | `POST /api/session` | MAP | 同 v1 |
 | `POST /api/session/{id}/fork` | MAP | 同 v1 fork，返回 v2 信封 |
 | `POST /api/session/{id}/compact` | MAP | 同 v1 summarize/compact（SDK v2 路由，204） |
+| `POST /session/{id}/command` | MAP | `/preset`、`/goal` 经 dsh command registry 执行并广播 busy/idle |
 | `GET /api/session/{id}` | MAP | 同 v1 |
 | `GET /api/session/{id}/message` | MAP | 同 v1 |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
@@ -197,6 +199,7 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 | `session/event: tool/call` | `message.part.updated`（ToolPart pending） |
 | `session/event: tool/result` | `message.part.updated`（ToolPart completed/error） |
 | `session/event: todo/write` | `todo.updated` |
+| `session/event: goal/change` | `todo.updated`（合并 goal 为首条） |
 | `session/event: approval/asked` | `permission.asked` |
 | `session/event: approval/decided` | `permission.replied` |
 | `approval/requested` | `permission.asked` |
@@ -204,6 +207,7 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 | `question/requested` | `question.asked` |
 | `question/resolved` | `question.replied` / `question.rejected` |
 | `session/projection: todos` | `todo.updated` |
+| `session/projection: goal` | `todo.updated`（合并 goal 为首条） |
 | `session/projection: produced-files` | `session.diff` |
 | `session/queue`, `session/jobs` | P1 忽略；P3 再评估 |
 
@@ -326,6 +330,8 @@ dsh 0.1.0-rc.6 + opencode 1.18.18，TUI 与 bridge 均实际跑通）：
 | `GET /provider` | MAP | 返回 `ProviderListResponse` 对象 `{ all, default, connected }`（协议对象，非裸数组） |
 | `GET /api/model` | MAP | 返回 `{ location, data: ModelV2Info[] }`（协议对象，非裸数组） |
 | `GET /permission` + `POST /permission/{id}/reply` | MAP | 需保持至少一个 SSE 连接（与真实 TUI 一致）才能收到 mux approval 帧 |
+| `GET /session/{id}/todo` + `goal/change` | MAP | goal 与 todos 合并（goal 首条）；`scripts/e2e-api-goal.sh` |
+| `POST /session/{id}/command` `/goal` | MAP | 创建/查看 goal；真实 TUI sidebar 可见（`scripts/e2e-tui-goal.sh`） |
 | `DSH_PERMISSION_MODE=ask` | 不支持 | dsh 只接受 `read-only`/`workspace-write`/`danger-full-access`；approval=ask 用 `workspace-write` |
 | oc profile 宿主行 | 已并入 bundle patch | `storage`/`storage-json`/`storage-domain`/`webserver` 已由 `cordis.patch.yml` 挂载；`dsh --profile oc` 直接启动（无需宿主 overlay） |
 | `--print-logs` | 透传 | oc-tui 已把 `--print-logs` 传给 `opencode attach`（opencode 顶层全局选项，设置 `OPENCODE_PRINT_LOGS=1`） |

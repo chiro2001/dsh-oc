@@ -35,6 +35,7 @@ import {
   type ToolCallInfo,
   type ToolResultInfo,
 } from './tool.js'
+import { goalChangeText } from './goal.js'
 
 export interface MessageConvertOptions {
   sessionId: string
@@ -586,8 +587,23 @@ export function convertMessagesV1(
         break
       }
       default:
-        // Log-only events (turn/start, request/header, todo/write, ...) are
-        // not part of the message surface.
+        // Log-only events (turn/start, request/header, ...) are not part of
+        // the message surface; goal changes become concise assistant notes.
+        if (event.type === 'goal/change' as SessionEvent['type']) {
+          const text = goalChangeText((event as unknown as { data: unknown }).data)
+          if (text !== undefined) {
+            const id = `goal:${event.seq}`
+            entries.push({
+              info: partialAssistantMessageInfo(
+                id,
+                event.time,
+                lastMessageId || `pending:${opts.sessionId}:user`,
+                opts,
+              ),
+              parts: [textPart(`${id}:note`, id, text, { start: event.time, end: event.time }, opts)],
+            })
+          }
+        }
         break
     }
   }
@@ -978,6 +994,26 @@ export function convertMessagesV2(
         break
       }
       default:
+        if (event.type === 'goal/change' as SessionEvent['type']) {
+          const text = goalChangeText((event as unknown as { data: unknown }).data)
+          if (text !== undefined) {
+            const id = `goal:${event.seq}`
+            const model = opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+            messages.push({
+              id,
+              time: { created: event.time, completed: event.time },
+              type: 'assistant',
+              agent: DEFAULT_AGENT,
+              model: {
+                id: model.modelID,
+                providerID: model.providerID,
+              },
+              content: [{ type: 'text', id: `${id}:note`, text }],
+              cost: 0,
+              tokens: ZERO_TOKENS,
+            })
+          }
+        }
         break
     }
   }

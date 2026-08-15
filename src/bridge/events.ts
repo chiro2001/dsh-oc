@@ -20,7 +20,6 @@ import {
 } from './convert/common.js'
 import { toPermissionRequest } from './convert/permission.js'
 import { toQuestionRequest } from './convert/question.js'
-import { convertTodos } from './convert/todo.js'
 import {
   completedToolPart,
   errorToolPart,
@@ -29,6 +28,7 @@ import {
   type FileChange,
   type ToolCallInfo,
 } from './convert/tool.js'
+import { convertGoalTodos } from './convert/goal.js'
 import { minimalSession } from './convert/session.js'
 import { filterGitTrackedDiffs } from './git.js'
 import type { InteractionState, NewApprovalEntry, NewQuestionEntry } from './state.js'
@@ -318,6 +318,8 @@ export class MuxEventTranslator {
   private currentAssistant = new Map<string, string>()
   private pendingCalls = new Map<string, Map<string, ToolCallInfo>>()
   private streams = new Map<string, SessionStreamState>()
+  private sessionGoals = new Map<string, unknown>()
+  private sessionTodos = new Map<string, unknown>()
 
   constructor(private deps: TranslateDeps) {}
 
@@ -334,6 +336,20 @@ export class MuxEventTranslator {
       this.streams.set(sessionId, state)
     }
     return state
+  }
+
+  /** Emit the merged goal + todo list for one session. */
+  private todoUpdateEvents(
+    sessionId: string,
+    directory: string,
+    project: string,
+  ): BridgeGlobalEvent[] {
+    return [
+      makeEvent(directory, 'todo.updated', {
+        sessionID: sessionId,
+        todos: convertGoalTodos(this.sessionGoals.get(sessionId), this.sessionTodos.get(sessionId)),
+      }, project),
+    ]
   }
 
   /**
@@ -518,7 +534,12 @@ export class MuxEventTranslator {
     const directory = directoryFor(sessionId, this.deps)
     const project = projectIdFor(directory)
     if (key === 'todos') {
-      return [makeEvent(directory, 'todo.updated', { sessionID: sessionId, todos: convertTodos(value) }, project)]
+      this.sessionTodos.set(sessionId, value)
+      return this.todoUpdateEvents(sessionId, directory, project)
+    }
+    if (key === 'goal') {
+      this.sessionGoals.set(sessionId, value)
+      return this.todoUpdateEvents(sessionId, directory, project)
     }
     if (key === 'produced-files') {
       const diff = filterGitTrackedDiffs(directory, convertProducedFiles(value))
@@ -705,7 +726,19 @@ export class MuxEventTranslator {
         ]
       }
       case 'todo/write':
-        return [makeEvent(directory, 'todo.updated', { sessionID: sessionId, todos: convertTodos(event.data.todos) }, project)]
+        this.sessionTodos.set(sessionId, event.data.todos)
+        return this.todoUpdateEvents(sessionId, directory, project)
+      case 'goal/change' as SessionEvent['type']: {
+        const data = (event as unknown as { data: { goal?: unknown; cleared?: unknown } }).data
+        if (data?.goal !== undefined) {
+          this.sessionGoals.set(sessionId, { goal: data.goal })
+        } else if (data?.cleared !== undefined) {
+          this.sessionGoals.set(sessionId, null)
+        } else {
+          return []
+        }
+        return this.todoUpdateEvents(sessionId, directory, project)
+      }
       case 'tool/call': {
         const data = event.data
         const call: ToolCallInfo = {

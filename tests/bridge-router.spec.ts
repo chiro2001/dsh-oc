@@ -807,10 +807,16 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     ])
 
     const v1Commands = await request(server, 'GET', '/command')
-    expect(v1Commands.body).toMatchObject([{ name: 'preset', template: 'preset' }])
+    expect(v1Commands.body).toMatchObject([
+      { name: 'preset', template: 'preset' },
+      { name: 'goal', template: 'goal' },
+    ])
     const v2Commands = await request(server, 'GET', '/api/command')
     expect(v2Commands.body).toMatchObject({
-      data: [{ name: 'preset', template: 'preset' }],
+      data: [
+        { name: 'preset', template: 'preset' },
+        { name: 'goal', template: 'goal' },
+      ],
     })
   })
 
@@ -1337,5 +1343,198 @@ describe('bridge router: OPTIONS and CORS', () => {
     const response = await fetch(server.url + '/session', { method: 'OPTIONS' })
     expect(response.status).toBe(204)
     expect(response.headers.get('access-control-allow-origin')).toBe('*')
+  })
+})
+
+describe('bridge router: /goal command and goal todo merge', () => {
+  const activeGoal = {
+    goal: {
+      id: 'g1',
+      revision: 1,
+      objective: 'ship goal support',
+      phase: 'active',
+      maxGoalRounds: 5,
+    },
+    roundsStarted: 0,
+    createdAt: 100,
+    updatedAt: 100,
+  }
+
+  function commandApi(lines: string[], texts: Record<string, string> = {}) {
+    const base = fakeApi()
+    return {
+      ...base,
+      agents: {
+        get: () => ({ id: 's1' }),
+      },
+      commands: {
+        execute: async (_agent: unknown, line: string) => {
+          lines.push(line)
+          const text = texts[line]
+            ?? (line === '/goal'
+              ? 'No goal is currently set.\nUsage: /goal [<objective>|clear|edit <objective>|pause|resume]'
+              : `Goal created: ${line.slice('/goal '.length)}`)
+          return { commandId: 'cmd-goal', result: { kind: 'success' as const, text } }
+        },
+      },
+    }
+  }
+
+  it('runs /goal list and create through the command registry', async () => {
+    const lines: string[] = []
+    const { server } = await boot(commandApi(lines))
+
+    const listed = await request(server, 'POST', '/session/s1/command', {
+      command: 'goal',
+      arguments: '',
+    })
+    expect(listed.status).toBe(200)
+    expect((listed.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('No goal')
+
+    const created = await request(server, 'POST', '/session/s1/command', {
+      command: '/goal',
+      arguments: 'ship goal support',
+    })
+    expect(created.status).toBe(200)
+    expect((created.body as { parts: Array<{ text: string }> }).parts[0]?.text).toBe(
+      'Goal created: ship goal support',
+    )
+    expect(lines).toEqual(['/goal', '/goal ship goal support'])
+  })
+
+  it('captures /goal from prompt routes without triggering a model turn', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const lines: string[] = []
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        prompt: async (request) => {
+          calls.push({ method: 'session.prompt', payload: request.payload })
+          return okRpc({ accepted: true })
+        },
+      },
+      agents: {
+        get: () => ({ id: 's1' }),
+      },
+      commands: {
+        execute: async (_agent: unknown, line: string) => {
+          lines.push(line)
+          return { commandId: 'cmd-goal', result: { kind: 'success' as const, text: `Goal created: ${line.slice('/goal '.length)}` } }
+        },
+      },
+    }
+    const { server } = await boot(api)
+
+    const created = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: '/goal ship goal support' }],
+    })
+    expect(created.status).toBe(200)
+    expect((created.body as { parts: Array<{ text: string }> }).parts[0]?.text).toBe(
+      'Goal created: ship goal support',
+    )
+    expect(lines).toEqual(['/goal ship goal support'])
+    expect(calls).toHaveLength(0)
+  })
+
+  it('surfaces /goal command errors as 400 command errors', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: { get: () => ({ id: 's1' }) },
+      commands: {
+        execute: async () => ({
+          commandId: 'cmd-goal',
+          result: { kind: 'error' as const, text: 'Goal editing requires a replacement objective.' },
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/command', {
+      command: 'goal',
+      arguments: 'edit',
+    })
+    expect(result.status).toBe(400)
+    expect(result.body).toMatchObject({
+      name: 'BadRequest',
+      data: { code: 'command-error' },
+    })
+  })
+
+  it('returns goal-first todos from the goal projection', async () => {
+    const base = fakeApi()
+    const api = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [
+            { event: sessionEvent('todo/write', { todos: [{ content: 'step 1', status: 'in_progress' }] }, 1, 100) },
+          ],
+          hasMore: false,
+          projections: {
+            asOfSeq: 1,
+            values: {
+              goal: activeGoal,
+              todos: [{ content: 'step 1', status: 'in_progress' }],
+            } as never,
+          },
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const todo = await request(server, 'GET', '/session/s1/todo')
+    expect(todo.status).toBe(200)
+    expect(todo.body).toMatchObject([
+      { id: 'goal:g1', content: 'Goal: ship goal support', status: 'in_progress', priority: 'high' },
+      { content: 'step 1', status: 'in_progress', priority: 'medium' },
+    ])
+  })
+
+  it('folds the latest goal/change when no projection exists and clears with a tombstone', async () => {
+    const base = fakeApi()
+    const api = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [
+            { event: sessionEvent('todo/write', { todos: [{ content: 'step 1', status: 'pending' }] }, 1, 100) },
+            { event: sessionEvent('goal/change', { operation: 'create', goal: activeGoal.goal }, 2, 200) },
+            { event: sessionEvent('goal/change', {
+              operation: 'edit',
+              goal: { ...activeGoal.goal, revision: 2, objective: 'ship goal support v2' },
+            }, 3, 300) },
+          ],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const todo = await request(server, 'GET', '/session/s1/todo')
+    expect(todo.body).toMatchObject([
+      { content: 'Goal: ship goal support v2', status: 'in_progress' },
+      { content: 'step 1', status: 'pending' },
+    ])
+
+    const clearedApi = {
+      ...fakeApi(),
+      sessions: {
+        ...fakeApi().sessions,
+        history: async () => okRpc({
+          events: [
+            { event: sessionEvent('goal/change', {
+              operation: 'clear',
+              cleared: { id: 'g1', revision: 3 },
+              clearedAt: 400,
+            }, 4, 400) },
+          ],
+          hasMore: false,
+        }),
+      },
+    }
+    const cleared = await boot(clearedApi)
+    expect((await request(cleared.server, 'GET', '/session/s1/todo')).body).toEqual([])
   })
 })

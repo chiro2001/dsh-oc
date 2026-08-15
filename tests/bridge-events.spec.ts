@@ -697,6 +697,94 @@ describe('bridge events: session event mapping', () => {
     })
   })
 
+  it('merges goal/change into todo.updated and keeps the goal across turns', () => {
+    const { translate } = translator()
+    const goal = {
+      goal: {
+        id: 'g1',
+        revision: 1,
+        objective: 'ship the goal feature',
+        phase: 'active',
+        maxGoalRounds: 5,
+      },
+      roundsStarted: 0,
+      createdAt: 100,
+      updatedAt: 100,
+    }
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('todo/write', { todos: [{ content: 'step 1', status: 'in_progress' }] }, 1, 100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('goal/change', { operation: 'create', ...goal }, 2, 200),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 3, 300),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('todo/write', { todos: [{ content: 'step 2', status: 'pending' }] }, 4, 400),
+      }),
+    ])
+    const todoEvents = events.filter((event) => event.payload.type === 'todo.updated')
+    expect(todoEvents).toHaveLength(3)
+    expect(todoEvents[1]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      todos: [
+        { id: 'goal:g1', content: 'Goal: ship the goal feature', status: 'in_progress', priority: 'high' },
+        { content: 'step 1', status: 'in_progress', priority: 'medium' },
+      ],
+    })
+    // turn/end resets stream state but not the goal/todo merge cache.
+    expect(todoEvents[2]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      todos: [
+        { content: 'Goal: ship the goal feature', status: 'in_progress' },
+        { content: 'step 2', status: 'pending' },
+      ],
+    })
+  })
+
+  it('maps a goal clear tombstone back to plain todos', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('goal/change', {
+          operation: 'create',
+          goal: {
+            id: 'g1',
+            revision: 1,
+            objective: 'temp',
+            phase: 'active',
+            maxGoalRounds: 5,
+          },
+        }, 1, 100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('goal/change', {
+          operation: 'clear',
+          cleared: { id: 'g1', revision: 2 },
+          clearedAt: 200,
+        }, 2, 200),
+      }),
+    ])
+    expect(events[1]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      todos: [],
+    })
+  })
+
   it('emits session.updated for created/title events when they arrive', () => {
     const { translate } = translator()
     const events = translate([
@@ -870,6 +958,35 @@ describe('bridge events: projection and control frames', () => {
     expect(events[1]?.payload.properties).toMatchObject({
       sessionID: 's1',
       diff: [{ file: 'a.ts', additions: 2, deletions: 1, status: 'modified' }],
+    })
+  })
+
+  it('maps a goal projection to merged todo.updated', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/projection',
+        sessionId: 's1' as never,
+        key: 'goal',
+        value: {
+          goal: {
+            id: 'g1',
+            revision: 1,
+            objective: 'finish the goal',
+            phase: 'active',
+            maxGoalRounds: 5,
+          },
+          roundsStarted: 0,
+          createdAt: 100,
+          updatedAt: 100,
+        },
+        seq: 1,
+      }),
+    ])
+    expect(events[0]?.payload.type).toBe('todo.updated')
+    expect(events[0]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      todos: [{ id: 'goal:g1', content: 'Goal: finish the goal', status: 'in_progress', priority: 'high' }],
     })
   })
 

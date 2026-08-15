@@ -51,7 +51,7 @@ import {
 } from './convert/model.js'
 import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
-import { convertTodos } from './convert/todo.js'
+import { convertGoalTodos } from './convert/goal.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
 import { commandResultEvents, convertProducedFiles, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
@@ -348,6 +348,18 @@ const PRESET_COMMAND_V2: CommandV2Info = {
   description: 'List or switch the session dsh agent preset',
 }
 
+const GOAL_COMMAND_V1: V1Command = {
+  name: 'goal',
+  description: 'Set or view the goal for a long-running task',
+  template: 'goal',
+}
+
+const GOAL_COMMAND_V2: CommandV2Info = {
+  name: 'goal',
+  template: 'goal',
+  description: 'Set or view the goal for a long-running task',
+}
+
 async function defaultAgents(ctx: BridgeRouteContext): Promise<{
   providerID: string
   modelID: string
@@ -448,15 +460,25 @@ function textFromPromptParts(content: readonly PromptContentPart[]): string {
     .join('\n')
 }
 
+interface SlashPromptCapture {
+  name: 'preset' | 'goal'
+  argument: string
+}
+
 /**
- * `/preset` typed with a trailing space (or after dismissing the slash popup)
- * reaches the prompt routes as a plain prompt. Returns the trailing argument,
- * or `undefined` when the prompt is not a `/preset` invocation.
+ * A slash command typed with a trailing space (or after dismissing the slash
+ * popup) reaches the prompt routes as a plain prompt. Commands handled by the
+ * bridge are captured here so they never trigger a model turn.
  */
-function presetArgumentFromPrompt(content: readonly PromptContentPart[]): string | undefined {
+function slashPromptCapture(content: readonly PromptContentPart[]): SlashPromptCapture | undefined {
   const text = textFromPromptParts(content).trim()
-  if (!/^\/preset(?:\s|$)/.test(text)) return undefined
-  return text.slice('/preset'.length).trim()
+  if (/^\/preset(?:\s|$)/.test(text)) {
+    return { name: 'preset', argument: text.slice('/preset'.length).trim() }
+  }
+  if (/^\/goal(?:\s|$)/.test(text)) {
+    return { name: 'goal', argument: text.slice('/goal'.length).trim() }
+  }
+  return undefined
 }
 
 interface PresetCommandOutcome {
@@ -509,6 +531,70 @@ async function runPresetCommand(
   const outcome = await presetCommandOutcome(ctx, sessionId, argument)
   broadcastCommandResult(ctx, sessionId, outcome.text, 'idle')
   return outcome
+}
+
+interface RegistryCommandOutcome {
+  kind: 'success' | 'error'
+  text: string
+}
+
+/**
+ * Run one dsh registered command (`/goal`, ...) through the live session
+ * agent with visible busy/idle progress in the TUI. Infra failures (missing
+ * agent/registry/command) throw; a command-level error becomes an outcome
+ * the caller can turn into a 400.
+ */
+async function runRegistryCommand(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  commandLine: string,
+  label: string,
+): Promise<RegistryCommandOutcome> {
+  broadcastCommandResult(ctx, sessionId, `Running ${label}…`, 'busy')
+  const agent = ctx.api.agents?.get(sessionId)
+  if (agent === undefined) {
+    const text = `${label} unavailable: session is not attached`
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    throw conflict(text, { sessionId })
+  }
+  if (!ctx.api.commands) {
+    const text = `${label} unavailable: dsh command registry is missing`
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    throw internalError(text, { sessionId })
+  }
+  let execution: BridgeCommandExecution | undefined
+  try {
+    execution = await ctx.api.commands.execute(agent, commandLine, new AbortController().signal)
+  } catch (error) {
+    const text = `${label} failed: ${error instanceof Error ? error.message : String(error)}`
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    throw internalError(text, { sessionId })
+  }
+  if (execution === undefined) {
+    const text = `${label} failed: unknown command ${commandLine.split(/\s+/)[0] ?? commandLine}`
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    throw badRequest(text, { code: 'unknown-command', sessionId })
+  }
+  if (execution.result.kind === 'error') {
+    const text = execution.result.text ?? `${label} failed`
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    return { kind: 'error', text }
+  }
+  const text = execution.result.text ?? `${label} completed`
+  broadcastCommandResult(ctx, sessionId, text, 'idle')
+  ctx.log(`[bridge] ${commandLine}: ${text}`)
+  return { kind: 'success', text }
+}
+
+/** Run `/goal` with an optional argument through the dsh command registry. */
+async function runGoalCommand(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  argument: string,
+): Promise<RegistryCommandOutcome> {
+  const trimmed = argument.trim()
+  const commandLine = trimmed === '' ? '/goal' : `/goal ${trimmed}`
+  return runRegistryCommand(ctx, sessionId, commandLine, '/goal')
 }
 
 async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
@@ -883,6 +969,29 @@ function historyFileDiffs(history: { events: HistoryEntry[]; projections?: { val
   return toSnapshotFileDiffs(historyChanges(history))
 }
 
+/**
+ * Current goal for one session: prefer the durable `goal` projection, then
+ * fold the latest `goal/change` event when the projection is unavailable.
+ * `null` (clear tombstone) means no goal is rendered.
+ */
+function goalFromHistory(history: {
+  projections?: { values?: Partial<Record<string, unknown>> }
+  events: readonly HistoryEntry[]
+}): unknown {
+  if (history.projections?.values?.goal !== undefined) {
+    return history.projections.values.goal
+  }
+  for (let index = history.events.length - 1; index >= 0; index--) {
+    const event = (history.events[index] as HistoryEntry).event
+    if ((event.type as string) !== 'goal/change') continue
+    const data = (event as unknown as { data: { goal?: unknown; cleared?: unknown } }).data
+    if (data?.goal !== undefined) return { goal: data.goal }
+    if (data?.cleared !== undefined) return null
+    return undefined
+  }
+  return undefined
+}
+
 export function createBridgeRouter(
   api: BridgeApi,
   options: RouterOptions = {},
@@ -955,7 +1064,7 @@ export function createBridgeRouter(
   // and the second Enter executes through `POST /session/:id/command`. The
   // prompt routes below additionally capture `/preset` typed with a trailing
   // space (or after Esc), so every path ends with a visible SSE result.
-  register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1]))
+  register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1, GOAL_COMMAND_V1]))
   for (const bare of ['/skill', '/reference', '/integration']) {
     register('GET', bare, 'json', async () => json(200, []))
   }
@@ -970,7 +1079,7 @@ export function createBridgeRouter(
 
   register('GET', '/api/command', 'json', async (_req, ctx) => json(200, {
     location: locationInfo(ctx),
-    data: [PRESET_COMMAND_V2],
+    data: [PRESET_COMMAND_V2, GOAL_COMMAND_V2],
   }))
   for (const bare of ['/api/skill', '/api/reference', '/api/integration']) {
     register('GET', bare, 'json', async (_req, ctx) => json(200, v2LocationBody(ctx)))
@@ -1060,9 +1169,11 @@ export function createBridgeRouter(
   register('POST', '/session/:id/message', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
-    const presetArgument = presetArgumentFromPrompt(content)
-    if (presetArgument !== undefined) {
-      const outcome = await runPresetCommand(ctx, id, presetArgument)
+    const slash = slashPromptCapture(content)
+    if (slash !== undefined) {
+      const outcome = slash.name === 'preset'
+        ? await runPresetCommand(ctx, id, slash.argument)
+        : await runGoalCommand(ctx, id, slash.argument)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
     }
@@ -1076,9 +1187,11 @@ export function createBridgeRouter(
   register('POST', '/session/:id/prompt', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
-    const presetArgument = presetArgumentFromPrompt(content)
-    if (presetArgument !== undefined) {
-      const outcome = await runPresetCommand(ctx, id, presetArgument)
+    const slash = slashPromptCapture(content)
+    if (slash !== undefined) {
+      const outcome = slash.name === 'preset'
+        ? await runPresetCommand(ctx, id, slash.argument)
+        : await runGoalCommand(ctx, id, slash.argument)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
     }
@@ -1098,10 +1211,18 @@ export function createBridgeRouter(
     const body = bodyAsRecord(req.body)
     const command = typeof body.command === 'string' ? body.command : ''
     const argumentsRaw = typeof body.arguments === 'string' ? body.arguments : ''
-    if (command.replace(/^\//, '') !== 'preset') throw badRequest(`unsupported command "${command}"`)
-    const outcome = await runPresetCommand(ctx, id, argumentsRaw.trim())
-    if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-    return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
+    const name = command.replace(/^\//, '')
+    if (name === 'preset') {
+      const outcome = await runPresetCommand(ctx, id, argumentsRaw.trim())
+      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
+    }
+    if (name === 'goal') {
+      const outcome = await runGoalCommand(ctx, id, argumentsRaw)
+      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
+    }
+    throw badRequest(`unsupported command "${command}"`)
   })
 
   register('GET', '/session/:id/todo', 'json', async (req, ctx) => {
@@ -1119,7 +1240,7 @@ export function createBridgeRouter(
       const values = history.projections.values as Partial<Record<string, unknown>>
       if (values.todos !== undefined) todos = values.todos
     }
-    return json(200, convertTodos(todos ?? []))
+    return json(200, convertGoalTodos(goalFromHistory(history), todos ?? []))
   })
 
   register('GET', '/session/:id/diff', 'json', async (req, ctx) => {
@@ -1180,9 +1301,11 @@ export function createBridgeRouter(
   register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
-    const presetArgument = presetArgumentFromPrompt(content)
-    if (presetArgument !== undefined) {
-      const outcome = await runPresetCommand(ctx, id, presetArgument)
+    const slash = slashPromptCapture(content)
+    if (slash !== undefined) {
+      const outcome = slash.name === 'preset'
+        ? await runPresetCommand(ctx, id, slash.argument)
+        : await runGoalCommand(ctx, id, slash.argument)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return json(200, {
         data: {
