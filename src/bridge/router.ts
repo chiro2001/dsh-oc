@@ -60,7 +60,7 @@ import { agentErrorEvent, commandResultEvents, convertProducedFiles, toSnapshotF
 import { filterGitTrackedDiffs } from './git.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { ocHelp } from '../help.js'
-import { InteractionState } from './state.js'
+import { InteractionState, type CachedHistory } from './state.js'
 import { SseHub } from './sse.js'
 import { MuxEventTranslator } from './events.js'
 import { stubRoutes } from './stubs.js'
@@ -213,11 +213,11 @@ function filterSessionsByDirectory(
 }
 
 async function sessionView(ctx: BridgeRouteContext, id: string): Promise<SessionView> {
-  const list = await rpc(ctx, 'session.list', {})
-  const summary = list.items.find((item) => String(item.sessionId) === id)
-  recordSessionSummaries(ctx, list.items)
-  const cwd = sessionDirectoryFrom(list.items, summary, ctx.cwd)
-  const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
+  const list = await cachedSessionList(ctx)
+  const summary = list.find((item) => String(item.sessionId) === id)
+  recordSessionSummaries(ctx, list)
+  const cwd = sessionDirectoryFrom(list, summary, ctx.cwd)
+  const history = await cachedSessionHistory(ctx, id)
   let model: SessionView['model']
   try {
     const selection = await rpc(ctx, 'session.models', { sessionId: sid(id) })
@@ -292,6 +292,45 @@ function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
     }
   }
   return oldest
+}
+
+const SESSION_LIST_CACHE_MS = 1000
+const HISTORY_CACHE_MS = 500
+
+function historyCacheKey(sessionId: string, maxMessages?: number, beforeSeq?: number): string {
+  return `${sessionId}:${maxMessages ?? 'tail'}:${beforeSeq ?? 'tail'}`
+}
+
+/** Read session.list through a short-lived cache (invalidated by mutations/SSE). */
+async function cachedSessionList(ctx: BridgeRouteContext): Promise<SessionSummary[]> {
+  const cached = ctx.state.getSessionListCache(SESSION_LIST_CACHE_MS)
+  if (cached !== undefined) return cached
+  const list = await rpc(ctx, 'session.list', {})
+  ctx.state.setSessionListCache(list.items)
+  return list.items
+}
+
+/** Read a history page through a short-lived per-page cache. */
+async function cachedSessionHistory(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  options: { maxMessages?: number; beforeSeq?: number } = {},
+): Promise<CachedHistory> {
+  const key = historyCacheKey(sessionId, options.maxMessages, options.beforeSeq)
+  const cached = ctx.state.getHistoryCache(key, HISTORY_CACHE_MS)
+  if (cached !== undefined) return cached
+  const history = await rpc(ctx, 'session.history', {
+    sessionId: sid(sessionId),
+    ...(options.maxMessages === undefined ? {} : { maxMessages: options.maxMessages }),
+    ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
+  })
+  const value: CachedHistory = {
+    events: history.events,
+    hasMore: history.hasMore,
+    ...(history.projections === undefined ? {} : { projections: history.projections }),
+  }
+  ctx.state.setHistoryCache(key, value)
+  return value
 }
 
 function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
@@ -694,6 +733,7 @@ async function runPresetCommand(
 ): Promise<PresetCommandOutcome> {
   broadcastCommandResult(ctx, sessionId, 'Running /preset…', 'busy')
   const outcome = await presetCommandOutcome(ctx, sessionId, argument)
+  ctx.state.invalidateSession(sessionId)
   broadcastCommandResult(ctx, sessionId, outcome.text, 'idle')
   return outcome
 }
@@ -735,6 +775,7 @@ async function runRegistryCommand(
     broadcastCommandResult(ctx, sessionId, text, 'idle')
     throw internalError(text, { sessionId })
   }
+  ctx.state.invalidateSession(sessionId)
   if (execution === undefined) {
     const text = `${label} failed: unknown command ${commandLine.split(/\s+/)[0] ?? commandLine}`
     broadcastCommandResult(ctx, sessionId, text, 'idle')
@@ -780,7 +821,7 @@ async function completeGoalCommand(
 ): Promise<RegistryCommandOutcome> {
   broadcastCommandResult(ctx, sessionId, 'Running /goal complete…', 'busy')
   try {
-    const history = await rpc(ctx, 'session.history', { sessionId: sid(sessionId) })
+    const history = await cachedSessionHistory(ctx, sessionId)
     const current = goalFromHistory(history) as { goal?: { id: string; revision: number } } | null | undefined
     const ref = current?.goal
     if (current === undefined || ref === undefined) {
@@ -794,6 +835,7 @@ async function completeGoalCommand(
       sessionId: sid(sessionId),
       ref: { id: ref.id as never, revision: ref.revision },
     })
+    ctx.state.invalidateSession(sessionId)
     const text = 'Goal completed'
     broadcastCommandResult(ctx, sessionId, text, 'idle')
     return { kind: 'success', text }
@@ -914,7 +956,7 @@ async function atSeqForMessage(
   sessionId: string,
   messageId: string,
 ): Promise<number> {
-  const history = await rpc(ctx, 'session.history', { sessionId: sid(sessionId) })
+  const history = await cachedSessionHistory(ctx, sessionId)
   for (const entry of history.events) {
     const event = entry.event
     const candidate = event.type === 'user/message'
@@ -970,15 +1012,15 @@ async function forkTitleForSource(
   ctx: BridgeRouteContext,
   sourceId: string,
 ): Promise<string> {
-  const list = await rpc(ctx, 'session.list', {})
-  const source = list.items.find((item) => String(item.sessionId) === sourceId)
+  const list = await cachedSessionList(ctx)
+  const source = list.find((item) => String(item.sessionId) === sourceId)
   const sourceTitle = source === undefined ? 'Session' : sessionTitleFrom(source) || 'Session'
   const base = forkChainBase(sourceTitle)
   const sourceForkNumber = forkNumberInTitle(sourceTitle)
   if (sourceForkNumber > 0) {
     return `${base} (fork #${sourceForkNumber + 1})`
   }
-  const existingForks = list.items.filter(
+  const existingForks = list.filter(
     (item) =>
       String(item.sessionId) !== sourceId
       && String(item.parentSessionId) === sourceId
@@ -1003,6 +1045,7 @@ async function forkFromSource(
   } catch (error) {
     ctx.log(`[bridge] rename of forked session ${childId} failed: ${error instanceof Error ? error.message : String(error)}`)
   }
+  ctx.state.invalidateSession()
   return childId
 }
 
@@ -1050,6 +1093,7 @@ async function runCompactCommand(
     })
   }
   const text = execution.result.text ?? 'Compaction completed'
+  ctx.state.invalidateSession(sessionId)
   broadcastCommandResult(ctx, sessionId, text, 'idle')
   ctx.log(`[bridge] /compact: ${text}`)
 }
@@ -1091,6 +1135,7 @@ async function createSession(
   if (body.model !== undefined) {
     await applyModelSelection(ctx, id, body)
   }
+  ctx.state.invalidateSession()
   const view = await sessionView(ctx, id)
   return json(200, v2 ? { data: toV2Session(view, id, ctx) } : toV1Session(view, id, ctx))
 }
@@ -1335,8 +1380,8 @@ export function createBridgeRouter(
 
   // ---- v1 sessions ----
   register('GET', '/session', 'json', async (_req, ctx) => {
-    const list = await rpc(ctx, 'session.list', {})
-    const items = filterSessionsByDirectory(list.items, _req.query.get('directory') ?? undefined)
+    const list = await cachedSessionList(ctx)
+    const items = filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined)
     recordSessionSummaries(ctx, items)
     return json(200, items.map((item) => convertSessionSummary(item, {
       cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
@@ -1344,9 +1389,9 @@ export function createBridgeRouter(
   })
 
   register('GET', '/session/status', 'json', async (_req, ctx) => {
-    const list = await rpc(ctx, 'session.list', {})
+    const list = await cachedSessionList(ctx)
     const status: Record<string, SessionStatus> = {}
-    for (const item of filterSessionsByDirectory(list.items, _req.query.get('directory') ?? undefined)) {
+    for (const item of filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined)) {
       status[String(item.sessionId)] = item.running ? { type: 'busy' } : { type: 'idle' }
     }
     return json(200, status)
@@ -1380,6 +1425,7 @@ export function createBridgeRouter(
     const body = bodyAsRecord(req.body)
     if (typeof body.title !== 'string') throw badRequest('session update requires a string title')
     await rpc(ctx, 'session.rename', { sessionId: sid(id), title: body.title })
+    ctx.state.invalidateSession()
     const view = await sessionView(ctx, id)
     return json(200, toV1Session(view, id, ctx))
   })
@@ -1388,7 +1434,7 @@ export function createBridgeRouter(
     const id = req.params.id as string
     const limitRaw = req.query.get('limit')
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
-    const history = await rpc(ctx, 'session.history', { sessionId: sid(id), maxMessages: limit })
+    const history = await cachedSessionHistory(ctx, id, { maxMessages: limit })
     const defaultModel = await defaultModelRef(ctx)
     const entries = history.events
     return json(200, convertMessagesV1(
@@ -1414,6 +1460,7 @@ export function createBridgeRouter(
     }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.invalidateSession(id)
     return json(200, pendingAssistantPlaceholder(id, cwd))
   })
 
@@ -1430,6 +1477,7 @@ export function createBridgeRouter(
     }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.invalidateSession(id)
     return json(200, pendingAssistantPlaceholder(id, cwd))
   })
 
@@ -1464,7 +1512,7 @@ export function createBridgeRouter(
 
   register('GET', '/session/:id/todo', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
+    const history = await cachedSessionHistory(ctx, id)
     let todos: unknown
     for (let index = history.events.length - 1; index >= 0; index--) {
       const event = (history.events[index] as HistoryEntry).event
@@ -1482,7 +1530,7 @@ export function createBridgeRouter(
 
   register('GET', '/session/:id/diff', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
+    const history = await cachedSessionHistory(ctx, id)
     return json(200, producedFilesV1(filterGitTrackedDiffs(ctx.cwd, historyFileDiffs(history))))
   })
 
@@ -1520,11 +1568,10 @@ export function createBridgeRouter(
     if (search !== null && search.length > 0) {
       const results = await rpc(ctx, 'session.search', { query: search })
       const ids = new Set(results.items.map((item) => String(item.sessionId)))
-      const list = await rpc(ctx, 'session.list', {})
-      all = list.items.filter((item) => ids.has(String(item.sessionId)))
+      const list = await cachedSessionList(ctx)
+      all = list.filter((item) => ids.has(String(item.sessionId)))
     } else {
-      const list = await rpc(ctx, 'session.list', {})
-      all = list.items
+      all = await cachedSessionList(ctx)
     }
     const filtered = filterSessionsByDirectory(all, req.query.get('directory') ?? undefined)
     const limitRaw = req.query.get('limit')
@@ -1576,6 +1623,7 @@ export function createBridgeRouter(
     }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.invalidateSession(id)
     return json(200, {
       data: {
         id: `msg_${randomUUID()}`,
@@ -1607,6 +1655,7 @@ export function createBridgeRouter(
       : ''
     if (agent === '') throw badRequest('agent switch requires a string agent')
     await switchAgentPreset(ctx, id, agent)
+    ctx.state.invalidateSession(id)
     return json(204)
   })
 
@@ -1616,11 +1665,7 @@ export function createBridgeRouter(
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
     const cursorRaw = req.query.get('cursor')
     const beforeSeq = cursorRaw === null ? undefined : decodeMessageCursor(cursorRaw)
-    const history = await rpc(ctx, 'session.history', {
-      sessionId: sid(id),
-      ...(limit === undefined ? {} : { maxMessages: limit }),
-      ...(beforeSeq === undefined ? {} : { beforeSeq }),
-    })
+    const history = await cachedSessionHistory(ctx, id, { maxMessages: limit, beforeSeq })
     const defaultModel = await defaultModelRef(ctx)
     const entries = history.events
     const oldest = oldestSurfaceSeq(entries)
@@ -1644,7 +1689,7 @@ export function createBridgeRouter(
 
   register('GET', '/api/session/:sessionID/diff', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
-    const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
+    const history = await cachedSessionHistory(ctx, id)
     return json(200, filterGitTrackedDiffs(ctx.cwd, historyFileDiffs(history)))
   })
 
@@ -1720,6 +1765,7 @@ export function createBridgeRouter(
             void (async () => {
               try {
                 const list = await rpc(ctx, 'session.list', {})
+                ctx.state.setSessionListCache(list.items)
                 recordSessionSummaries(ctx, list.items)
               } catch (error) {
                 log(`[bridge/sse] session list refresh failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -1744,6 +1790,7 @@ export function createBridgeRouter(
               if (sessionId) hub.send(client, agentErrorEvent(sessionId, message, cwd))
             }
             if (payload.type === 'host/session-added' || payload.type === 'host/session-removed') {
+              ctx.state.invalidateSession()
               scheduleListRefresh()
             }
           }
@@ -1774,7 +1821,9 @@ export function createBridgeRouter(
           }
           if (frame.payload.type === 'session/event') {
             const sessionEvent = frame.payload.event as unknown as { type: string }
+            ctx.state.invalidateHistory(String(frame.payload.sessionId))
             if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {
+              ctx.state.invalidateSession()
               scheduleListRefresh()
             }
           }

@@ -13,7 +13,7 @@ import {
 import { InteractionState } from '../src/bridge/state.js'
 import { createBridgeRouter } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
-import { fakeApi, makeAssistantEvent, makeUserEvent, sessionEvent } from './helpers.js'
+import { fakeApi, makeAssistantEvent, makeUserEvent, okRpc, sessionEvent } from './helpers.js'
 
 const tempDirs: string[] = []
 

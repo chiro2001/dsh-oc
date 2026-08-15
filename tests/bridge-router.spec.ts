@@ -255,6 +255,62 @@ describe('bridge router: session routes', () => {
     expect((all.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s1', 's2'])
   })
 
+  it('caches the session list within TTL and invalidates on rename', async () => {
+    const calls: string[] = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => {
+          calls.push('list')
+          return okRpc({ items: [item] })
+        },
+        rename: async () => {
+          calls.push('rename')
+          return okRpc({ title: 'x', seq: 2 })
+        },
+      },
+    }
+    const { server } = await boot(api)
+
+    await request(server, 'GET', '/session')
+    await request(server, 'GET', '/session')
+    expect(calls.filter((call) => call === 'list')).toHaveLength(1)
+
+    await request(server, 'PATCH', '/session/s1', { title: 'x' })
+    await request(server, 'GET', '/session')
+    expect(calls.filter((call) => call === 'list')).toHaveLength(2)
+  })
+
+  it('caches history per page and invalidates after a prompt', async () => {
+    const historyCalls: string[] = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async (request) => {
+          const maxMessages = (request.payload as { maxMessages?: number }).maxMessages
+          historyCalls.push(maxMessages === undefined ? 'tail' : String(maxMessages))
+          return okRpc({ events: [], hasMore: false })
+        },
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server } = await boot(api)
+
+    await request(server, 'GET', '/session/s1/message?limit=10')
+    await request(server, 'GET', '/session/s1/message?limit=10')
+    expect(historyCalls).toEqual(['10'])
+
+    await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    await request(server, 'GET', '/session/s1/message?limit=10')
+    expect(historyCalls).toEqual(['10', '10'])
+  })
+
   it('searches v2 session lists through session.search and applies limit', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }

@@ -120,13 +120,13 @@
 | 流式工具事件 API e2e | ✅ | `scripts/e2e-api.sh` 审批流断言 started/delta/called/success | `bash scripts/e2e-api.sh` | 本提交 |
 | 功能矩阵自动追踪 | ✅ | `scripts/update-feature-matrix.mjs` | `pnpm run features:update` | 本提交 |
 | 会话性能测试（生成器 + 指标 + 报告） | ✅ | `scripts/perf.mjs` + `scripts/perf-session-gen.mjs`（dsh Session API 合成日志、zstd 分帧写入） | `pnpm run perf`、`tests/perf.spec.ts` | 本提交 |
-| 大会话性能验证（200/1000/5000） | ✅ | `docs/perf/results-2026-08-15.md`：SSE 防抖修复 + 上游 list/history 瓶颈记录 | `pnpm run perf -- --sessions 5000` | 本提交 |
+| 大会话性能验证（200/1000/5000） | ✅ | `docs/perf/results-2026-08-15.md`：SSE 防抖 + list/history 短 TTL 缓存 + 上游瓶颈记录 | `pnpm run perf -- --sessions 5000` | 本提交 |
 | perf 生成器单测（编码/round-trip/子代理场景） | ✅ | `tests/perf.spec.ts` | `pnpm test` | 本提交 |
 
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`c7b4acf`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`a796272`（2026-08-15）。
 
 ### 路由注册表
 
@@ -207,9 +207,9 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 30 | e256572 feat(bridge): session-scoped always permission memory |
+| `tests/bridge-events.spec.ts` | 30 | a796272 perf(bridge): debounce SSE session-list refresh and record 5000-session results |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 52 | c7b4acf feat(bridge): report autoupdate:false from GET /config |
+| `tests/bridge-router.spec.ts` | 54 | c7b4acf feat(bridge): report autoupdate:false from GET /config |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -245,7 +245,7 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
-| `src/bridge/router.ts` | c7b4acf feat(bridge): report autoupdate:false from GET /config |
+| `src/bridge/router.ts` | a796272 perf(bridge): debounce SSE session-list refresh and record 5000-session results |
 | `src/bridge/rpc.ts` | ecb00f1 feat(bridge): v2 session search with limit and directory filters |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | e256572 feat(bridge): session-scoped always permission memory |

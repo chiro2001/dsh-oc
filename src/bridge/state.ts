@@ -1,4 +1,5 @@
 import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
+import type { HistoryEntry, SessionProjectionsBlock, SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { PermissionEntry } from './convert/permission.js'
 import type { QuestionEntry } from './convert/question.js'
 
@@ -7,6 +8,13 @@ export interface SavedPermission {
   sessionId: string
   toolName: string
   grantedAt: number
+}
+
+/** One cached history page (tail or bounded by limit/beforeSeq). */
+export interface CachedHistory {
+  events: HistoryEntry[]
+  hasMore: boolean
+  projections?: SessionProjectionsBlock
 }
 
 /**
@@ -22,6 +30,45 @@ export class InteractionState {
   readonly sessionDirectories = new Map<string, string>()
   readonly sessionParents = new Map<string, string>()
   readonly savedPermissions = new Map<string, SavedPermission>()
+  sessionListCache?: { items: SessionSummary[]; at: number }
+  readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
+
+  getSessionListCache(ttlMs: number): SessionSummary[] | undefined {
+    const cached = this.sessionListCache
+    if (cached !== undefined && Date.now() - cached.at < ttlMs) return cached.items
+    return undefined
+  }
+
+  setSessionListCache(items: SessionSummary[]): void {
+    this.sessionListCache = { items, at: Date.now() }
+  }
+
+  getHistoryCache(key: string, ttlMs: number): CachedHistory | undefined {
+    const entry = this.historyCache.get(key)
+    if (entry !== undefined && Date.now() - entry.at < ttlMs) return entry.value
+    return undefined
+  }
+
+  setHistoryCache(key: string, value: CachedHistory): void {
+    this.historyCache.set(key, { value, at: Date.now() })
+  }
+
+  /** Drop list and (optionally per-session) history caches after any mutation. */
+  invalidateSession(sessionId?: string): void {
+    this.sessionListCache = undefined
+    this.invalidateHistory(sessionId)
+  }
+
+  /** Drop only history pages (used by the live SSE feed). */
+  invalidateHistory(sessionId?: string): void {
+    if (sessionId === undefined) {
+      this.historyCache.clear()
+      return
+    }
+    for (const key of [...this.historyCache.keys()]) {
+      if (key === sessionId || key.startsWith(`${sessionId}:`)) this.historyCache.delete(key)
+    }
+  }
 
   private static savedKey(sessionId: string, toolName: string): string {
     return `${sessionId}\u0000${toolName}`
