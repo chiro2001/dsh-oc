@@ -938,7 +938,7 @@ export function createBridgeRouter(
     const body = bodyAsRecord(req.body)
     const command = typeof body.command === 'string' ? body.command : ''
     const argumentsRaw = typeof body.arguments === 'string' ? body.arguments : ''
-    if (command !== 'preset') throw badRequest(`unsupported command "${command}"`)
+    if (command.replace(/^\//, '') !== 'preset') throw badRequest(`unsupported command "${command}"`)
     const argument = argumentsRaw.trim()
     if (argument === '') {
       const roster = await presetRoster(ctx)

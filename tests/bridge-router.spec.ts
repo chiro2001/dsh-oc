@@ -947,6 +947,12 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     expect((listed.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('standard')
     expect((listed.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('(default)')
 
+    const slashListed = await request(server, 'POST', '/session/s1/command', {
+      command: '/preset',
+      arguments: '',
+    })
+    expect(slashListed.status).toBe(200)
+
     const switched = await request(server, 'POST', '/session/s1/command', {
       command: 'preset',
       arguments: 'minimal',
