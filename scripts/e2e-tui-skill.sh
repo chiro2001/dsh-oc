@@ -42,8 +42,8 @@ echo "  TUI ready: $READY_HINT"
 echo "== type /code-review with per-key pacing =="
 tmux send-keys -t "$E2E_TUI_SESSION" "/code-review"
 sleep 2
-tmux send-keys -t "$E2E_TUI_SESSION" Escape
-sleep 1
+tmux send-keys -t "$E2E_TUI_SESSION" Enter
+sleep 2
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 
 SKILL_HINT=""
