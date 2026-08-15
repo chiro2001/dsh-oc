@@ -4,6 +4,10 @@
 > 本文件是功能状态入口；路由/协议细节见 [PROTOCOL.md](PROTOCOL.md)。
 > 运行 `pnpm run features:update` 可刷新文末“自动追踪”部分，手动状态矩阵保留。
 
+## 下一阶段
+
+> 下一阶段需求见 [ROADMAP.md](ROADMAP.md)：自动更新关闭、流式 tool progress、goal、性能测试、协议升级探针、README//help 能力矩阵。
+
 ## 1. 模型
 
 | 功能 | 状态 | 路由/实现 | 验证方式 | 最后更新 |

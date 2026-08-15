@@ -16,6 +16,8 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 
 - [docs/PLAN.md](docs/PLAN.md)：总体实现规划、阶段、验收标准。
 - [docs/PROTOCOL.md](docs/PROTOCOL.md)：OpenCode TUI 协议探针结果、路由兼容矩阵、SSE 映射。
+- [docs/FEATURES.md](docs/FEATURES.md)：当前功能支持矩阵（自动追踪）。
+- [docs/ROADMAP.md](docs/ROADMAP.md)：下一阶段需求与验收标准。
 - [docs/FEATURES.md](docs/FEATURES.md)：功能支持状态矩阵（含自动追踪部分）。
 
 ## 安装使用
