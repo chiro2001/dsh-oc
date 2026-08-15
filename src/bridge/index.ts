@@ -15,6 +15,8 @@ export interface OcBridgeValue {
   prefetchSession(sessionId: string): void
   /** Whether this run accepted new user input. */
   hasNewActivity(): boolean
+  /** Whether the TUI exit banner likely printed and needs the dsh hint. */
+  exitNoteNeeded(): Promise<boolean>
 }
 
 /**
@@ -65,6 +67,10 @@ export class OcBridgeService extends Service implements OcBridgeValue {
 
   hasNewActivity(): boolean {
     return this.router?.hasNewActivity() ?? false
+  }
+
+  exitNoteNeeded(): Promise<boolean> {
+    return this.router?.exitNoteNeeded() ?? Promise.resolve(false)
   }
 
   private async stop(): Promise<void> {

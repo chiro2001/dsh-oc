@@ -129,7 +129,7 @@
 | `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | `--continue` attach e2e | ✅ | `scripts/e2e-tui-continue.sh`（恢复最新会话） | `bash scripts/e2e-tui-continue.sh` | 本提交 |
 | `--mini` attach + 回复 e2e | ✅ | `scripts/e2e-tui-mini.sh`：输入 prompt、断言回复且只渲染一次 | `bash scripts/e2e-tui-mini.sh` | 本提交 |
-| 退出 splash 说明（全量/`--mini`） | 🟡 | 官方二进制渲染，无法替换；有输入时 dsh-oc 在下方补一行提示（id 为 dsh 会话 id，恢复用 `dsh --profile oc --session`） | `scripts/e2e-tui-mini.sh`、`tests/tui/index.spec.ts` | 本提交 |
+| 退出 splash 说明（全量/`--mini`） | 🟡 | 官方二进制渲染，无法替换；会话有内容（新输入或恢复历史）时 dsh-oc 在下方补一行提示（id 为 dsh 会话 id，恢复用 `dsh --profile oc --session`） | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-mini.sh` | 本提交 |
 | `--print-logs` 透传 e2e | ✅ | `scripts/e2e-tui-print-logs.sh`（fake 二进制 argv 断言） | `bash scripts/e2e-tui-print-logs.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
 | 一键自测入口 | ✅ | `scripts/check-all.sh`（typecheck+单测+探针+性能冒烟；`--e2e` 全量 e2e；`--scale N` 压测） | `bash scripts/check-all.sh` | 本提交 |
@@ -144,7 +144,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`520735c`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`f021570`（2026-08-15）。
 
 ### 路由注册表
 
@@ -228,7 +228,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 36 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 72 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `tests/bridge-router.spec.ts` | 74 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -243,7 +243,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 32 | 520735c fix(tui): print exit hint for full TUI too, not only --mini |
+| `tests/tui/index.spec.ts` | 31 | 520735c fix(tui): print exit hint for full TUI too, not only --mini |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -278,7 +278,7 @@
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `scripts/check-all.sh` | de6e601 test(e2e): verify --dir scopes new sessions and filters the list |
-| `scripts/cleanup-merged-branches.sh` | — |
+| `scripts/cleanup-merged-branches.sh` | f021570 docs(contrib): add contribution guide, issue/PR templates and branch cleanup tooling |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
 | `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |

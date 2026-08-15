@@ -8,6 +8,8 @@ interface OcBridgeService {
   prefetchSession?(sessionId: string): void;
   /** Whether this run accepted new user input. */
   hasNewActivity?(): boolean;
+  /** Whether the TUI exit banner likely printed and needs the dsh hint. */
+  exitNoteNeeded?(): Promise<boolean>;
 }
 interface OpenCodeAsset {
   /** Platform facts derived from the asset key. */

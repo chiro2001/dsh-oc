@@ -11,6 +11,8 @@ interface OcBridgeValue {
   prefetchSession(sessionId: string): void;
   /** Whether this run accepted new user input. */
   hasNewActivity(): boolean;
+  /** Whether the TUI exit banner likely printed and needs the dsh hint. */
+  exitNoteNeeded(): Promise<boolean>;
 }
 /**
  * oc-bridge cordis service: owns the loopback HTTP/SSE server and exposes
@@ -29,6 +31,7 @@ declare class OcBridgeService extends Service implements OcBridgeValue {
   setCwd(directory: string): void;
   prefetchSession(sessionId: string): void;
   hasNewActivity(): boolean;
+  exitNoteNeeded(): Promise<boolean>;
   private stop;
 }
 //#endregion

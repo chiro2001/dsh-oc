@@ -260,7 +260,8 @@ opencode 子进程启动时被强制关闭后台外网行为（以 1.18.18 源�
 - **退出 splash**：opencode 官方 TUI（全量与 `--mini`）在会话有内容时退出会打印
   自己的 logo + “Session …” 与 `opencode -s <id>` / `opencode --mini -s <id>`
   恢复命令。该画面由官方二进制在滚动缓冲区渲染，无法通过插件替换；dsh-oc 会在
-  有新输入时于其下方补一行说明，提示其中的 `<id>` 是 dsh 会话 id、恢复请用
+  会话有内容（新输入或恢复的旧会话有历史）时于其下方补一行说明，提示其中的
+  `<id>` 是 dsh 会话 id、恢复请用
   `dsh --profile oc --session <id>`，不要直接运行 opencode 的恢复命令。
 - **文件附件**：支持 `file` part 的文本文件（data URL 或 cwd 内本地路径）与
   图片（data URL）；PDF 等二进制附件暂不支持，会返回明确 400。

@@ -443,17 +443,6 @@ export function ocExitNote(): string {
   return '[dsh-oc] 上面是 opencode 的退出提示；session id 是 dsh 会话 id，恢复请使用 dsh --profile oc --session <id>，不要直接运行 opencode 的恢复命令'
 }
 
-/**
- * Print the exit note after runs that accepted new input — the runs where
- * opencode actually renders the `Session … / Continue opencode -s …` banner
- * on exit (both full TUI and `--mini`; bare session creation exits clean).
- */
-export function shouldPrintOcExitNote(
-  hasNewActivity: boolean,
-): boolean {
-  return hasNewActivity
-}
-
 /** Input accepted by {@link resolveOpenCodeBinary}. */
 export type ResolveBinaryInput = BinaryResolverDeps & { config?: { binary?: string } }
 
@@ -546,8 +535,11 @@ export class OcTuiService extends Service {
         tuiArgs,
         cwd: process.cwd(),
         env: childEnv,
-        onExit: code => {
-          if (shouldPrintOcExitNote(bridge.hasNewActivity?.() ?? false)) {
+        onExit: async code => {
+          const needed = bridge.exitNoteNeeded
+            ? await bridge.exitNoteNeeded().catch(() => false)
+            : (bridge.hasNewActivity?.() ?? false)
+          if (needed) {
             process.stdout.write(`${ocExitNote()}\n`)
           }
           requestExit(this.ctx, code)

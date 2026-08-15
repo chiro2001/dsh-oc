@@ -109,6 +109,8 @@ export interface BridgeRouter {
   prefetchSession(sessionId: string): void
   /** Whether this bridge run accepted new user input. */
   hasNewActivity(): boolean
+  /** Whether the mini/full TUI exit banner is likely printed (needs a hint). */
+  exitNoteNeeded(): Promise<boolean>
 }
 
 export interface RouterOptions {
@@ -227,6 +229,7 @@ function filterSessionsByDirectory(
 }
 
 async function sessionView(ctx: BridgeRouteContext, id: string): Promise<SessionView> {
+  ctx.state.setCurrentSession(id)
   const list = await cachedSessionList(ctx)
   const summary = list.find((item) => String(item.sessionId) === id)
   recordSessionSummaries(ctx, list)
@@ -1179,6 +1182,7 @@ async function forkSession(
   const messageId = typeof body.messageID === 'string' ? body.messageID : undefined
   const atSeq = messageId === undefined ? undefined : await atSeqForMessage(ctx, id, messageId)
   const childId = await forkFromSource(ctx, id, atSeq)
+  ctx.state.setCurrentSession(childId)
   const view = await sessionView(ctx, childId)
   return json(200, v2
     ? { data: toV2Session(view, childId, ctx) }
@@ -1335,6 +1339,7 @@ async function createSession(
   if (body.model !== undefined) {
     await applyModelSelection(ctx, id, body)
   }
+  ctx.state.setCurrentSession(id)
   ctx.state.invalidateSession()
   const view = await sessionView(ctx, id)
   return json(200, v2 ? { data: toV2Session(view, id, ctx) } : toV1Session(view, id, ctx))
@@ -2173,6 +2178,7 @@ export function createBridgeRouter(
       })()
     },
     prefetchSession(sessionId: string) {
+      ctx.state.setCurrentSession(sessionId)
       // Match the TUI's initial v1 message fetch (default limit 100).
       void cachedSessionHistory(ctx, sessionId, { maxMessages: 100 }).catch((error) => {
         log(`[bridge] session history prefetch failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -2180,6 +2186,20 @@ export function createBridgeRouter(
     },
     hasNewActivity() {
       return ctx.state.newInputDuringRun
+    },
+    async exitNoteNeeded() {
+      if (ctx.state.newInputDuringRun) return true
+      const sessionId = ctx.state.currentSessionId
+      if (sessionId === undefined) return false
+      try {
+        const history = await cachedSessionHistory(ctx, sessionId, { maxMessages: 100 })
+        const title = history.projections === undefined
+          ? undefined
+          : (history.projections.values as Partial<Record<string, unknown>>).title
+        return typeof title === 'string' && title.length > 0
+      } catch {
+        return false
+      }
     },
   }
 }

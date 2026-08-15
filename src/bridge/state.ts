@@ -38,6 +38,8 @@ export class InteractionState {
   private sessionListGeneration = 0
   /** Whether this bridge run accepted new user input (banner-bearing content). */
   newInputDuringRun = false
+  /** The session the TUI most recently created/resumed/opened. */
+  currentSessionId?: string
   readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
   private readonly historyLoading = new Map<string, Promise<CachedHistory>>()
   private readonly historyGenerations = new Map<string, number>()
@@ -147,6 +149,10 @@ export class InteractionState {
   /** Record that the user submitted new input during this run. */
   markInput(): void {
     this.newInputDuringRun = true
+  }
+
+  setCurrentSession(sessionId: string): void {
+    this.currentSessionId = sessionId
   }
 
   registerApproval(entry: PermissionEntry): PermissionEntry {

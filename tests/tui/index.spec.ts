@@ -19,7 +19,6 @@ import {
   prepareOpenCodeTuiState,
   requestExit,
   resolveTuiDir,
-  shouldPrintOcExitNote,
   startOpenCodeTui,
   tuiDirFromArgs,
   tuiSessionFromArgs,
@@ -261,10 +260,6 @@ describe('ocExitNote', () => {
     expect(note).toContain('不要直接运行 opencode 的恢复命令')
   })
 
-  it('prints for any TUI mode that accepted new input', () => {
-    expect(shouldPrintOcExitNote(true)).toBe(true)
-    expect(shouldPrintOcExitNote(false)).toBe(false)
-  })
 })
 
 describe('prepareOpenCodeTuiState', () => {

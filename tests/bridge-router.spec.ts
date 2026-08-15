@@ -299,6 +299,7 @@ describe('bridge router: session routes', () => {
     const result = await request(server, 'POST', '/session', {})
     expect(result.status).toBe(200)
     expect(router.hasNewActivity()).toBe(false)
+    expect(await router.exitNoteNeeded()).toBe(false)
   })
 
   it('tracks new prompt input for the exit note signal', async () => {
@@ -310,6 +311,46 @@ describe('bridge router: session routes', () => {
     })
     expect(result.status).toBe(200)
     expect(router.hasNewActivity()).toBe(true)
+    expect(await router.exitNoteNeeded()).toBe(true)
+  })
+
+  it('needs the exit note for a resumed session with a durable title', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [],
+          hasMore: false,
+          projections: { asOfSeq: 2, values: { title: 'Resumed Title' } as never },
+        }),
+      },
+    }
+    const { router } = await boot(api)
+    expect(await router.exitNoteNeeded()).toBe(false)
+    router.prefetchSession('s1')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(await router.exitNoteNeeded()).toBe(true)
+  })
+
+  it('skips the exit note for an empty resumed session', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [],
+          hasMore: false,
+          projections: { asOfSeq: 1, values: { title: null } as never },
+        }),
+      },
+    }
+    const { router } = await boot(api)
+    router.prefetchSession('s1')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(await router.exitNoteNeeded()).toBe(false)
   })
 
   it('filters session lists by the directory query', async () => {
