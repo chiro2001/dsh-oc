@@ -144,7 +144,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`5f6d22a`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`520735c`（2026-08-15）。
 
 ### 路由注册表
 
@@ -226,15 +226,15 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 35 | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
+| `tests/bridge-events.spec.ts` | 36 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 63 | 5f6d22a fix(bridge): implement POST /session/:id/prompt_async for --mini |
+| `tests/bridge-router.spec.ts` | 72 | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `tests/convert/session.spec.ts` | 7 | 7e3ded6 fix(bridge): show fallback session titles in the list |
+| `tests/convert/session.spec.ts` | 8 | 01b5bf0 feat(bridge): show real durable session titles in the list |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
 | `tests/perf.spec.ts` | 5 | 776d145 test(e2e): remove remaining machine-specific absolute paths |
@@ -243,7 +243,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 30 | 22e8032 feat(tui): validate --dir exists and is a directory before attach |
+| `tests/tui/index.spec.ts` | 32 | 520735c fix(tui): print exit hint for full TUI too, not only --mini |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -252,35 +252,36 @@
 |---|---|
 | `src/bridge/convert/common.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/goal.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `src/bridge/convert/message.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `src/bridge/convert/message.ts` | ebc3ffc fix(bridge): reuse streamed part ids so --mini renders one reply |
 | `src/bridge/convert/model.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/session.ts` | 7e3ded6 fix(bridge): show fallback session titles in the list |
+| `src/bridge/convert/session.ts` | 01b5bf0 feat(bridge): show real durable session titles in the list |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
+| `src/bridge/events.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/index.ts` | f8bad18 chore: rename package to @chiro2001/dsh-oc |
-| `src/bridge/router.ts` | 5f6d22a fix(bridge): implement POST /session/:id/prompt_async for --mini |
+| `src/bridge/index.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
+| `src/bridge/router.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `src/bridge/state.ts` | 5743dd1 perf(bridge): short-TTL list/history caches with mutation and SSE invalidation |
+| `src/bridge/state.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/help.ts` | e256572 feat(bridge): session-scoped always permission memory |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/tui/index.ts` | 22e8032 feat(tui): validate --dir exists and is a directory before attach |
+| `src/tui/index.ts` | 520735c fix(tui): print exit hint for full TUI too, not only --mini |
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/types.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
+| `src/types.ts` | afee9fa feat(tui): print a dsh restore hint under the opencode mini exit banner |
 | `scripts/check-all.sh` | de6e601 test(e2e): verify --dir scopes new sessions and filters the list |
+| `scripts/cleanup-merged-branches.sh` | — |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
-| `scripts/e2e-tui-boot.sh` | 776d145 test(e2e): remove remaining machine-specific absolute paths |
+| `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
 | `scripts/e2e-tui-continue.sh` | 9cf9fb8 test(e2e): cover attach --continue resuming the newest session |
@@ -289,14 +290,14 @@
 | `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
 | `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
-| `scripts/e2e-tui-mini.sh` | 5f6d22a fix(bridge): implement POST /session/:id/prompt_async for --mini |
+| `scripts/e2e-tui-mini.sh` | ebc3ffc fix(bridge): reuse streamed part ids so --mini renders one reply |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/e2e-tui-print-logs.sh` | 071dfdc test(e2e): assert --print-logs forwarding through the fake opencode child |
 | `scripts/e2e-tui-skill.sh` | 360a21d test(e2e): verify skill slash command with Enter+Enter submission |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
 | `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/e2e-tui-tools.sh` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `scripts/e2e-tui-turn.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
+| `scripts/e2e-tui-turn.sh` | 01b5bf0 feat(bridge): show real durable session titles in the list |
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/generate-tui-branding-art.mjs` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/perf-session-gen.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
@@ -305,6 +306,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

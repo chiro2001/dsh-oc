@@ -4,7 +4,13 @@ on:
   push:
     branches:
       - main
+      - develop
       - 'feat-**'
+      - 'fix-**'
+      - 'docs-**'
+      - 'perf-**'
+      - 'test-**'
+      - 'chore-**'
   pull_request:
 
 jobs:

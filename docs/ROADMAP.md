@@ -220,6 +220,54 @@ opencode 版本升级后，API 路由/类型可能变化；需要用户可自助
 
 ---
 
+## M 系列：维护与工程化（2026-08-15 起）
+
+功能主线（N1–N6）完成后进入维护阶段，目标是把项目做成可持续迭代、易参与、
+易验证的仓库。当前处于 `develop` 分支集成交付模式。
+
+### 优先级总览
+
+| 编号 | 方向 | 状态 |
+|---|---|---|
+| M1 | 文档与已知限制同步 | ✅ 进行中：README/FEATURES 已同步退出 splash 说明；`features:update` 自动追踪 |
+| M2 | 开发流程与 CI | ✅ CI 覆盖 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/`chore-*`；`check-all.sh --e2e` 全量回归 |
+| M3 | 社区贡献流程 | ✅ 新增 `CONTRIBUTING.md`、PR 模板、Issue 模板（bug/feature） |
+| M4 | 分支策略与清理 | ✅ `scripts/cleanup-merged-branches.sh`（dry-run 默认）；历史 `feat-*` 已全部并入 main |
+| M5 | 重构（router 拆分/缓存统一） | ⬜ 待排期：`src/bridge/router.ts` 按路由域拆分，状态/缓存管理收敛 |
+
+### M1 文档
+
+- README 已知限制与 `docs/FEATURES.md` 保持一致；新增行为（如退出 splash 说明）必须
+  同步两处。
+- 涉及能力清单的改动运行 `pnpm run features:update` 并提交自动追踪结果。
+
+### M2 开发流程
+
+- 单测/探针/性能冒烟由 `scripts/check-all.sh` 一键执行；完整 e2e 用 `--e2e`。
+- GitHub Actions：`ci.yml` 自动跑 build/typecheck/test/probe；`e2e.yml` 手动触发
+  API e2e 与压测。
+- e2e 分支白名单：`main` / `develop` / `chore-*` / `feat-*`。
+
+### M3 社区贡献
+
+- 开发环境、分支策略、提交规范与自测门槛见 `CONTRIBUTING.md`。
+- Issue/PR 模板位于 `.github/`，按模板填写。
+
+### M4 分支策略与清理
+
+- `main` 稳定发布、`develop` 集成交付、短生命周期功能分支。
+- 已并入 `main` 的历史 `feat-*` 分支可安全清理：
+  `bash scripts/cleanup-merged-branches.sh`（dry-run 先看，`--apply` 删本地，
+  `--remote` 同时删远端；工作树中仍检出的分支会跳过）。
+
+### M5 重构候选
+
+- `src/bridge/router.ts` 约 2200 行，按 v1/v2/session/tool/permission/goal 域拆分。
+- `InteractionState` 各缓存/映射的失效规则统一为单一生成号管理。
+- e2e 辅助函数（`tests/e2e/common.sh`）收敛重复的 tmux/等待逻辑。
+
+---
+
 ## 统一验收门槛
 
 1. `pnpm install && pnpm build && pnpm typecheck && pnpm test` 全部通过。
