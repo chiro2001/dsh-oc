@@ -249,7 +249,7 @@ opencode 版本升级后，API 路由/类型可能变化；需要用户可自助
 | 编号 | 方向 | 状态 |
 |---|---|---|
 | M1 | 文档与已知限制同步 | ✅ README（用户）与 AGENTS.md（Agent/开发）分离，CHANGELOG/FEATURES 自动追踪 |
-| M2 | 开发流程与 CI | ✅ CI 覆盖 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/`chore-*`；push 自动跑 API e2e 子集，手动触发全量 e2e + 压测 |
+| M2 | 开发流程与 CI | ✅ CI 覆盖 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/`chore-*`；push 自动跑稳定 e2e 套件，手动触发全量 e2e + 压测 |
 | M3 | 社区贡献流程 | ✅ `CONTRIBUTING.md`、PR 模板、Issue 模板（bug/feature） |
 | M4 | 分支策略与清理 | ✅ `scripts/cleanup-merged-branches.sh`（dry-run 默认）；历史 `feat-*` 已全部并入 main |
 | M5 | 重构（router 拆分/缓存统一） | ✅ 路由注册按域拆到 `src/bridge/routes/`；缓存/在途合并与失效 generation 已统一 |
@@ -263,8 +263,8 @@ opencode 版本升级后，API 路由/类型可能变化；需要用户可自助
 ### M2 开发流程
 
 - 单测/探针/性能冒烟由 `scripts/check-all.sh` 一键执行；完整 e2e 用 `--e2e`。
-- GitHub Actions：`ci.yml` 自动跑 build/typecheck/test/probe；`e2e.yml` 手动触发
-  API e2e 与压测。
+- GitHub Actions：`ci.yml` 自动跑 build/typecheck/test/probe；`e2e.yml` push
+  自动跑稳定 e2e 套件、手动触发全量 e2e 与压测。
 - e2e 分支白名单：`main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
   `perf-*` / `test-*` / `feat-*`。
 

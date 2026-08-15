@@ -58,7 +58,7 @@
 - `CONTRIBUTING.md`、PR/Issue 模板、分支策略（main 发布 / develop 集成 /
   短生命周期功能分支）。
 - CI：push 到 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/
-  `chore-*` 自动跑 API e2e 子集；手动触发全量 e2e + 压测。
+  `chore-*` 自动跑稳定 e2e 套件（`CI_E2E_SUBSET=1`）；手动触发全量 e2e + 压测。
 - M5 重构：路由注册从 `router.ts` 抽出，并按域拆分为
   `src/bridge/routes/{boot,session-v1,session-v2,permission}.ts`；
   协议探针自动扫描路由目录。
