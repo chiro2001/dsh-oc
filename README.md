@@ -21,7 +21,7 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 <img src="docs/demo/dsh-oc-demo.gif" alt="dsh-oc 核心功能演示（真实 DeepSeek 模型）" width="900">
 
 真实录制：`dsh --profile oc` → 品牌启动画面 → 真实模型运行 `pnpm test` →
-266 个测试全部通过 → 退出提示。cast 源文件在
+全部单测通过 → 退出提示。cast 源文件在
 [docs/demo/dsh-oc-demo.cast](docs/demo/dsh-oc-demo.cast)，可
 `asciinema play` 回放。
 

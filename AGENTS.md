@@ -34,10 +34,12 @@ src/
       session-v2.ts  # v2 会话路由
       permission.ts  # permission / question 路由
     routes.ts        # 聚合器（注册顺序即匹配顺序，勿乱）
+      vcs.ts         # 真实 git 信息/状态/diff 路由
+      fs.ts          # 工作区文件读取/列表/查找路由
     events.ts        # SSE 事件翻译（turn.*、message.*、session.*、工具流、权限）
     state.ts         # 桥内存状态（缓存、标题、preset、活动标记）
     convert/         # dsh 事件 → opencode 消息/会话/模型/权限转换
-    http.ts sse.ts rpc.ts errors.ts stubs.ts git.ts
+    http.ts sse.ts rpc.ts errors.ts stubs.ts git.ts fs.ts
   tui/               # opencode 子进程解析/下载/spawn、信号转发、退出处理
   help.ts            # --help / /help 静态能力摘要
 tui-branding/        # DSH OC 品牌 logo TUI 插件
@@ -130,7 +132,7 @@ e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
 ## 关键实现约定与陷阱
 
 - **路由注册顺序即匹配顺序**：`src/bridge/routes.ts` 按 boot → session-v1 →
-  permission → session-v2 → SSE 顺序调用；新增路由放在对应域文件。
+  permission → session-v2 → vcs → fs → SSE 顺序调用；新增路由放在对应域文件。
 - **会话列表标题**：dsh `session.list` 不返回 title 投影；bridge 从
   `session.history` tail 投影补读（≤40 非空会话同步全量，大列表后台低并发补
   24，绝不阻塞列表请求）。标题优先级：投影标题 → 目录 basename → session id。
