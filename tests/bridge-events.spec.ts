@@ -1647,4 +1647,72 @@ describe('bridge events: SSE connection lifecycle', () => {
     expect(subscriptions).toBe(2)
     controller.abort()
   })
+
+  it('keeps pending approvals deduped across mux retries', async () => {
+    let subscription = 0
+    const base = fakeApi()
+    const approvalFrame = {
+      rpcId: 'rpc-approval' as never,
+      payload: {
+        type: 'approval/requested',
+        sessionId: 's1' as never,
+        approvalId: 'a1' as never,
+        toolName: 'bash',
+        callId: 'c1' as never,
+      },
+    }
+    const api = {
+      ...base,
+      events: {
+        ...base.events,
+        mux: async function* (_request: never, signal: AbortSignal) {
+          subscription += 1
+          if (subscription === 1) {
+            yield approvalFrame
+            throw new Error('transient after approval')
+          }
+          // dsh replays the still-pending approval on resubscribe.
+          yield approvalFrame
+          yield {
+            rpcId: 'rpc-turn' as never,
+            payload: {
+              type: 'session/event',
+              sessionId: 's1',
+              event: sessionEvent('turn/start', { turn: 1 }, 1, 100),
+            },
+          }
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve())
+          })
+        },
+      },
+    }
+    const router = createBridgeRouter(api as never, {
+      cwd: '/work',
+      sseRetryBaseMs: 10,
+      sseRetryMaxAttempts: 3,
+    })
+    const server = await startBridgeServer(router)
+    servers.push(server)
+
+    const controller = new AbortController()
+    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline && !text.includes('session.status')) {
+      const { done, value } = await reader?.read() ?? { done: true, value: undefined }
+      text += decoder.decode(value ?? new Uint8Array())
+      if (done) break
+    }
+    expect(text).toContain('session.status')
+    expect(subscription).toBe(2)
+    const asked = (text.match(/permission\.asked/g) ?? []).length
+    expect(asked).toBe(1)
+
+    const pending = await (await fetch(server.url + '/permission')).json() as unknown[]
+    expect(pending).toHaveLength(1)
+    controller.abort()
+  })
 })
