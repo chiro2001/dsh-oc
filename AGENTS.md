@@ -63,6 +63,7 @@ pnpm run perf              # 会话性能压测（--sessions N --scale ...）
 pnpm run features:update   # 刷新 docs/FEATURES.md 自动追踪
 bash scripts/check-all.sh --e2e          # 一键全量门槛
 bash scripts/check-all.sh --e2e --scale 5000
+bash scripts/cleanup-e2e-runs.sh --keep 20 --apply   # 清理 .e2e 旧 run（默认 dry-run）
 ```
 
 本地直连 dsh profile（实时验证）：`dsh plugin --profile oc add .`；改代码后

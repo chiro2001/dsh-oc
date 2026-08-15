@@ -64,6 +64,8 @@
   协议探针自动扫描路由目录。
 - `scripts/cleanup-merged-branches.sh`：列出/删除已并入 main 的遗留分支
   （默认 dry-run，`--apply` 本地删除，`--remote` 同步删除远端）。
+- `scripts/cleanup-e2e-runs.sh`：清理 `.e2e` 下旧的 e2e run 目录
+  （默认 dry-run，`--keep N` 保留最近 N 个，`--apply` 删除；测试产物可再生）。
 - `pnpm run e2e` / `pnpm run e2e:api`：一键跑全量或 API 子集 e2e。
 - `scripts/e2e-tui-permission.sh`：真实 TUI 权限/提问 e2e（workspace-write +
   mock LLM 升级工具调用），覆盖 Allow once、Allow always + 会话内自动放行、
