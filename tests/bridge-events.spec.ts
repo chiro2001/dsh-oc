@@ -469,7 +469,7 @@ describe('bridge events: session event mapping', () => {
     expect(finalPart[0]?.payload.properties.part).toMatchObject({
       id: 'prt_stream:s1:1:1:reasoning:0',
       text: ' think',
-      time: { start: 1100, end: 2000 },
+      time: { start: 1100, end: 1100 },
     })
   })
 

@@ -215,6 +215,7 @@ interface SessionStreamState {
   lastUserMessageId?: string
   provisionalMessageIds: Map<string, string>
   blockStarts: Map<string, number>
+  blockEnds: Map<string, number>
   finishReasons: Map<string, string>
   blocks: Map<string, StreamBlockState>
   compactions: Map<string, CompactionStreamState>
@@ -390,6 +391,7 @@ export class MuxEventTranslator {
       state = {
         provisionalMessageIds: new Map(),
         blockStarts: new Map(),
+        blockEnds: new Map(),
         finishReasons: new Map(),
         blocks: new Map(),
         compactions: new Map(),
@@ -994,6 +996,7 @@ export class MuxEventTranslator {
             event,
             messageOptions(sessionId, this.deps),
             (index, blockType) => state.blockStarts.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`),
+            (index, blockType) => state.blockEnds.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`),
             created,
             state.lastUserMessageId,
             state.finishReasons.get(stepKey) ?? 'stop',
@@ -1267,6 +1270,7 @@ export class MuxEventTranslator {
     }
     const sent = block.sent
     block.text += event.data.texts.join('')
+    state.blockEnds.set(blockStartKey, event.time ?? time0)
     block.sent = block.text.length
     if (sent === 0) {
       events.push(

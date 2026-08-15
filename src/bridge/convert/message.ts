@@ -179,6 +179,7 @@ export function assistantPartsFromMessage(
   time: number,
   opts: MessageConvertOptions,
   blockStart?: (index: number, blockType: string) => number | undefined,
+  blockEnd?: (index: number, blockType: string) => number | undefined,
   partIdFor?: (index: number, blockType: string) => string | undefined,
 ): { parts: Part[]; calls: Map<string, ToolCallInfo> } {
   const parts: Part[] = []
@@ -195,7 +196,7 @@ export function assistantPartsFromMessage(
         messageID,
         type: 'reasoning',
         text: block.text,
-        time: { start, end: time },
+        time: { start, end: blockEnd?.(index, 'reasoning') ?? time },
       })
     } else if (block.type === 'tool-call') {
       const call: ToolCallInfo = {
@@ -439,6 +440,7 @@ export function convertMessagesV1(
   const blockStarts = new Map<string, number>()
   const turnStarts = new Map<number, number>()
   const finishReasons = new Map<string, string>()
+  const blockEnds = new Map<string, number>()
   const blocksByStep: StreamBlocksByStep = new Map()
   const pending = new Map<string, V1MessageEntry>()
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
@@ -473,6 +475,7 @@ export function convertMessagesV1(
           const blockType = chunk.type === 'text-delta' ? 'text' : 'reasoning'
           const key = `${data.turn}:${data.step}:${chunk.index}:${blockType}`
           if (!blockStarts.has(key)) blockStarts.set(key, event.time)
+          blockEnds.set(key, event.time)
           const start = blockStarts.get(key) ?? event.time
           accumulateStreamBlock(blocksByStep, data.turn, data.step, chunk.index, blockType, chunk.text, start)
           upsertPartialV1(
@@ -498,6 +501,7 @@ export function convertMessagesV1(
         if (!blockStarts.has(key)) {
           blockStarts.set(key, time0)
         }
+        blockEnds.set(key, event.time)
         const start = blockStarts.get(key) ?? time0
         accumulateStreamBlock(
           blocksByStep,
@@ -530,6 +534,7 @@ export function convertMessagesV1(
           event.time,
           opts,
           (index, blockType) => blockStarts.get(`${data.turn}:${data.step}:${index}:${blockType}`),
+          (index, blockType) => blockEnds.get(`${data.turn}:${data.step}:${index}:${blockType}`),
         )
         for (const [callId, call] of messageCalls) calls.set(callId, call)
         const pendingEntry = pending.get(stepKey)
@@ -630,13 +635,14 @@ export function assistantMessageFromEvent(
   event: SessionEvent<'assistant/message'>,
   opts: MessageConvertOptions,
   blockStart?: (index: number, blockType: string) => number | undefined,
+  blockEnd?: (index: number, blockType: string) => number | undefined,
   created?: number,
   parentID?: string,
   finish?: string,
   partIdFor?: (index: number, blockType: string) => string | undefined,
 ): V1MessageEntry {
   const id = String(event.data.message.id)
-  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart, partIdFor)
+  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart, blockEnd, partIdFor)
   return {
     info: assistantMessageInfo(event.data.message, event.time, parentID ?? id, opts, event.data.usage, created, finish),
     parts,

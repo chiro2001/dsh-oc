@@ -117,6 +117,22 @@ describe('convert/message (v1)', () => {
     expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1200, end: 1200 } })
   })
 
+  it('ends reasoning at the last reasoning chunk time, not reply completion', () => {
+    const events = [
+      chunkRow('reasoning-chunks', ['th'], 1000, 1, 0),
+      chunkRow('reasoning-chunks', ['ink'], 1100, 2, 0),
+      chunkRow('text-chunks', ['an'], 1200, 3, 1),
+      chunkRow('text-chunks', ['swer'], 1300, 4, 1),
+      makeAssistantEvent([
+        { type: 'reasoning', text: 'think' },
+        { type: 'text', text: 'answer' },
+      ]),
+    ]
+    const [entry] = convertMessagesV1(events, opts)
+    expect(entry?.parts[0]).toMatchObject({ type: 'reasoning', time: { start: 1000, end: 1100 } })
+    expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1200, end: 1200 } })
+  })
+
   it('uses turn/start and block-start times for assistant history durations', () => {
     const events = [
       sessionEvent('turn/start', { turn: 1 }, 1, 1000),
