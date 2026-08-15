@@ -48,7 +48,9 @@ export function convertSessionSummary(
     slug: String(summary.sessionId),
     projectID: projectIdFor(directory),
     directory,
-    parentID: summary.parentSessionId === undefined ? undefined : String(summary.parentSessionId),
+    ...(summary.origin === 'subagent' && summary.parentSessionId !== undefined
+      ? { parentID: String(summary.parentSessionId) }
+      : {}),
     title,
     agent: summary.agentPreset ?? DEFAULT_AGENT,
     ...(options.model === undefined ? {} : { model: options.model }),
@@ -72,7 +74,9 @@ export function convertSessionSummaryV2(
   const createdAt = options.createdAt ?? summary.updatedAt
   return {
     id: String(summary.sessionId),
-    parentID: summary.parentSessionId === undefined ? undefined : String(summary.parentSessionId),
+    ...(summary.origin === 'subagent' && summary.parentSessionId !== undefined
+      ? { parentID: String(summary.parentSessionId) }
+      : {}),
     projectID: projectIdFor(directory),
     agent: summary.agentPreset ?? DEFAULT_AGENT,
     ...(options.model === undefined ? {} : { model: options.model }),

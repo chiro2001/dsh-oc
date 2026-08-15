@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { MuxEventTranslator, type BridgeGlobalEvent } from '../src/bridge/events.js'
@@ -6,6 +10,28 @@ import { InteractionState } from '../src/bridge/state.js'
 import { createBridgeRouter } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import { fakeApi, makeAssistantEvent, makeUserEvent, sessionEvent } from './helpers.js'
+
+const tempDirs: string[] = []
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+function gitFixture(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-oc-events-git-'))
+  execFileSync('git', ['init', '-q'], { cwd: dir })
+  execFileSync('git', ['config', 'user.email', 'e2e@dsh-oc.test'], { cwd: dir })
+  execFileSync('git', ['config', 'user.name', 'dsh-oc e2e'], { cwd: dir })
+  for (const [path, content] of Object.entries(files)) {
+    const full = join(dir, path)
+    mkdirSync(join(full, '..'), { recursive: true })
+    writeFileSync(full, content)
+  }
+  execFileSync('git', ['add', '-A'], { cwd: dir })
+  execFileSync('git', ['commit', '-qm', 'initial'], { cwd: dir })
+  tempDirs.push(dir)
+  return dir
+}
 
 function frame(payload: MuxFrame, rpcId = 'rpc-1'): RpcRequest<MuxFrame> {
   return { rpcId: rpcId as never, payload }
@@ -35,8 +61,8 @@ function chunkRow(
   } as unknown as SessionEvent
 }
 
-function translator(state = new InteractionState(), logs: string[] = []) {
-  const instance = new MuxEventTranslator({ cwd: '/work', state, log: (message) => logs.push(message) })
+function translator(state = new InteractionState(), logs: string[] = [], cwd = '/work') {
+  const instance = new MuxEventTranslator({ cwd, state, log: (message) => logs.push(message) })
   return {
     state,
     logs,
@@ -396,7 +422,9 @@ describe('bridge events: session event mapping', () => {
   })
 
   it('emits snapshot/patch parts and session.diff after a file-changing tool', () => {
-    const { translate } = translator()
+    const work = gitFixture({ 'src/a.ts': 'const a = 1' })
+    const trackedPath = join(work, 'src', 'a.ts')
+    const { translate } = translator(new InteractionState(), [], work)
     const events = translate([
       frame({
         type: 'session/event',
@@ -408,7 +436,7 @@ describe('bridge events: session event mapping', () => {
           name: 'str_replace_editor',
           arguments: JSON.stringify({
             command: 'str_replace',
-            path: '/work/src/a.ts',
+            path: trackedPath,
             old_str: 'const a = 1',
             new_str: 'const a = 2',
           }),
@@ -417,9 +445,9 @@ describe('bridge events: session event mapping', () => {
           for: 'call',
           view: {
             card: 'diff',
-            title: 'str_replace /work/src/a.ts',
+            title: `str_replace ${trackedPath}`,
             diffs: [{
-              path: '/work/src/a.ts',
+              path: trackedPath,
               oldText: 'const a = 1',
               newText: 'const a = 2',
             }],
@@ -447,9 +475,9 @@ describe('bridge events: session event mapping', () => {
           for: 'result',
           view: {
             card: 'diff',
-            title: 'str_replace /work/src/a.ts',
+            title: `str_replace ${trackedPath}`,
             diffs: [{
-              path: '/work/src/a.ts',
+              path: trackedPath,
               oldText: 'const a = 1',
               newText: 'const a = 2',
             }],
@@ -474,21 +502,21 @@ describe('bridge events: session event mapping', () => {
       state: {
         status: 'completed',
         metadata: {
-          files: ['/work/src/a.ts'],
+          files: [trackedPath],
           command: 'str_replace',
         },
       },
     })
     const patch = partEvents[3]?.payload.properties.part as { type: string; files: string[]; hash: string }
     expect(patch.type).toBe('patch')
-    expect(patch.files).toEqual(['/work/src/a.ts'])
+    expect(patch.files).toEqual([trackedPath])
     expect(patch.hash).toBeTypeOf('string')
 
     const diff = events.find((event) => event.payload.type === 'session.diff')
     expect(diff?.payload.properties).toMatchObject({
       sessionID: 's1',
       diff: [{
-        file: '/work/src/a.ts',
+        file: trackedPath,
         additions: 1,
         deletions: 1,
         status: 'modified',
@@ -633,7 +661,8 @@ describe('bridge events: approval/question frames', () => {
 
 describe('bridge events: projection and control frames', () => {
   it('maps todos and produced-files projections', () => {
-    const { translate } = translator()
+    const work = gitFixture({ 'a.ts': 'x' })
+    const { translate } = translator(new InteractionState(), [], work)
     const events = translate([
       frame({
         type: 'session/projection',
@@ -659,7 +688,8 @@ describe('bridge events: projection and control frames', () => {
   })
 
   it('normalizes produced-files patch/status into SnapshotFileDiff', () => {
-    const { translate } = translator()
+    const work = gitFixture({ 'src/new.ts': 'hello\n' })
+    const { translate } = translator(new InteractionState(), [], work)
     const events = translate([
       frame({
         type: 'session/projection',

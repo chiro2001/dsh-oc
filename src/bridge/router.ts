@@ -31,7 +31,13 @@ import {
   notFound,
   rpcErrorToHttp,
 } from './errors.js'
-import { convertSessionSummary, convertSessionSummaryV2, minimalSession, minimalSessionV2 } from './convert/session.js'
+import {
+  convertSessionSummary,
+  convertSessionSummaryV2,
+  minimalSession,
+  minimalSessionV2,
+  sessionTitleFrom,
+} from './convert/session.js'
 import {
   convertMessagesV1,
   convertMessagesV2,
@@ -48,6 +54,7 @@ import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/questio
 import { convertTodos } from './convert/todo.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
 import { convertProducedFiles, toSnapshotFileDiffs } from './events.js'
+import { filterGitTrackedDiffs } from './git.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { InteractionState } from './state.js'
 import { SseHub } from './sse.js'
@@ -180,7 +187,7 @@ function recordSessionSummaries(
   for (const item of items) {
     const id = String(item.sessionId)
     ctx.state.sessionDirectories.set(id, directories.get(id) ?? ctx.cwd)
-    if (item.parentSessionId !== undefined) {
+    if (item.origin === 'subagent' && item.parentSessionId !== undefined) {
       ctx.state.sessionParents.set(id, String(item.parentSessionId))
     }
   }
@@ -542,15 +549,51 @@ async function forkSession(
   const body = bodyAsRecord(req.body)
   const messageId = typeof body.messageID === 'string' ? body.messageID : undefined
   const atSeq = messageId === undefined ? undefined : await atSeqForMessage(ctx, id, messageId)
-  const result = await rpc(ctx, 'session.fork', {
-    sessionId: sid(id),
-    ...(atSeq === undefined ? {} : { atSeq }),
-  })
-  const childId = String(result.sessionId)
+  const childId = await forkFromSource(ctx, id, atSeq)
   const view = await sessionView(ctx, childId)
   return json(200, v2
     ? { data: toV2Session(view, childId, ctx) }
     : toV1Session(view, childId, ctx))
+}
+
+/**
+ * dsh forks are independent conversations, not subagent children. Derive a
+ * user-visible `(fork #N)` title from the source session and the number of
+ * existing non-subagent forks before calling `session.rename`.
+ */
+async function forkTitleForSource(
+  ctx: BridgeRouteContext,
+  sourceId: string,
+): Promise<string> {
+  const list = await rpc(ctx, 'session.list', {})
+  const source = list.items.find((item) => String(item.sessionId) === sourceId)
+  const existingForks = list.items.filter(
+    (item) =>
+      String(item.sessionId) !== sourceId
+      && String(item.parentSessionId) === sourceId
+      && item.origin !== 'subagent',
+  )
+  const sourceTitle = source === undefined ? undefined : sessionTitleFrom(source)
+  return `${sourceTitle || 'Session'} (fork #${existingForks.length + 1})`
+}
+
+async function forkFromSource(
+  ctx: BridgeRouteContext,
+  sourceId: string,
+  atSeq?: number,
+): Promise<string> {
+  const title = await forkTitleForSource(ctx, sourceId)
+  const result = await rpc(ctx, 'session.fork', {
+    sessionId: sid(sourceId),
+    ...(atSeq === undefined ? {} : { atSeq }),
+  })
+  const childId = String(result.sessionId)
+  try {
+    await rpc(ctx, 'session.rename', { sessionId: sid(childId), title })
+  } catch (error) {
+    ctx.log(`[bridge] rename of forked session ${childId} failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  return childId
 }
 
 /**
@@ -607,8 +650,7 @@ async function createSession(
   const agentPreset = agentName === undefined ? undefined : await presetIdForAgent(ctx, agentName)
   let id: string
   if (parentID) {
-    const result = await rpc(ctx, 'session.fork', { sessionId: sid(parentID) })
-    id = String(result.sessionId)
+    id = await forkFromSource(ctx, parentID)
   } else {
     const location = body.location as { directory?: unknown } | undefined
     const directory = typeof location?.directory === 'string' ? location.directory : ctx.cwd
@@ -618,16 +660,16 @@ async function createSession(
       ...(agentPreset === undefined ? {} : { agentPreset }),
     })
     id = String(result.sessionId)
+    if (title) {
+      try {
+        await rpc(ctx, 'session.rename', { sessionId: sid(id), title })
+      } catch (error) {
+        ctx.log(`[bridge] rename of new session ${id} failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
   }
   if (body.model !== undefined) {
     await applyModelSelection(ctx, id, body)
-  }
-  if (title) {
-    try {
-      await rpc(ctx, 'session.rename', { sessionId: sid(id), title })
-    } catch (error) {
-      ctx.log(`[bridge] rename of new session ${id} failed: ${error instanceof Error ? error.message : String(error)}`)
-    }
   }
   const view = await sessionView(ctx, id)
   return json(200, v2 ? { data: toV2Session(view, id, ctx) } : toV1Session(view, id, ctx))
@@ -972,7 +1014,7 @@ export function createBridgeRouter(
   register('GET', '/session/:id/diff', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
-    return json(200, producedFilesV1(historyFileDiffs(history)))
+    return json(200, producedFilesV1(filterGitTrackedDiffs(ctx.cwd, historyFileDiffs(history))))
   })
 
   // ---- permission / question (legacy v1-style routes) ----
@@ -1087,7 +1129,7 @@ export function createBridgeRouter(
   register('GET', '/api/session/:sessionID/diff', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
-    return json(200, historyFileDiffs(history))
+    return json(200, filterGitTrackedDiffs(ctx.cwd, historyFileDiffs(history)))
   })
 
   register('GET', '/api/session/:sessionID/permission', 'json', async (req, ctx) => {

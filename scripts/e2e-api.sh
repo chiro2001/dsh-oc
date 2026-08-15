@@ -197,19 +197,31 @@ wait_assistant "$BRIDGE/api/session/$SESSION_V2/message" "mock response recovere
 echo "== fork lineage =="
 USER_MESSAGE_ID="$(curl -s "$BRIDGE/session/$SESSION_V1/message" | jq -er '.[] | select(.info.role == "user") | .info.id' | head -1)"
 [[ -n "$USER_MESSAGE_ID" ]]
-FORKED_AT_MSG="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' \
-  -d "{\"messageID\":\"$USER_MESSAGE_ID\"}" | jq -er .id)"
+FORKED_AT_MSG_JSON="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' \
+  -d "{\"messageID\":\"$USER_MESSAGE_ID\"}")"
+FORKED_AT_MSG="$(jq -er .id <<<"$FORKED_AT_MSG_JSON")"
 [[ -n "$FORKED_AT_MSG" && "$FORKED_AT_MSG" != "$SESSION_V1" ]]
-curl -s "$BRIDGE/session/$FORKED_AT_MSG" | jq -e --arg f "$FORKED_AT_MSG" --arg p "$SESSION_V1" '.id == $f and .parentID == $p' >/dev/null
-echo "  fork at message $USER_MESSAGE_ID -> $FORKED_AT_MSG"
-FORKED_V1="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' -d '{}' | jq -er .id)"
+jq -e --arg f "$FORKED_AT_MSG" --arg t 'e2e renamed (fork #1)' \
+  '.id == $f and (has("parentID") | not) and .title == $t' <<<"$FORKED_AT_MSG_JSON" >/dev/null
+curl -s "$BRIDGE/session/$FORKED_AT_MSG" | jq -e --arg f "$FORKED_AT_MSG" --arg t 'e2e renamed (fork #1)' \
+  '.id == $f and (has("parentID") | not) and .title == $t' >/dev/null
+echo "  fork at message $USER_MESSAGE_ID -> $FORKED_AT_MSG (fork #1)"
+FORKED_V1_JSON="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' -d '{}')"
+FORKED_V1="$(jq -er .id <<<"$FORKED_V1_JSON")"
 [[ -n "$FORKED_V1" && "$FORKED_V1" != "$SESSION_V1" ]]
-curl -s "$BRIDGE/session/$FORKED_V1" | jq -e --arg f "$FORKED_V1" --arg p "$SESSION_V1" '.id == $f and .parentID == $p' >/dev/null
-echo "  v1 fork: $FORKED_V1 (parent $SESSION_V1)"
-FORKED_V2="$(curl -s -X POST "$BRIDGE/api/session/$SESSION_V1/fork" -H 'Content-Type: application/json' -d '{}' | jq -er .data.id)"
+jq -e --arg f "$FORKED_V1" --arg t 'e2e renamed (fork #2)' \
+  '.id == $f and (has("parentID") | not) and .title == $t' <<<"$FORKED_V1_JSON" >/dev/null
+curl -s "$BRIDGE/session/$FORKED_V1" | jq -e --arg f "$FORKED_V1" --arg t 'e2e renamed (fork #2)' \
+  '.id == $f and (has("parentID") | not) and .title == $t' >/dev/null
+echo "  v1 fork: $FORKED_V1 (fork #2)"
+FORKED_V2_JSON="$(curl -s -X POST "$BRIDGE/api/session/$SESSION_V1/fork" -H 'Content-Type: application/json' -d '{}')"
+FORKED_V2="$(jq -er .data.id <<<"$FORKED_V2_JSON")"
 [[ -n "$FORKED_V2" && "$FORKED_V2" != "$SESSION_V1" ]]
-curl -s "$BRIDGE/api/session/$FORKED_V2" | jq -e --arg f "$FORKED_V2" --arg p "$SESSION_V1" '.data.id == $f and .data.parentID == $p' >/dev/null
-echo "  v2 fork: $FORKED_V2 (parent $SESSION_V1)"
+jq -e --arg f "$FORKED_V2" --arg t 'e2e renamed (fork #3)' \
+  '.data.id == $f and (.data | has("parentID") | not) and .data.title == $t' <<<"$FORKED_V2_JSON" >/dev/null
+curl -s "$BRIDGE/api/session/$FORKED_V2" | jq -e --arg f "$FORKED_V2" --arg t 'e2e renamed (fork #3)' \
+  '.data.id == $f and (.data | has("parentID") | not) and .data.title == $t' >/dev/null
+echo "  v2 fork: $FORKED_V2 (fork #3)"
 
 echo "== compact =="
 COMPACT_CODE="$(curl -s -o "$E2E_RUN/compact-summarize.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V1/summarize" \

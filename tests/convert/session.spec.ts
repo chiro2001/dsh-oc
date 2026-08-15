@@ -60,7 +60,7 @@ describe('convert/session', () => {
     expect(v2.title).toBe('My Session')
   })
 
-  it('maps fork lineage and subagent origin onto both session shapes', () => {
+  it('maps subagent origin onto both session shapes', () => {
     const child = summary({
       parentSessionId: 'session-parent' as never,
       origin: 'subagent' as const,
@@ -76,6 +76,24 @@ describe('convert/session', () => {
     const v2 = convertSessionSummaryV2(child, { cwd: '/parent' })
     expect(v2.parentID).toBe('session-parent')
     expect(v2.title).toBe('Subagent session')
+  })
+
+  it('treats dsh forks as independent sessions without parentID or subagent metadata', () => {
+    const fork = summary({
+      parentSessionId: 'session-parent' as never,
+      cwd: undefined,
+      projections: undefined,
+    })
+    const v1 = convertSessionSummary(fork, { cwd: '/parent' })
+    expect(v1.parentID).toBeUndefined()
+    expect(v1.metadata).toBeUndefined()
+    expect(v1.title).toBe('')
+    expect(v1.directory).toBe('/parent')
+
+    const v2 = convertSessionSummaryV2(fork, { cwd: '/parent' })
+    expect(v2.parentID).toBeUndefined()
+    expect(v2.title).toBe('')
+    expect(v2.location.directory).toBe('/parent')
   })
 
   it('reads the title projection', () => {

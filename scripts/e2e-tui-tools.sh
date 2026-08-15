@@ -69,35 +69,7 @@ stop_sse() {
   fi
 }
 
-echo "== bash tool file write =="
-e2e_new_run "tools-bash" "danger-full-access" "tool_call_success,success" "1" \
-  '{"command":"mkdir -p src && printf \"hello\\n\" > src/generated.txt","description":"e2e bash file write"}'
-E2E_ACTIVE_SESSION="dsh-oc-tools-bash"
-e2e_start_dsh "$E2E_ACTIVE_SESSION"
-e2e_wait_bridge_url
-BASH_BRIDGE="$E2E_BRIDGE_URL"
-start_sse "$BASH_BRIDGE" "$E2E_RUN_DIR/tools-bash-sse.txt"
-BASH_SESSION="$(seed_tool_session "$BASH_BRIDGE")"
-echo "  bash session: $BASH_SESSION"
-wait_assistant_text "$BASH_BRIDGE/session/$BASH_SESSION/message" "mock response recovered"
-
-BASH_TOOL="$(curl -s "$BASH_BRIDGE/session/$BASH_SESSION/message" | jq -r '[.. | objects | select(.type == "tool") | .tool] | join(" ")')"
-[[ "$BASH_TOOL" == *bash* ]]
-echo "  bash tool card: $BASH_TOOL"
-BASH_OUTPUT="$(curl -s "$BASH_BRIDGE/session/$BASH_SESSION/message" | jq -r '[.. | objects | select(.type == "tool" and .tool == "bash") | (.state.output // .state.metadata.output // "")] | join(" ")')"
-echo "  bash card output: ${BASH_OUTPUT:0:40}"
-BASH_DIFF="$(curl -s "$BASH_BRIDGE/api/session/$BASH_SESSION/diff")"
-jq -e --arg file "src/generated.txt" 'any(.[]; .file == $file)' <<<"$BASH_DIFF" >/dev/null
-echo "  bash diff visible: $(jq -r '.[0].file' <<<"$BASH_DIFF")"
-[[ -f "$E2E_WORKDIR/src/generated.txt" ]]
-echo "  bash wrote workdir file"
-
-stop_sse
-e2e_stop_dsh "$E2E_ACTIVE_SESSION"
-E2E_ACTIVE_SESSION=""
-e2e_stop_run
-
-echo "== str_replace_editor file write =="
+echo "== str_replace_editor untracked file write =="
 e2e_new_run "tools-edit" "danger-full-access" "tool_call_success,success" "1" \
   '{"command":"create","path":"@WORKDIR@/created.txt","file_text":"created by str_replace_editor\n"}' \
   "str_replace_editor"
@@ -114,34 +86,71 @@ EDIT_TOOL_JSON="$(curl -s "$EDIT_BRIDGE/session/$EDIT_SESSION/message" | jq -c '
 jq -e '.tool == "edit" and .state.status == "completed" and (.state.metadata.diff | type) == "string" and (.state.metadata.diff | length > 0)' <<<"$EDIT_TOOL_JSON" >/dev/null
 echo "  str_replace_editor rendered as edit card with metadata.diff"
 EDIT_DIFF="$(curl -s "$EDIT_BRIDGE/api/session/$EDIT_SESSION/diff")"
-jq -e 'any(.[]; (.file | endswith("created.txt")) and (.patch | type) == "string" and (.patch | length > 0) and .additions == 1)' <<<"$EDIT_DIFF" >/dev/null
-echo "  edit diff visible: $(jq -r '.[0].file' <<<"$EDIT_DIFF")"
+if jq -e 'any(.[]; (.file // "") | endswith("created.txt"))' <<<"$EDIT_DIFF" >/dev/null; then
+  echo "e2e: untracked created.txt leaked into API diff" >&2
+  exit 1
+fi
+echo "  untracked created.txt excluded from sidebar diff"
 [[ -f "$E2E_WORKDIR/created.txt" ]]
 echo "  str_replace_editor wrote workdir file"
 
 stop_sse
-
-echo "== real TUI file changes =="
 e2e_stop_dsh "$E2E_ACTIVE_SESSION"
 E2E_ACTIVE_SESSION=""
-e2e_tui_start "--session $EDIT_SESSION"
+e2e_stop_run
+
+echo "== bash tool tracked file write =="
+e2e_new_run "tools-bash" "danger-full-access" "tool_call_success,success" "1" \
+  '{"command":"mkdir -p src && printf \"tracked updated\\n\" > src/tracked.txt","description":"e2e bash tracked file write"}'
+git -C "$E2E_WORKDIR" config user.email e2e@dsh-oc.test
+git -C "$E2E_WORKDIR" config user.name dsh-oc-e2e
+mkdir -p "$E2E_WORKDIR/src"
+printf 'tracked initial\n' > "$E2E_WORKDIR/src/tracked.txt"
+git -C "$E2E_WORKDIR" add src/tracked.txt
+git -C "$E2E_WORKDIR" commit -qm 'initial tracked file'
+E2E_ACTIVE_SESSION="dsh-oc-tools-bash"
+e2e_start_dsh "$E2E_ACTIVE_SESSION"
+e2e_wait_bridge_url
+BASH_BRIDGE="$E2E_BRIDGE_URL"
+start_sse "$BASH_BRIDGE" "$E2E_RUN_DIR/tools-bash-sse.txt"
+BASH_SESSION="$(seed_tool_session "$BASH_BRIDGE")"
+echo "  bash session: $BASH_SESSION"
+wait_assistant_text "$BASH_BRIDGE/session/$BASH_SESSION/message" "mock response recovered"
+
+BASH_TOOL="$(curl -s "$BASH_BRIDGE/session/$BASH_SESSION/message" | jq -r '[.. | objects | select(.type == "tool") | .tool] | join(" ")')"
+[[ "$BASH_TOOL" == *bash* ]]
+echo "  bash tool card: $BASH_TOOL"
+BASH_OUTPUT="$(curl -s "$BASH_BRIDGE/session/$BASH_SESSION/message" | jq -r '[.. | objects | select(.type == "tool" and .tool == "bash") | (.state.output // .state.metadata.output // "")] | join(" ")')"
+echo "  bash card output: ${BASH_OUTPUT:0:40}"
+BASH_DIFF="$(curl -s "$BASH_BRIDGE/api/session/$BASH_SESSION/diff")"
+jq -e --arg file "src/tracked.txt" 'any(.[]; .file == $file)' <<<"$BASH_DIFF" >/dev/null
+echo "  bash diff visible: $(jq -r '.[0].file' <<<"$BASH_DIFF")"
+[[ -f "$E2E_WORKDIR/src/tracked.txt" ]]
+echo "  bash modified tracked workdir file"
+
+stop_sse
+e2e_stop_dsh "$E2E_ACTIVE_SESSION"
+E2E_ACTIVE_SESSION=""
+
+echo "== real TUI file changes =="
+e2e_tui_start "--session $BASH_SESSION"
 e2e_tui_wait_attach
 TUI_URL="$E2E_BRIDGE_URL"
 
-SYNCED_DIFF="$(curl -s "$TUI_URL/api/session/$EDIT_SESSION/diff")"
-jq -e 'any(.[]; .file | endswith("created.txt"))' <<<"$SYNCED_DIFF" >/dev/null
-echo "  TUI bridge diff API returns the created file"
+SYNCED_DIFF="$(curl -s "$TUI_URL/api/session/$BASH_SESSION/diff")"
+jq -e --arg file "src/tracked.txt" 'any(.[]; .file == $file)' <<<"$SYNCED_DIFF" >/dev/null
+echo "  TUI bridge diff API returns the tracked file"
 
 TUI_HINT=""
 deadline=$((SECONDS + 60))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-tools.txt"
-  for pattern in "Modified Files" "created.txt"; do
-    if grep -qa "$pattern" "$E2E_RUN_DIR/tui-tools.txt"; then
-      TUI_HINT="$pattern"
-      break 2
-    fi
-  done
+  if grep -qa "Modified Files" "$E2E_RUN_DIR/tui-tools.txt" \
+    && { grep -qa "src/tracked.txt" "$E2E_RUN_DIR/tui-tools.txt" \
+      || grep -qa "tracked.txt" "$E2E_RUN_DIR/tui-tools.txt"; }; then
+    TUI_HINT="Modified Files + tracked.txt"
+    break
+  fi
   if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
     echo "e2e: dsh exited while waiting for TUI file changes: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
     exit 1
@@ -150,7 +159,7 @@ while (( SECONDS < deadline )); do
 done
 echo "  pane bytes: $(wc -c < "$E2E_RUN_DIR/tui-tools.txt")"
 if [[ -z "$TUI_HINT" ]]; then
-  echo "e2e: no Modified Files / created.txt in TUI pane" >&2
+  echo "e2e: no Modified Files / tracked.txt in TUI pane" >&2
   exit 1
 fi
 echo "  TUI file changes visible: \"$TUI_HINT\""

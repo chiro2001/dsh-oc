@@ -29,6 +29,7 @@ import {
   type ToolCallInfo,
 } from './convert/tool.js'
 import { minimalSession } from './convert/session.js'
+import { filterGitTrackedDiffs } from './git.js'
 import type { InteractionState, NewApprovalEntry, NewQuestionEntry } from './state.js'
 
 /**
@@ -359,7 +360,8 @@ export class MuxEventTranslator {
       return [makeEvent(directory, 'todo.updated', { sessionID: sessionId, todos: convertTodos(value) }, project)]
     }
     if (key === 'produced-files') {
-      return [makeEvent(directory, 'session.diff', { sessionID: sessionId, diff: convertProducedFiles(value) }, project)]
+      const diff = filterGitTrackedDiffs(directory, convertProducedFiles(value))
+      return [makeEvent(directory, 'session.diff', { sessionID: sessionId, diff }, project)]
     }
     if (key === 'title') {
       const title = typeof value === 'string' ? value : ''
@@ -754,11 +756,13 @@ export function fileChangeEvents(
   time: number,
 ): BridgeGlobalEvent[] {
   if (changes.length === 0) return []
-  const patch = changes
+  const trackedChanges = filterGitTrackedDiffs(directory, changes)
+  if (trackedChanges.length === 0) return []
+  const patch = trackedChanges
     .map((change) => change.patch)
     .filter((value): value is string => value !== undefined)
     .join('\n')
-  const files = changes.map((change) => change.file)
+  const files = trackedChanges.map((change) => change.file)
   const hash = stableId(`${sessionID}:${messageID}:${files.join('\u0000')}:${patch}`)
   const events: BridgeGlobalEvent[] = [
     makeEvent(directory, 'message.part.updated', {
@@ -775,7 +779,7 @@ export function fileChangeEvents(
     }, project),
     makeEvent(directory, 'session.diff', {
       sessionID,
-      diff: toSnapshotFileDiffs(changes),
+      diff: toSnapshotFileDiffs(trackedChanges),
     }, project),
   ]
   if (patch) {
