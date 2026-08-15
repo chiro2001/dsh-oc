@@ -966,6 +966,95 @@ describe('bridge router: model variants, agent presets and /preset', () => {
       payload: { sessionId: 's1', agentPreset: 'minimal' },
     })
   })
+
+  it('captures /preset from prompt routes without triggering a model turn', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: false },
+            { id: 'standard', trust: 'system', isDefault: true },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async (request) => {
+          calls.push({ method: 'agentPreset.select', payload: request.payload })
+          return okRpc({ agentPreset: 'minimal' })
+        },
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async (request) => {
+          calls.push({ method: 'session.prompt', payload: request.payload })
+          return okRpc({ accepted: true })
+        },
+      },
+    }
+    const { server } = await boot(api)
+
+    const listed = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: '/preset' }],
+    })
+    expect(listed.status).toBe(200)
+    expect((listed.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('standard')
+    expect((listed.body as { parts: Array<{ text: string }> }).parts[0]?.text).toContain('(default)')
+
+    const switched = await request(server, 'POST', '/session/s1/prompt', {
+      parts: [{ type: 'text', text: '/preset minimal' }],
+    })
+    expect(switched.status).toBe(200)
+    expect((switched.body as { parts: Array<{ text: string }> }).parts[0]?.text).toBe(
+      'Switched dsh agent preset to minimal',
+    )
+
+    const v2Listed = await request(server, 'POST', '/api/session/s1/prompt', {
+      parts: [{ type: 'text', text: '/preset' }],
+    })
+    expect(v2Listed.status).toBe(200)
+    expect(v2Listed.body).toMatchObject({ data: { sessionID: 's1', delivery: 'queue' } })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      method: 'agentPreset.select',
+      payload: { sessionId: 's1', agentPreset: 'minimal' },
+    })
+    expect(calls.some((call) => call.method === 'session.prompt')).toBe(false)
+  })
+
+  it('surfaces unknown /preset switches as command errors', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [{ id: 'minimal', trust: 'system', isDefault: true }],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => okRpc({ agentPreset: 'minimal' }),
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async () => {
+          throw new Error('session.prompt must not be called for /preset')
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: '/preset nope' }],
+    })
+    expect(result.status).toBe(400)
+    expect(result.body).toMatchObject({
+      name: 'BadRequest',
+      message: 'agent "nope" is not a switchable dsh preset',
+      data: { code: 'command-error' },
+    })
+  })
 })
 
 describe('bridge router: error mapping', () => {
