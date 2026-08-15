@@ -184,6 +184,8 @@ describe('ocHelp', () => {
     expect(text).toContain('--continue/-c')
     expect(text).toContain('--session/-s')
     expect(text).toContain('核心能力')
+    expect(text).toContain('会话列表真实标题')
+    expect(text).toContain('Esc 打断/取消')
     expect(text).toContain('docs/FEATURES.md')
     expect(text).toContain('docs/PROTOCOL.md')
   })
