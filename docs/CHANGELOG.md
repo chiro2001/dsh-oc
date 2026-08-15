@@ -22,6 +22,7 @@
 - `POST /session/{id}/permissions/{permissionID}`：SDK v2 权限回复别名
   （body 用 `response` 字段），映射到同一 `permissionReply`。
 - `GET /api/health`：返回 `{ healthy: true }` 供客户端探活。
+- `GET /api/session/active`：返回当前活动会话（`{ data: { [sessionId]: { type: "running" } } }`）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温

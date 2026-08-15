@@ -68,6 +68,11 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
 
   register('POST', '/api/session', 'json', (req, ctx) => R.createSession(req, ctx, true))
 
+  register('GET', '/api/session/active', 'json', async (_req, ctx) => {
+    const id = ctx.state.currentSessionId
+    return R.json(200, { data: id === undefined ? {} : { [id]: { type: 'running' } } })
+  })
+
   register('POST', '/api/session/:sessionID/fork', 'json', (req, ctx) => R.forkSession(req, ctx, true))
 
   register('POST', '/api/session/:sessionID/compact', 'json', async (req, ctx) => {

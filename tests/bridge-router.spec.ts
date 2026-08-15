@@ -913,6 +913,22 @@ describe('bridge router: session routes', () => {
     expect(v2Messages.body).toMatchObject({ data: [{ type: 'user' }, { type: 'assistant' }], cursor: {} })
   })
 
+  it('reports the active session through /api/session/active', async () => {
+    const { server } = await boot(fakeApi())
+    const empty = await request(server, 'GET', '/api/session/active')
+    expect(empty.status).toBe(200)
+    expect(empty.body).toEqual({ data: {} })
+    await request(server, 'POST', '/session', {})
+    const active = await request(server, 'GET', '/api/session/active')
+    expect(active.status).toBe(200)
+    const data = (active.body as { data: Record<string, { type: string }> }).data
+    const keys = Object.keys(data)
+    expect(keys).toHaveLength(1)
+    const key = keys[0]
+    expect(key).toBeDefined()
+    expect(key !== undefined && data[key]).toEqual({ type: 'running' })
+  })
+
   it('tags user messages with an advertised model so the TUI keeps a valid selection', async () => {
     const base = fakeApi()
     const api = {
