@@ -10,7 +10,9 @@
 |---|---|---|---|---|
 | Provider / 模型目录展示（v1 + v2） | ✅ | `GET /provider`、`GET /api/model`、`src/bridge/convert/model.ts` | `tests/convert/model.spec.ts`、`scripts/e2e-api.sh` | `f30b156` |
 | 默认 build agent 携带可用模型 | ✅ | `GET /agent`、`GET /api/agent`、`src/bridge/router.ts` | `tests/bridge-router.spec.ts` | `f30b156` |
-| 模型选择器回写 dsh（`/api/session/:id/model`） | ❌ | 未注册路由，TUI 会收到 501 | 手工 TUI 模型选择器 | `f30b156` |
+| 模型选择器回写 dsh（`/api/session/:id/model`） | ✅ | `POST /api/session/:sessionID/model`、`POST /session/:id/message` body model | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
+| Reasoning effort / variant 展示与切换 | ✅ | `Model.variants`、`ModelV2Info.variants`、session model `variant` | `tests/convert/model.spec.ts`、TUI `ctrl+t` | 本提交 |
+| dsh agent preset 展示与切换（minimal 等） | 🟡 | `GET /agent`、`GET /api/agent`、`POST /api/session/:sessionID/agent`、`POST /session/:id/command` `/preset` | `tests/bridge-router.spec.ts`；隔离 profile 无 minimal 时仅 build | 本提交 |
 | 模型/Provider 错误映射 | ✅ | `src/bridge/errors.ts`、`src/bridge/rpc.ts` | `tests/bridge-router.spec.ts`（404/409/400/501） | `f30b156` |
 
 ## 2. 会话
@@ -21,9 +23,9 @@
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
 | Prompt（v1 message、v1 alias、v2 prompt） | ✅ | `POST /session/:id/message`、`POST /session/:id/prompt`、`POST /api/session/:sessionID/prompt` | `e2e-api.sh`、`e2e-tui-turn.sh` | `f30b156` |
 | Abort / cancel | ✅ | `POST /session/:id/abort` | `e2e-api.sh` | `f30b156` |
-| Fork（`parentID`） | 🟡 | `POST /session`/`POST /api/session` 内 `session.fork` | `tests/bridge-router.spec.ts`；TUI 内 fork 未专门 e2e | `f30b156` |
+| Fork（`parentID`） | ✅ | `POST /session/:id/fork`、`POST /api/session/:id/fork`，messageID→atSeq | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | Todo 投影 | ✅ | `GET /session/:id/todo`、`src/bridge/convert/todo.ts` | `tests/convert/todo.spec.ts`、`tests/bridge-router.spec.ts` | `f30b156` |
-| Diff / produced-files | 🟡 | `GET /session/:id/diff`、`src/bridge/events.ts` | `tests/bridge-router.spec.ts`；无投影时返回 `[]` | `f30b156` |
+| Diff / produced-files / Modified Files | ✅ | `GET /session/:id/diff`、`GET /api/session/:id/diff`、`session.diff` + Snapshot/Patch part | `tests/bridge-router.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | SSE 会话/消息事件 | ✅ | `GET /global/event`、`src/bridge/events.ts` | `tests/bridge-events.spec.ts`、`e2e-api.sh`、`e2e-tui-stream.sh` | `f30b156` |
 
 ## 3. 工具
@@ -32,6 +34,8 @@
 |---|---|---|---|---|
 | Tool call / result 四态映射 | ✅ | `src/bridge/convert/tool.ts`、`src/bridge/events.ts` | `tests/convert/tool.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
 | 工具执行由 dsh 后端完成 | ✅ | `ctx.apiProxy.sessions.prompt`、dsh tool 注册表 | `e2e-api.sh`（bash 工具） | `f30b156` |
+| read/write/edit 文件变化展示 | ✅ | tool result → ToolPart metadata/diff + `session.diff` + Modified Files | `tests/convert/tool.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
+| dsh 多种编辑模式映射（view/create/str_replace/insert/undo_edit） | ✅ | `src/bridge/convert/tool.ts` 映射为 read/edit 卡片并保留 mode | `tests/convert/tool.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | 文本附件/文件 part | 🟡 | `src/bridge/router.ts` 仅接受 `data:` image part | `tests/bridge-router.spec.ts`（400 拒绝未知 part） | `f30b156` |
 | MCP / LSP / formatter 等外围工具 | ❌ | `src/bridge/stubs.ts` 返回 schema-valid 空数据 | `e2e-api.sh` 路由矩阵 | `f30b156` |
 
@@ -49,13 +53,14 @@
 |---|---|---|---|---|
 | 主 agent（build）展示 | ✅ | `GET /agent`、`GET /api/agent`、`src/bridge/router.ts` | `tests/bridge-router.spec.ts` | `f30b156` |
 | Background subagents | ❌ | `GET /experimental/capabilities` 返回 `{ backgroundSubagents: false }` | `e2e-api.sh` | `f30b156` |
-| 子代理会话树 / parent-child 渲染 | ❌ | 未提供专门 subagent 路由 | 手工验证 | `f30b156` |
+| 子代理会话树 / parent-child 渲染 | ✅ | `Session.parentID`、child cwd/parent 继承、child 历史复用 | `tests/convert/session.spec.ts`、`e2e-api.sh` fork lineage | 本提交 |
 
 ## 6. 命令
 
 | 功能 | 状态 | 路由/实现 | 验证方式 | 最后更新 |
 |---|---|---|---|---|
-| 命令列表 | ❌ | `GET /command`、`GET /api/command` 返回 `[]` | `e2e-api.sh` | `f30b156` |
+| 命令列表 | ✅ | `GET /command`、`GET /api/command` 注册 `/preset` | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
+| `/compact` / summarize | ✅ | `POST /session/:id/summarize`、`POST /session/:id/compact`、`POST /api/session/:id/compact` | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
 | Skills / references / integrations | ❌ | `GET /skill`、`GET /api/skill`、`GET /reference`、`GET /integration` 等返回 `[]` | `e2e-api.sh` | `f30b156` |
 
 ## 7. TUI
@@ -91,7 +96,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`3905813`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`cd520a9`（2026-08-15）。
 
 ### 路由注册表
 
@@ -224,6 +229,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 
