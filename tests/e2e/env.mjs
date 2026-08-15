@@ -96,6 +96,7 @@ async function newRun(argv) {
     'storage-json',
     'storage-domain',
     'webserver',
+    'agent-presets',
     'workspace',
     'directory-picker',
     'api-proxy',

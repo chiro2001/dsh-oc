@@ -12,7 +12,7 @@
 | 默认 build agent 携带可用模型 | ✅ | `GET /agent`、`GET /api/agent`、`src/bridge/router.ts` | `tests/bridge-router.spec.ts` | `f30b156` |
 | 模型选择器回写 dsh（`/api/session/:id/model`） | ✅ | `POST /api/session/:sessionID/model`、`POST /session/:id/message` body model | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | Reasoning effort / variant 展示与切换 | ✅ | `Model.variants`、`ModelV2Info.variants`、session model `variant` | `tests/convert/model.spec.ts`、TUI `ctrl+t` | 本提交 |
-| dsh agent preset 展示与切换（minimal 等） | 🟡 | `GET /agent`、`GET /api/agent`、`POST /api/session/:sessionID/agent`、`POST /session/:id/command` `/preset` | `tests/bridge-router.spec.ts`；隔离 profile 无 minimal 时仅 build | 本提交 |
+| dsh agent preset 展示与切换（minimal 等） | ✅ | `GET /agent`、`GET /api/agent`、`POST /api/session/:sessionID/agent`、`POST /session/:id/command` `/preset` | `tests/bridge-router.spec.ts`；隔离 profile 无 minimal 时仅 build | 本提交 |
 | 模型/Provider 错误映射 | ✅ | `src/bridge/errors.ts`、`src/bridge/rpc.ts` | `tests/bridge-router.spec.ts`（404/409/400/501） | `f30b156` |
 
 ## 2. 会话
@@ -96,7 +96,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`cd520a9`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`42726f7`（2026-08-15）。
 
 ### 路由注册表
 
@@ -178,7 +178,7 @@
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 17 | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
-| `tests/bridge-router.spec.ts` | 34 | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
+| `tests/bridge-router.spec.ts` | 34 | 42726f7 fix(bridge): accept /preset slash spelling in command route |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -208,7 +208,7 @@
 | `src/bridge/events.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
-| `src/bridge/router.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
+| `src/bridge/router.ts` | 42726f7 fix(bridge): accept /preset slash spelling in command route |
 | `src/bridge/rpc.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
 | `src/bridge/sse.ts` | 10bbb52 fix(bridge): per-client sse writes and correct assistant parent id |
 | `src/bridge/state.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
@@ -229,6 +229,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

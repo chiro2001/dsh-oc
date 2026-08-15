@@ -80,7 +80,7 @@ describe('opencode-assets.json', () => {
 })
 
 describe('cordis.patch.yml', () => {
-  it('contains the nine bundle plugins in order', () => {
+  it('contains the ten bundle plugins in order', () => {
     const yaml = read('cordis.patch.yml')
     const ids = [...yaml.matchAll(/^\s*- id:\s*(\S+)/gm)].map(
       (match) => match[1],
@@ -90,6 +90,7 @@ describe('cordis.patch.yml', () => {
       'storage-json',
       'storage-domain',
       'webserver',
+      'agent-presets',
       'workspace',
       'directory-picker',
       'api-proxy',
