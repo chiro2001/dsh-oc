@@ -36,6 +36,7 @@
 | Agent/流错误 → `session.error` | ✅ | `stream/error` 与 `host/agent-error` 映射 | `tests/bridge-events.spec.ts` | 本提交 |
 | SSE mux/host 短暂错误自动重连（指数退避） | ✅ | `src/bridge/router.ts` `startSse` 重订阅（默认 250ms 起、最多 3 次） | `tests/bridge-events.spec.ts` | 本提交 |
 | 重连 approval/question 重放去重 | ✅ | `MuxEventTranslator` `replayGuard`（按 SSE 连接） | `tests/bridge-events.spec.ts` | 本提交 |
+| 重连后 todo/goal 投影状态保留 | ✅ | `sharedState` 跨 translator 重建共享 | `tests/bridge-events.spec.ts` | 本提交 |
 
 ## 3. 工具
 
@@ -132,7 +133,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`3a8767f`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`360a21d`（2026-08-15）。
 
 ### 路由注册表
 
@@ -213,7 +214,7 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 34 | abfb5d8 test(bridge): verify pending approvals survive mux retry without duplicates |
+| `tests/bridge-events.spec.ts` | 35 | abfb5d8 test(bridge): verify pending approvals survive mux retry without duplicates |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/bridge-router.spec.ts` | 61 | 7b7fa5b feat(bridge): support DSH_OC_E2E_FAKE_SKILLS test seam |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
@@ -276,7 +277,7 @@
 | `scripts/e2e-tui-mini.sh` | 90c2260 test(e2e): cover attach --mini boot rendering |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/e2e-tui-print-logs.sh` | 071dfdc test(e2e): assert --print-logs forwarding through the fake opencode child |
-| `scripts/e2e-tui-skill.sh` | 3a8767f build: rebuild lib for DSH_OC_E2E_FAKE_SKILLS test seam |
+| `scripts/e2e-tui-skill.sh` | 360a21d test(e2e): verify skill slash command with Enter+Enter submission |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
 | `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/e2e-tui-tools.sh` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |

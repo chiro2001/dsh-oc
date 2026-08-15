@@ -1881,12 +1881,14 @@ export function createBridgeRouter(
       try {
         const defaultModel = await defaultModelRef(ctx)
         const replayGuard = { approvals: new Set<string>(), questions: new Set<string>() }
+        const sharedState = { todos: new Map<string, unknown>(), goals: new Map<string, unknown>() }
         const makeTranslator = (): MuxEventTranslator => new MuxEventTranslator({
           cwd,
           state,
           defaultModel,
           log,
           replayGuard,
+          sharedState,
           onFlush: (events) => {
             for (const event of events) hub.send(client, event)
           },

@@ -62,6 +62,8 @@ export interface TranslateDeps {
   log(message: string): void
   /** Per-SSE-connection replay guard for approval/question frames. */
   replayGuard?: { approvals: Set<string>; questions: Set<string> }
+  /** Per-SSE-connection projection state surviving translator rebuilds. */
+  sharedState?: { todos: Map<string, unknown>; goals: Map<string, unknown> }
   /** Coalescing window for `tool-call-delta` events before flushing (ms). */
   toolFlushMs?: number
   /** Injectable timer used by the tool-input throttle. */
@@ -366,8 +368,8 @@ export class MuxEventTranslator {
   private currentAssistant = new Map<string, string>()
   private pendingCalls = new Map<string, Map<string, ToolCallInfo>>()
   private streams = new Map<string, SessionStreamState>()
-  private sessionGoals = new Map<string, unknown>()
-  private sessionTodos = new Map<string, unknown>()
+  private readonly sessionGoals: Map<string, unknown>
+  private readonly sessionTodos: Map<string, unknown>
   private readonly flushMs: number
   private readonly setTimer: (callback: () => void, ms: number) => TimerHandle
   private readonly clearTimer: (handle: TimerHandle | undefined) => void
@@ -378,6 +380,8 @@ export class MuxEventTranslator {
     this.clearTimer = deps.clearTimeoutImpl ?? ((handle) => {
       if (handle !== undefined) clearTimeout(handle as NodeJS.Timeout)
     })
+    this.sessionGoals = deps.sharedState?.goals ?? new Map<string, unknown>()
+    this.sessionTodos = deps.sharedState?.todos ?? new Map<string, unknown>()
   }
 
   private streamState(sessionId: string): SessionStreamState {

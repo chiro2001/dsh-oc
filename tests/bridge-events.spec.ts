@@ -1309,6 +1309,33 @@ describe('bridge events: projection and control frames', () => {
     expect(instance.translate(questionFrame)).toEqual([])
     expect(state.questions.size).toBe(1)
   })
+
+  it('shares todo/goal projection state across translator rebuilds', () => {
+    const shared = { todos: new Map<string, unknown>(), goals: new Map<string, unknown>() }
+    const deps = { cwd: '/work', state: new InteractionState(), log: () => {}, sharedState: shared }
+
+    const first = new MuxEventTranslator(deps)
+    first.translate(frame({
+      type: 'session/projection',
+      sessionId: 's1' as never,
+      key: 'todos',
+      value: [{ content: 'keep me', status: 'pending' }],
+      seq: 1,
+    }))
+
+    const second = new MuxEventTranslator(deps)
+    const events = second.translate(frame({
+      type: 'session/projection',
+      sessionId: 's1' as never,
+      key: 'goal',
+      value: null,
+      seq: 2,
+    }))
+    const todo = events.find((event) => event.payload.type === 'todo.updated')
+    expect(todo?.payload.properties).toMatchObject({
+      todos: expect.arrayContaining([expect.objectContaining({ content: 'keep me' })]),
+    })
+  })
 })
 
 describe('bridge events: SSE connection lifecycle', () => {
