@@ -13,7 +13,7 @@
 //                                   [--out .e2e/protocol-probe.json] [--json-only]
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -38,7 +38,12 @@ function routeKey(method, path, kind) {
 }
 
 function parseRegisteredRoutes() {
-  const routeFiles = ['src/bridge/router.ts', 'src/bridge/routes.ts']
+  const routesDir = join(root, 'src', 'bridge', 'routes')
+  const routeFiles = [
+    'src/bridge/router.ts',
+    'src/bridge/routes.ts',
+    ...(existsSync(routesDir) ? readdirSync(routesDir).map((file) => `src/bridge/routes/${file}`) : []),
+  ]
   const stubs = readFileSync(join(root, 'src', 'bridge', 'stubs.ts'), 'utf8')
   const routes = new Set()
   for (const file of routeFiles) {
