@@ -126,7 +126,7 @@
 | `--print-logs` 透传 e2e | ✅ | `scripts/e2e-tui-print-logs.sh`（fake 二进制 argv 断言） | `bash scripts/e2e-tui-print-logs.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
 | 一键自测入口 | ✅ | `scripts/check-all.sh`（typecheck+单测+探针+性能冒烟；`--e2e` 全量 e2e；`--scale N` 压测） | `bash scripts/check-all.sh` | 本提交 |
-| GitHub Actions CI | ✅ | `.github/workflows/ci.yml`：build/typecheck/test/probe | 推送与 PR 自动运行 | 本提交 |
+| GitHub Actions CI | ✅ | `.github/workflows/ci.yml`（自动）+ `.github/workflows/e2e.yml`（手动全量 e2e/压测） | 推送/PR 自动 + workflow_dispatch | 本提交 |
 | 流式工具事件 API e2e | ✅ | `scripts/e2e-api.sh` 审批流断言 started/delta/called/success | `bash scripts/e2e-api.sh` | 本提交 |
 | 功能矩阵自动追踪 | ✅ | `scripts/update-feature-matrix.mjs` | `pnpm run features:update` | 本提交 |
 | 会话性能测试（生成器 + 指标 + 报告） | ✅ | `scripts/perf.mjs` + `scripts/perf-session-gen.mjs`（dsh Session API 合成日志、zstd 分帧写入） | `pnpm run perf`、`tests/perf.spec.ts` | 本提交 |
@@ -136,7 +136,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`a0ee5ed`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`67fd797`（2026-08-15）。
 
 ### 路由注册表
 
@@ -268,13 +268,13 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
-| `scripts/check-all.sh` | 38dd32e test(ci): add --scale N large-perf option to check-all.sh |
+| `scripts/check-all.sh` | 9cf9fb8 test(e2e): cover attach --continue resuming the newest session |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | d57039e test(e2e): verify /help slash command inside the real TUI pane |
-| `scripts/e2e-tui-continue.sh` | — |
+| `scripts/e2e-tui-continue.sh` | 9cf9fb8 test(e2e): cover attach --continue resuming the newest session |
 | `scripts/e2e-tui-dir.sh` | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
 | `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |

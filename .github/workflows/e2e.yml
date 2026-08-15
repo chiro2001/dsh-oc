@@ -1,0 +1,49 @@
+name: e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      sessions:
+        description: Perf scale sessions for the optional large run
+        required: false
+        default: '1000'
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: System deps
+        run: sudo apt-get update && sudo apt-get install -y tmux
+
+      - name: Install dsh CLI
+        run: npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install locked opencode binary
+        run: |
+          mkdir -p /tmp/oc-bin
+          curl -fsSL -o /tmp/oc-bin/opencode.tar.gz \
+            https://github.com/anomalyco/opencode/releases/download/v1.18.18/opencode-linux-x64.tar.gz
+          tar -xzf /tmp/oc-bin/opencode.tar.gz -C /tmp/oc-bin
+          chmod +x /tmp/oc-bin/opencode
+          echo "DSH_OC_OPENCODE_BIN=/tmp/oc-bin/opencode" >> "$GITHUB_ENV"
+
+      - name: Full e2e + perf scale
+        run: bash scripts/check-all.sh --e2e --scale ${{ github.event.inputs.sessions }}
