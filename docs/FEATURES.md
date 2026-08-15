@@ -24,6 +24,7 @@
 | 功能 | 状态 | 路由/实现 | 验证方式 | 最后更新 |
 |---|---|---|---|---|
 | 会话列表 / 状态 | ✅ | `GET /session`、`GET /session/status`、`GET /api/session` | `tests/bridge-router.spec.ts`、`e2e-api.sh` | `f30b156` |
+| 会话搜索（v2 `?search=`）与 limit/目录过滤 | ✅ | `src/bridge/router.ts` `/api/session` 经 `session.search` | `tests/bridge-router.spec.ts` | 本提交 |
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
 | Prompt（v1 message、v1 alias、v2 prompt） | ✅ | `POST /session/:id/message`、`POST /session/:id/prompt`、`POST /api/session/:sessionID/prompt` | `e2e-api.sh`、`e2e-tui-turn.sh` | `f30b156` |
 | Abort / cancel | ✅ | `POST /session/:id/abort` | `e2e-api.sh` | `f30b156` |
@@ -122,7 +123,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`c3d4dc2`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`2ab2ece`（2026-08-15）。
 
 ### 路由注册表
 
@@ -205,7 +206,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 29 | e256572 feat(bridge): session-scoped always permission memory |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 49 | c3d4dc2 feat(bridge): apply directory filter to session status route |
+| `tests/bridge-router.spec.ts` | 50 | 2ab2ece feat(bridge): v2 message pagination with opaque before cursor |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -241,7 +242,7 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
-| `src/bridge/router.ts` | c3d4dc2 feat(bridge): apply directory filter to session status route |
+| `src/bridge/router.ts` | 2ab2ece feat(bridge): v2 message pagination with opaque before cursor |
 | `src/bridge/rpc.ts` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | e256572 feat(bridge): session-scoped always permission memory |

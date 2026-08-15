@@ -254,6 +254,34 @@ describe('bridge router: session routes', () => {
     expect((all.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s1', 's2'])
   })
 
+  it('searches v2 session lists through session.search and applies limit', async () => {
+    const base = fakeApi()
+    const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
+    const searchCalls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [item, other] }),
+        search: async (request) => {
+          searchCalls.push({ method: 'session.search', payload: request.payload })
+          return okRpc({
+            items: [{ sessionId: 's2' as never, snippet: 'needle found' }],
+            hasMore: false,
+          })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'GET', '/api/session?search=needle&limit=10')
+    expect(result.status).toBe(200)
+    expect((result.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id)).toEqual(['s2'])
+    expect(searchCalls[0]).toMatchObject({
+      method: 'session.search',
+      payload: { query: 'needle' },
+    })
+  })
+
   it('lists child sessions with parentID and inherits the parent cwd', async () => {
     const base = fakeApi()
     const parent = {

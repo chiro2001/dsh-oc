@@ -124,8 +124,8 @@ dsh --profile oc --dir ~/project --mini
 | Goal 创建/查看（sidebar 状态 + `/goal` 命令） | ✅ |
 | 自动更新关闭、二进制版本锁定 | ✅ |
 | DSH OC 品牌启动 logo（替换 OpenCode 字符画） | ✅ |
-| 文本/data image 附件 | 🟡 |
-| `Allow always` 权限 | 🟡（降级为 once） |
+| 文本/图片附件 | ✅（PDF 等二进制暂不支持） |
+| `Allow always` 权限 | ✅（会话内内存记忆，重启清空） |
 | MCP / LSP / formatter / skills / integration 等外围路由 | ❌（schema-valid stub） |
 
 网络与二进制策略：opencode 子进程不主动访问 `api.opencode.ai` / GitHub release

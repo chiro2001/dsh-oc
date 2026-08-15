@@ -36,6 +36,7 @@ export function fakeApi(overrides: Partial<BridgeApi> = {}): BridgeApi {
   const api: BridgeApi = {
     sessions: {
       list: async () => okRpc({ items: [] }),
+      search: async () => okRpc({ items: [], hasMore: false }),
       create: async () => okRpc({ sessionId: 'new-session' as never }),
       fork: async () => okRpc({ sessionId: 'fork-session' as never }),
       history: async () => okRpc({ events: [], hasMore: false }),

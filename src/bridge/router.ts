@@ -1493,9 +1493,22 @@ export function createBridgeRouter(
   })
 
   // ---- v2 sessions ----
-  register('GET', '/api/session', 'json', async (_req, ctx) => {
-    const list = await rpc(ctx, 'session.list', {})
-    const items = filterSessionsByDirectory(list.items, _req.query.get('directory') ?? undefined)
+  register('GET', '/api/session', 'json', async (req, ctx) => {
+    const search = req.query.get('search')
+    let all: SessionSummary[]
+    if (search !== null && search.length > 0) {
+      const results = await rpc(ctx, 'session.search', { query: search })
+      const ids = new Set(results.items.map((item) => String(item.sessionId)))
+      const list = await rpc(ctx, 'session.list', {})
+      all = list.items.filter((item) => ids.has(String(item.sessionId)))
+    } else {
+      const list = await rpc(ctx, 'session.list', {})
+      all = list.items
+    }
+    const filtered = filterSessionsByDirectory(all, req.query.get('directory') ?? undefined)
+    const limitRaw = req.query.get('limit')
+    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
+    const items = limit === undefined ? filtered : filtered.slice(0, limit)
     recordSessionSummaries(ctx, items)
     return json(200, {
       data: items.map((item) => convertSessionSummaryV2(item, {

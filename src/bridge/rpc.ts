@@ -19,6 +19,7 @@ export interface BridgeApi {
   sessions: Pick<
     ApiProxy['sessions'],
     | 'list'
+    | 'search'
     | 'create'
     | 'fork'
     | 'history'
