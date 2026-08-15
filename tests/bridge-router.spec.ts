@@ -110,6 +110,41 @@ describe('bridge router: startup GET routes', () => {
     expect((await request(server, 'GET', '/experimental/workspace')).body).toEqual([])
     expect((await request(server, 'GET', '/experimental/workspace/status')).body).toEqual([])
   })
+
+  it('advertises the default build agent so the TUI prompt can submit', async () => {
+    const base = fakeApi()
+    const api = {
+      ...base,
+      llm: {
+        ...base.llm,
+        models: async () => okRpc({
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [{ id: 'mock-model', name: 'Mock Model' }],
+          }],
+          failures: [],
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const v1 = await request(server, 'GET', '/agent')
+    expect(v1.status).toBe(200)
+    expect(v1.body).toMatchObject([
+      {
+        name: 'build',
+        mode: 'primary',
+        permission: [],
+        model: { providerID: 'deepseek', modelID: 'mock-model' },
+      },
+    ])
+    const v2 = await request(server, 'GET', '/api/agent')
+    expect(v2.status).toBe(200)
+    expect(v2.body).toMatchObject({
+      location: { directory: '/work' },
+      data: [{ id: 'build', mode: 'primary', hidden: false, model: { id: 'mock-model', providerID: 'deepseek' } }],
+    })
+  })
 })
 
 describe('bridge router: session routes', () => {
@@ -165,6 +200,36 @@ describe('bridge router: session routes', () => {
     const v2Messages = await request(server, 'GET', '/api/session/s1/message')
     expect(v2Messages.status).toBe(200)
     expect(v2Messages.body).toMatchObject({ data: [{ type: 'user' }, { type: 'assistant' }], cursor: {} })
+  })
+
+  it('tags user messages with an advertised model so the TUI keeps a valid selection', async () => {
+    const base = fakeApi()
+    const api = {
+      ...base,
+      llm: {
+        ...base.llm,
+        models: async () => okRpc({
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [{ id: 'mock-model', name: 'Mock Model' }],
+          }],
+          failures: [],
+        }),
+      },
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [item] }),
+        history: async () => okRpc({ events: [{ event: makeUserEvent('hello') }], hasMore: false }),
+      },
+    }
+    const { server } = await boot(api)
+    const messages = await request(server, 'GET', '/session/s1/message')
+    expect(messages.status).toBe(200)
+    expect((messages.body as Array<{ info: { role: string; model?: unknown } }>)[0]?.info).toMatchObject({
+      role: 'user',
+      model: { providerID: 'deepseek', modelID: 'mock-model' },
+    })
   })
 
   it('creates sessions (v1), forks from parentID, and creates v2 sessions', async () => {
@@ -238,10 +303,31 @@ describe('bridge router: session routes', () => {
     })
     expect(prompt.body).toMatchObject({ info: { role: 'assistant' }, parts: [] })
 
+    const promptAlias = await request(server, 'POST', '/session/s1/prompt', {
+      parts: [{ type: 'text', text: 'via alias' }],
+    })
+    expect(promptAlias.status).toBe(200)
+    expect(calls[2]).toMatchObject({
+      method: 'session.prompt',
+      payload: { sessionId: 's1', mode: 'queue', content: [{ type: 'text', text: 'via alias' }] },
+    })
+
+    const promptV2 = await request(server, 'POST', '/api/session/s1/prompt', {
+      parts: [{ type: 'text', text: 'via v2' }],
+    })
+    expect(promptV2.status).toBe(200)
+    expect(promptV2.body).toMatchObject({
+      data: { sessionID: 's1', prompt: { parts: [{ type: 'text', text: 'via v2' }] }, delivery: 'queue' },
+    })
+    expect(calls[3]).toMatchObject({
+      method: 'session.prompt',
+      payload: { sessionId: 's1', mode: 'queue', content: [{ type: 'text', text: 'via v2' }] },
+    })
+
     const aborted = await request(server, 'POST', '/session/s1/abort')
     expect(aborted.status).toBe(200)
     expect(aborted.body).toBe(true)
-    expect(calls[2]).toMatchObject({ method: 'session.cancel', payload: { sessionId: 's1' } })
+    expect(calls[4]).toMatchObject({ method: 'session.cancel', payload: { sessionId: 's1' } })
   })
 
   it('rejects unsupported prompt parts with 400', async () => {

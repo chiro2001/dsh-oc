@@ -27,7 +27,7 @@ export const OcTuiConfig = z.object({
   binary: z.string().optional(),
   /** Extra arguments appended before the dsh command line arguments. */
   args: z.array(z.string()).optional(),
-})
+}).default({})
 
 export type OcTuiConfig = z.infer<typeof OcTuiConfig>
 

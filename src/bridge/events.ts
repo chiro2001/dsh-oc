@@ -35,6 +35,7 @@ export interface BridgeGlobalEvent {
 export interface TranslateDeps {
   cwd: string
   state: InteractionState
+  defaultModel?: { providerID: string; modelID: string }
   log(message: string): void
 }
 
@@ -67,6 +68,7 @@ function messageOptions(
   return {
     sessionId,
     cwd: deps.cwd,
+    ...(deps.defaultModel === undefined ? {} : { defaultModel: deps.defaultModel }),
     onSkip: (eventType, reason) => deps.log(`[bridge/events] skip ${eventType}: ${reason}`),
   }
 }

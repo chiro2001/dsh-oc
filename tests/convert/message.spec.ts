@@ -22,6 +22,17 @@ describe('convert/message (v1)', () => {
     expect(entry?.parts[0]).toMatchObject({ type: 'text', text: 'hello' })
   })
 
+  it('uses the advertised default model for user message info', () => {
+    const [entry] = convertMessagesV1([makeUserEvent('hello')], {
+      ...opts,
+      defaultModel: { providerID: 'deepseek', modelID: 'mock-model' },
+    })
+    expect(entry?.info.role).toBe('user')
+    if (entry?.info.role === 'user') {
+      expect(entry.info.model).toEqual({ providerID: 'deepseek', modelID: 'mock-model' })
+    }
+  })
+
   it('folds assistant content into text/reasoning/tool parts', () => {
     const event = makeAssistantEvent([
       { type: 'reasoning', text: 'think' },

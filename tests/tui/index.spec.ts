@@ -3,12 +3,26 @@ import {
   buildChildEnv,
   filterSupportedArgs,
   installSignalForwarding,
+  OcTuiConfig,
   requestExit,
   startOpenCodeTui,
   type RunningTui,
   type TimerHandle,
   type TuiChild,
 } from '../../src/tui/index.ts'
+
+describe('oc-tui config schema', () => {
+  it('defaults to an empty config when the patch row carries no config', () => {
+    expect(OcTuiConfig.parse(undefined)).toEqual({})
+  })
+
+  it('accepts binary and args overrides', () => {
+    expect(OcTuiConfig.parse({ binary: '/bin/opencode', args: ['--print-logs'] })).toEqual({
+      binary: '/bin/opencode',
+      args: ['--print-logs'],
+    })
+  })
+})
 
 function fakeChild(): {
   child: TuiChild

@@ -31,6 +31,12 @@ import {
 export interface MessageConvertOptions {
   sessionId: string
   cwd: string
+  /**
+   * Model ref attached to user messages. The opencode TUI reads the last
+   * user message's model to restore the session model, so it must name a
+   * model present in the advertised catalog.
+   */
+  defaultModel?: { providerID: string; modelID: string }
   onSkip?: (eventType: string, reason: string) => void
 }
 
@@ -66,7 +72,7 @@ function userMessageInfo(id: string, time: number, opts: MessageConvertOptions):
     role: 'user',
     time: { created: time },
     agent: DEFAULT_AGENT,
-    model: { providerID: 'deepseek', modelID: 'deepseek-chat' },
+    model: opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' },
   }
 }
 

@@ -16,6 +16,7 @@ import type {
   SessionStatus,
   SessionV2Info,
 } from '@opencode-ai/sdk/v2/types'
+import type { Agent as V2Agent, AgentV2Info } from '@opencode-ai/sdk/v2/types'
 import type { BridgeApi } from './rpc.js'
 import { call, RpcCallError, respondApproval, respondQuestion, cancelQuestion } from './rpc.js'
 import {
@@ -41,7 +42,7 @@ import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertTodos } from './convert/todo.js'
 import { convertProducedFiles } from './events.js'
-import { projectIdFor } from './convert/common.js'
+import { externalProviderId, projectIdFor } from './convert/common.js'
 import { InteractionState } from './state.js'
 import { SseHub } from './sse.js'
 import { MuxEventTranslator } from './events.js'
@@ -223,6 +224,56 @@ function pendingAssistantPlaceholder(sessionID: string, cwd: string): V1MessageE
   }
 }
 
+/** The dsh-oc bridge exposes one primary agent so the TUI prompt stays usable. */
+const DEFAULT_AGENT_NAME = 'build'
+
+async function defaultAgents(ctx: BridgeRouteContext): Promise<{
+  providerID: string
+  modelID: string
+}> {
+  let providerID = 'deepseek'
+  let modelID = 'deepseek-chat'
+  try {
+    const groups = await modelGroups(ctx)
+    const first = groups[0]
+    const firstModel = first?.models[0]
+    if (first !== undefined) providerID = externalProviderId(first.id)
+    if (firstModel !== undefined) modelID = firstModel.id
+  } catch (error) {
+    ctx.log(`[bridge] default agent model fallback: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  return { providerID, modelID }
+}
+
+async function defaultModelRef(ctx: BridgeRouteContext): Promise<{ providerID: string; modelID: string }> {
+  return defaultAgents(ctx)
+}
+
+async function v1DefaultAgent(ctx: BridgeRouteContext): Promise<V2Agent> {
+  const { providerID, modelID } = await defaultAgents(ctx)
+  return {
+    name: DEFAULT_AGENT_NAME,
+    description: 'dsh-oc default build agent',
+    mode: 'primary',
+    permission: [],
+    options: {},
+    model: { providerID, modelID },
+  }
+}
+
+async function v2DefaultAgent(ctx: BridgeRouteContext): Promise<AgentV2Info> {
+  const { providerID, modelID } = await defaultAgents(ctx)
+  return {
+    id: DEFAULT_AGENT_NAME,
+    mode: 'primary',
+    hidden: false,
+    request: { headers: {}, body: {} },
+    permissions: [],
+    model: { id: modelID, providerID },
+    description: 'dsh-oc default build agent',
+  }
+}
+
 async function createSession(
   req: BridgeRequest,
   ctx: BridgeRouteContext,
@@ -388,14 +439,20 @@ export function createBridgeRouter(
 
   register('GET', '/provider/auth', 'json', async () => json(200, {}))
 
-  for (const bare of ['/agent', '/command', '/skill', '/reference', '/integration']) {
+  register('GET', '/agent', 'json', async (_req, ctx) => json(200, [await v1DefaultAgent(ctx)]))
+  for (const bare of ['/command', '/skill', '/reference', '/integration']) {
     register('GET', bare, 'json', async () => json(200, []))
   }
 
   // ---- v2 boot / catalog routes ----
   register('GET', '/api/location', 'json', async (_req, ctx) => json(200, locationInfo(ctx)))
 
-  for (const bare of ['/api/agent', '/api/command', '/api/skill', '/api/reference', '/api/integration']) {
+  register('GET', '/api/agent', 'json', async (_req, ctx) => json(200, {
+    location: locationInfo(ctx),
+    data: [await v2DefaultAgent(ctx)],
+  }))
+
+  for (const bare of ['/api/command', '/api/skill', '/api/reference', '/api/integration']) {
     register('GET', bare, 'json', async (_req, ctx) => json(200, v2LocationBody(ctx)))
   }
 
@@ -451,13 +508,28 @@ export function createBridgeRouter(
     const limitRaw = req.query.get('limit')
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
     const history = await rpc(ctx, 'session.history', { sessionId: sid(id), maxMessages: limit })
+    const defaultModel = await defaultModelRef(ctx)
     return json(200, convertMessagesV1(
       history.events.map((entry) => entry.event),
-      { sessionId: id, cwd, onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`) },
+      {
+        sessionId: id,
+        cwd,
+        defaultModel,
+        onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`),
+      },
     ))
   })
 
   register('POST', '/session/:id/message', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    return json(200, pendingAssistantPlaceholder(id, cwd))
+  })
+
+  // Alias used by the dsh-oc e2e matrix; the official SDK prompt route is
+  // `POST /session/:id/message` (v1) and `POST /api/session/:id/prompt` (v2).
+  register('POST', '/session/:id/prompt', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
@@ -536,6 +608,22 @@ export function createBridgeRouter(
 
   register('POST', '/api/session', 'json', (req, ctx) => createSession(req, ctx, true))
 
+  register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    return json(200, {
+      data: {
+        id: `msg_${randomUUID()}`,
+        sessionID: id,
+        prompt: { parts: content },
+        delivery: 'queue',
+        timeCreated: Date.now(),
+        admittedSeq: 0,
+      },
+    })
+  })
+
   register('GET', '/api/session/:sessionID', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const view = await sessionView(ctx, id)
@@ -545,10 +633,16 @@ export function createBridgeRouter(
   register('GET', '/api/session/:sessionID/message', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
+    const defaultModel = await defaultModelRef(ctx)
     const response: SessionMessagesResponse = {
       data: convertMessagesV2(
         history.events.map((entry) => entry.event),
-        { sessionId: id, cwd, onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`) },
+        {
+          sessionId: id,
+          cwd,
+          defaultModel,
+          onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
+        },
       ),
       cursor: {},
     }
@@ -606,9 +700,10 @@ export function createBridgeRouter(
     res.write('retry: 3000\n\n')
     const client = hub.add(res)
     const controller = client.controller
-    const translator = new MuxEventTranslator({ cwd, state, log })
     void (async () => {
       try {
+        const defaultModel = await defaultModelRef(ctx)
+        const translator = new MuxEventTranslator({ cwd, state, defaultModel, log })
         const stream = api.events.mux(
           { rpcId: randomUUID() as never, payload: {} },
           controller.signal,

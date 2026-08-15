@@ -282,3 +282,23 @@ gh api repos/anomalyco/opencode/releases/tags/v1.18.18 \
 3. **文件附件**：P1 先支持文本 prompt；图片/file part 在 P2/P3 按 `apiProxy.sessions.prompt` 的 `PromptContentPart` 能力补齐。
 4. **session diff**：无 produced-files 投影时返回 `[]`，不伪造 diff。
 5. **opencode v1/v2 双协议**：任何升级必须重新跑第 2 节探针并更新本文件。
+
+## 9. feat-e2e 实测实现状态（2026-08-15）
+
+下列状态来自本 worktree 的真实 e2e（mock LLM + dsh 0.1.0-rc.6 + opencode
+1.18.18，TUI 与 bridge 均实际跑通）：
+
+| 路由/能力 | 状态 | 备注 |
+|---|---|---|
+| §3 启动 GET 矩阵（31 条，含带 query 的 `/session`、`/api/model?location[...]` 等） | 200 + JSON | 全部经 curl+jq 断言 |
+| `GET /global/event` | 200 SSE | `retry: 3000` 首帧；每帧含 `directory` |
+| `GET /agent`、`GET /api/agent` | MAP | 首版返回单个 `build` 主 agent（含 `model`），否则 TUI prompt 无法提交 |
+| `POST /session/{id}/message` | MAP | opencode SDK v1 实际 prompt 路由 |
+| `POST /session/{id}/prompt` | 别名 | 官方 SDK 无此路由；dsh-oc 提供 v1 兼容别名（e2e 矩阵使用） |
+| `POST /api/session/{id}/prompt` | MAP | opencode SDK v2 官方路由，返回 `{ data: SessionInputAdmitted }` |
+| `GET /provider` | MAP | 返回 `ProviderListResponse` 对象 `{ all, default, connected }`（协议对象，非裸数组） |
+| `GET /api/model` | MAP | 返回 `{ location, data: ModelV2Info[] }`（协议对象，非裸数组） |
+| `GET /permission` + `POST /permission/{id}/reply` | MAP | 需保持至少一个 SSE 连接（与真实 TUI 一致）才能收到 mux approval 帧 |
+| `DSH_PERMISSION_MODE=ask` | 不支持 | dsh 只接受 `read-only`/`workspace-write`/`danger-full-access`；approval=ask 用 `workspace-write` |
+| oc profile 宿主行 | 运行期 overlay | oc bundle 依赖 `storage`/`storage-json`/`storage-domain`/`webserver`，dsh-base 未挂载；e2e 通过 `--patch oc-host.patch.yml` 注入（见 `tests/e2e/env.mjs`） |
+| `--print-logs` | 透传 | oc-tui 已把 `--print-logs` 传给 `opencode attach`（opencode 顶层全局选项，设置 `OPENCODE_PRINT_LOGS=1`） |
