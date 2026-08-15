@@ -184,6 +184,7 @@ GET /api/integration?location[directory]=...
 | `GET /session/{id}/children` | MAP | 会话列表中 `parentSessionId == id` 的 subagent 子会话（`convertSessionSummary`） |
 | `GET /api/session/{id}` | MAP | 同 v1 |
 | `GET /api/session/{id}/message` | MAP | 同 v1 |
+| `GET /api/session/{id}/context` | MAP | `{ data: SessionMessage[] }`（复用 v2 消息转换，无游标） |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
 | `POST /api/session/{id}/permission/{rid}/reply` | MAP | `apiProxy.respond` |
 | `GET /api/session/{id}/question` | MAP | pending questions per session |

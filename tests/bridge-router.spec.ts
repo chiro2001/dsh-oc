@@ -911,6 +911,9 @@ describe('bridge router: session routes', () => {
     const v2Messages = await request(server, 'GET', '/api/session/s1/message')
     expect(v2Messages.status).toBe(200)
     expect(v2Messages.body).toMatchObject({ data: [{ type: 'user' }, { type: 'assistant' }], cursor: {} })
+    const context = await request(server, 'GET', '/api/session/s1/context')
+    expect(context.status).toBe(200)
+    expect(context.body).toMatchObject({ data: [{ type: 'user' }, { type: 'assistant' }] })
   })
 
   it('reports the active session through /api/session/active', async () => {

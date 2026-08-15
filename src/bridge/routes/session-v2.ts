@@ -188,6 +188,24 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     return R.json(200, response)
   })
 
+  register('GET', '/api/session/:sessionID/context', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
+    const defaultModel = await R.defaultModelRef(ctx)
+    const entries = history.events
+    const data = convertMessagesV2(
+      entries.map((entry) => entry.event),
+      {
+        sessionId: id,
+        cwd: ctx.cwd,
+        defaultModel,
+        onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
+      },
+      entries.map((entry) => entry.view),
+    )
+    return R.json(200, { data })
+  })
+
   register('GET', '/api/session/:sessionID/diff', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const history = await R.cachedSessionHistory(ctx, id)

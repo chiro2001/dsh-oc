@@ -24,6 +24,7 @@
 - `GET /api/health`：返回 `{ healthy: true }` 供客户端探活。
 - `GET /api/session/active`：返回当前活动会话（`{ data: { [sessionId]: { type: "running" } } }`）。
 - `POST /api/session/{id}/wait`：有界轮询等待会话空闲（≤30s，空闲 204）。
+- `GET /api/session/{id}/context`：返回 `{ data: SessionMessage[] }`（v2 消息转换复用）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温
