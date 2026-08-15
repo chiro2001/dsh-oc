@@ -377,13 +377,15 @@ describe('bridge events: session event mapping', () => {
     const removedIndex = events.findIndex((event) =>
       event.payload.type === 'message.removed'
       && String(event.payload.properties.messageID).startsWith('msg_pending:'))
+    expect(removedIndex).toBe(-1)
     const finalIndex = events.findIndex((event) =>
       event.payload.type === 'message.updated'
-      && (event.payload.properties.info as { id?: string }).id === 'm-final')
-    expect(removedIndex).toBeGreaterThanOrEqual(0)
-    expect(removedIndex).toBeLessThan(finalIndex)
+      && (event.payload.properties.info as { id?: string }).id === 'msg_pending:s1:1:1'
+      && (event.payload.properties.info as { time: { completed?: number } }).time.completed === 2000)
+    expect(finalIndex).toBeGreaterThanOrEqual(0)
 
-    const finalInfo = events[finalIndex]?.payload.properties.info as { time: { created: number; completed: number }; parentID?: string; finish?: string }
+    const finalInfo = events[finalIndex]?.payload.properties.info as { id?: string; time: { created: number; completed: number }; parentID?: string; finish?: string }
+    expect(finalInfo.id).toBe('msg_pending:s1:1:1')
     expect(finalInfo.parentID).toBe('msg-user-1')
     expect(finalInfo.finish).toBe('stop')
     expect(finalInfo.time.created).toBe(1100)
@@ -392,10 +394,12 @@ describe('bridge events: session event mapping', () => {
 
     const finalTextPart = events.filter((event) =>
       event.payload.type === 'message.part.updated'
-      && (event.payload.properties.part as { messageID?: string }).messageID === 'm-final'
-      && (event.payload.properties.part as { type?: string }).type === 'text')
+      && (event.payload.properties.part as { messageID?: string }).messageID === 'msg_pending:s1:1:1'
+      && (event.payload.properties.part as { type?: string }).type === 'text'
+      && (event.payload.properties.part as { text?: string }).text === ' the attention mechanism,')
     expect(finalTextPart).toHaveLength(1)
     expect(finalTextPart[0]?.payload.properties.part).toMatchObject({
+      id: 'prt_stream:s1:1:1:text:0',
       text: ' the attention mechanism,',
       time: { start: 1100, end: 2000 },
     })
@@ -455,10 +459,12 @@ describe('bridge events: session event mapping', () => {
 
     const finalPart = events.filter((event) =>
       event.payload.type === 'message.part.updated'
-      && (event.payload.properties.part as { messageID?: string }).messageID === 'm-reason'
-      && (event.payload.properties.part as { type?: string }).type === 'reasoning')
+      && (event.payload.properties.part as { messageID?: string }).messageID === 'msg_pending:s1:1:1'
+      && (event.payload.properties.part as { type?: string }).type === 'reasoning'
+      && (event.payload.properties.part as { text?: string }).text === ' think')
     expect(finalPart).toHaveLength(1)
     expect(finalPart[0]?.payload.properties.part).toMatchObject({
+      id: 'prt_stream:s1:1:1:reasoning:0',
       text: ' think',
       time: { start: 1100, end: 2000 },
     })

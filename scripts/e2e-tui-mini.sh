@@ -70,6 +70,14 @@ if [[ -z "$REPLY_HINT" ]]; then
 fi
 echo "  mini model reply visible: $REPLY_HINT"
 
+e2e_tui_capture "$E2E_RUN_DIR/tui-mini-reply.txt"
+REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/tui-mini-reply.txt" | wc -l)"
+if [[ "$REPLY_COUNT" != "1" ]]; then
+  echo "e2e: --mini rendered the reply $REPLY_COUNT times (expected 1)" >&2
+  exit 1
+fi
+echo "  mini reply rendered once ($REPLY_COUNT)"
+
 echo "== stop the mini TUI harness =="
 e2e_stop_dsh "$E2E_TUI_SESSION"
 node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null

@@ -179,6 +179,7 @@ export function assistantPartsFromMessage(
   time: number,
   opts: MessageConvertOptions,
   blockStart?: (index: number, blockType: string) => number | undefined,
+  partIdFor?: (index: number, blockType: string) => string | undefined,
 ): { parts: Part[]; calls: Map<string, ToolCallInfo> } {
   const parts: Part[] = []
   const calls = new Map<string, ToolCallInfo>()
@@ -186,10 +187,10 @@ export function assistantPartsFromMessage(
   message.content.forEach((block, index) => {
     const start = blockStart?.(index, block.type) ?? time
     if (block.type === 'text') {
-      parts.push(textPart(`${messageID}:${index}`, messageID, block.text, { start, end: time }, opts))
+      parts.push(textPart(partIdFor?.(index, block.type) ?? `${messageID}:${index}`, messageID, block.text, { start, end: time }, opts))
     } else if (block.type === 'reasoning') {
       parts.push({
-        id: `${messageID}:${index}`,
+        id: partIdFor?.(index, block.type) ?? `${messageID}:${index}`,
         sessionID: opts.sessionId,
         messageID,
         type: 'reasoning',
@@ -632,9 +633,10 @@ export function assistantMessageFromEvent(
   created?: number,
   parentID?: string,
   finish?: string,
+  partIdFor?: (index: number, blockType: string) => string | undefined,
 ): V1MessageEntry {
   const id = String(event.data.message.id)
-  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart)
+  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart, partIdFor)
   return {
     info: assistantMessageInfo(event.data.message, event.time, parentID ?? id, opts, event.data.usage, created, finish),
     parts,

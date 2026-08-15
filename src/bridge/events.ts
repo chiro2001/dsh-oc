@@ -982,6 +982,8 @@ export class MuxEventTranslator {
         const state = this.streamState(sessionId)
         const stepKey = `${event.data.turn}:${event.data.step}`
         const provisionalId = state.provisionalMessageIds.get(stepKey)
+        const streamed = provisionalId !== undefined
+        const messageID = streamed ? provisionalId : String(event.data.message.id)
         const created = earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
           ?? state.turnStartTime
           ?? event.time
@@ -993,22 +995,18 @@ export class MuxEventTranslator {
             created,
             state.lastUserMessageId,
             state.finishReasons.get(stepKey) ?? 'stop',
+            (index, blockType) => {
+              const block = state.blocks.get(`${event.data.turn}:${event.data.step}:${index}`)
+              return block !== undefined && block.blockType === blockType ? block.partId : undefined
+            },
           )
           return {
-            info: entry.info as unknown as Record<string, unknown>,
-            parts: entry.parts as unknown as Array<Record<string, unknown>>,
+            info: { ...entry.info, id: messageID } as unknown as Record<string, unknown>,
+            parts: entry.parts.map((part) => ({ ...part, messageID })) as unknown as Array<Record<string, unknown>>,
           }
         })
-        if (provisionalId) {
-          events.unshift(
-            makeEvent(directory, 'message.removed', {
-              sessionID: sessionId,
-              messageID: provisionalId,
-            }, project),
-          )
-          state.provisionalMessageIds.delete(stepKey)
-        }
-        this.currentAssistant.set(sessionId, String(event.data.message.id))
+        if (streamed) state.provisionalMessageIds.delete(stepKey)
+        this.currentAssistant.set(sessionId, messageID)
         let calls = this.pendingCalls.get(sessionId)
         if (!calls) {
           calls = new Map<string, ToolCallInfo>()

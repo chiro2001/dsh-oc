@@ -127,7 +127,7 @@
 | `--dir` 目录过滤 e2e | ✅ | `scripts/e2e-tui-dir-filter.sh`：新会话落在子目录、根会话被过滤 | `bash scripts/e2e-tui-dir-filter.sh` | 本提交 |
 | `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | `--continue` attach e2e | ✅ | `scripts/e2e-tui-continue.sh`（恢复最新会话） | `bash scripts/e2e-tui-continue.sh` | 本提交 |
-| `--mini` attach + 回复 e2e | ✅ | `scripts/e2e-tui-mini.sh`：输入 prompt 并断言 mock 回复 | `bash scripts/e2e-tui-mini.sh` | 本提交 |
+| `--mini` attach + 回复 e2e | ✅ | `scripts/e2e-tui-mini.sh`：输入 prompt、断言回复且只渲染一次 | `bash scripts/e2e-tui-mini.sh` | 本提交 |
 | `--mini` 退出 splash | 🟡 | 官方二进制渲染，无法替换；id 为 dsh 会话 id，恢复请用 `dsh --profile oc --session` | 文档见 README | 本提交 |
 | `--print-logs` 透传 e2e | ✅ | `scripts/e2e-tui-print-logs.sh`（fake 二进制 argv 断言） | `bash scripts/e2e-tui-print-logs.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
@@ -142,7 +142,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`7e3ded6`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`5f6d22a`（2026-08-15）。
 
 ### 路由注册表
 
@@ -226,7 +226,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 35 | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 63 | 7192ed9 fix(bridge): resolve relative directory queries against bridge cwd |
+| `tests/bridge-router.spec.ts` | 63 | 5f6d22a fix(bridge): implement POST /session/:id/prompt_async for --mini |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -262,7 +262,7 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | f8bad18 chore: rename package to @chiro2001/dsh-oc |
-| `src/bridge/router.ts` | 7192ed9 fix(bridge): resolve relative directory queries against bridge cwd |
+| `src/bridge/router.ts` | 5f6d22a fix(bridge): implement POST /session/:id/prompt_async for --mini |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 5743dd1 perf(bridge): short-TTL list/history caches with mutation and SSE invalidation |
@@ -287,7 +287,7 @@
 | `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
 | `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
-| `scripts/e2e-tui-mini.sh` | 90c2260 test(e2e): cover attach --mini boot rendering |
+| `scripts/e2e-tui-mini.sh` | 5f6d22a fix(bridge): implement POST /session/:id/prompt_async for --mini |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/e2e-tui-print-logs.sh` | 071dfdc test(e2e): assert --print-logs forwarding through the fake opencode child |
 | `scripts/e2e-tui-skill.sh` | 360a21d test(e2e): verify skill slash command with Enter+Enter submission |
