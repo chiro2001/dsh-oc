@@ -125,7 +125,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`167a7b3`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`071dfdc`（2026-08-15）。
 
 ### 路由注册表
 
@@ -268,7 +268,7 @@
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `scripts/e2e-tui-mini.sh` | 90c2260 test(e2e): cover attach --mini boot rendering |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
-| `scripts/e2e-tui-print-logs.sh` | — |
+| `scripts/e2e-tui-print-logs.sh` | 071dfdc test(e2e): assert --print-logs forwarding through the fake opencode child |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
 | `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/e2e-tui-tools.sh` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
@@ -281,6 +281,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

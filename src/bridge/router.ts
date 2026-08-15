@@ -1271,7 +1271,7 @@ export function createBridgeRouter(
     { directory: ctx.cwd },
   ]))
 
-  register('GET', '/config', 'json', async () => json(200, {}))
+  register('GET', '/config', 'json', async () => json(200, { autoupdate: false }))
 
   register('GET', '/config/providers', 'json', async (_req, ctx) => {
     const groups = await modelGroups(ctx)

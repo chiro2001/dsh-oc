@@ -118,6 +118,7 @@ describe('bridge router: startup GET routes', () => {
 
   it('returns the stub shapes exactly', async () => {
     const { server } = await boot(fakeApi())
+    expect((await request(server, 'GET', '/config')).body).toEqual({ autoupdate: false })
     expect((await request(server, 'GET', '/lsp')).body).toEqual([])
     expect((await request(server, 'GET', '/mcp')).body).toEqual({})
     expect((await request(server, 'GET', '/formatter')).body).toEqual([])
