@@ -232,6 +232,25 @@ describe('bridge router: session routes', () => {
     expect(v2.body).toMatchObject({ data: [{ id: 's1', title: 'Session One' }], cursor: {} })
   })
 
+  it('filters session lists by the directory query', async () => {
+    const base = fakeApi()
+    const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
+    const api = {
+      ...base,
+      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, other] }) },
+    }
+    const { server } = await boot(api)
+
+    const v1 = await request(server, 'GET', '/session?directory=/other')
+    expect((v1.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s2'])
+
+    const v2 = await request(server, 'GET', '/api/session?directory=/work')
+    expect((v2.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id)).toEqual(['s1'])
+
+    const all = await request(server, 'GET', '/session')
+    expect((all.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s1', 's2'])
+  })
+
   it('lists child sessions with parentID and inherits the parent cwd', async () => {
     const base = fakeApi()
     const parent = {

@@ -199,6 +199,19 @@ function recordSessionSummaries(
   }
 }
 
+/** Filter dsh session summaries by a TUI-provided `directory` query. */
+function filterSessionsByDirectory(
+  items: readonly SessionSummary[],
+  directory: string | undefined,
+): SessionSummary[] {
+  if (directory === undefined || directory.length === 0) return [...items]
+  const normalized = resolve(directory)
+  return items.filter((item) => {
+    if (typeof item.cwd !== 'string') return true
+    return resolve(item.cwd) === normalized
+  })
+}
+
 async function sessionView(ctx: BridgeRouteContext, id: string): Promise<SessionView> {
   const list = await rpc(ctx, 'session.list', {})
   const summary = list.items.find((item) => String(item.sessionId) === id)
@@ -1269,8 +1282,9 @@ export function createBridgeRouter(
   // ---- v1 sessions ----
   register('GET', '/session', 'json', async (_req, ctx) => {
     const list = await rpc(ctx, 'session.list', {})
-    recordSessionSummaries(ctx, list.items)
-    return json(200, list.items.map((item) => convertSessionSummary(item, {
+    const items = filterSessionsByDirectory(list.items, _req.query.get('directory') ?? undefined)
+    recordSessionSummaries(ctx, items)
+    return json(200, items.map((item) => convertSessionSummary(item, {
       cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
     })))
   })
@@ -1448,9 +1462,10 @@ export function createBridgeRouter(
   // ---- v2 sessions ----
   register('GET', '/api/session', 'json', async (_req, ctx) => {
     const list = await rpc(ctx, 'session.list', {})
-    recordSessionSummaries(ctx, list.items)
+    const items = filterSessionsByDirectory(list.items, _req.query.get('directory') ?? undefined)
+    recordSessionSummaries(ctx, items)
     return json(200, {
-      data: list.items.map((item) => convertSessionSummaryV2(item, {
+      data: items.map((item) => convertSessionSummaryV2(item, {
         cwd: state.sessionDirectories.get(String(item.sessionId)) ?? cwd,
       })),
       cursor: {},

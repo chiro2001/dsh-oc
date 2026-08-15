@@ -122,7 +122,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`90c2260`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`13460d4`（2026-08-15）。
 
 ### 路由注册表
 
@@ -205,7 +205,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 29 | e256572 feat(bridge): session-scoped always permission memory |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 47 | 18741fd feat(tui): make --dir switch the bridge working directory |
+| `tests/bridge-router.spec.ts` | 48 | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -241,8 +241,8 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
-| `src/bridge/router.ts` | e256572 feat(bridge): session-scoped always permission memory |
-| `src/bridge/rpc.ts` | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
+| `src/bridge/router.ts` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
+| `src/bridge/rpc.ts` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | e256572 feat(bridge): session-scoped always permission memory |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -254,7 +254,7 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
-| `scripts/e2e-api-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
@@ -277,6 +277,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 
