@@ -47,6 +47,9 @@ dsh plugin --profile oc add .
 dsh --profile oc
 ```
 
+> `lib/` 已纳入版本库：GitHub 直装依赖已构建产物。修改 `src/` 后请运行
+> `pnpm build` 并连同 `lib/` 一起提交，否则 `chiro2001/dsh-oc` 安装的版本不会更新。
+
 ## 参数透传
 
 支持透传给 `opencode attach` 的参数：
