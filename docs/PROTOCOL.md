@@ -175,6 +175,7 @@ GET /api/integration?location[directory]=...
 | `GET /api/session` | MAP | 同 v1 |
 | `GET /experimental/session` | MAP | GlobalSession 列表（搜索/目录过滤/limit 子集，复用 `convertSessionSummary`） |
 | `GET /api/session/active` | MAP | 当前活动会话 `{ data: { [sessionId]: { type: "running" } } }`（无则 `{}`） |
+| `POST /api/session/{id}/wait` | MAP | 等待 agent 循环空闲：≤30s 轮询 `session.list`，空闲 204、超时 503、会话不存在 404 |
 | `POST /api/session` | MAP | 同 v1 |
 | `POST /api/session/{id}/fork` | MAP | 同 v1 fork，返回 v2 信封 |
 | `POST /api/session/{id}/compact` | MAP | 同 v1 summarize/compact（SDK v2 路由，204） |

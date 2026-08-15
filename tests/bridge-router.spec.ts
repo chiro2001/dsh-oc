@@ -929,6 +929,27 @@ describe('bridge router: session routes', () => {
     expect(key !== undefined && data[key]).toEqual({ type: 'running' })
   })
 
+  it('waits for a session to become idle', async () => {
+    const base = fakeApi()
+    const states = [{ running: true }, { running: false }]
+    const api = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [{
+          sessionId: 's1' as never,
+          updatedAt: Date.now(),
+          running: states.shift()?.running ?? false,
+          blank: false,
+        }] }),
+      },
+    }
+    const { server } = await boot(api)
+    const waited = await request(server, 'POST', '/api/session/s1/wait')
+    expect(waited.status).toBe(204)
+    expect((await request(server, 'POST', '/api/session/missing/wait')).status).toBe(404)
+  })
+
   it('tags user messages with an advertised model so the TUI keeps a valid selection', async () => {
     const base = fakeApi()
     const api = {

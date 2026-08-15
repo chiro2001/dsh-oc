@@ -319,6 +319,9 @@ fi
 
 curl -s -X POST "$BRIDGE/session/$SESSION_V1/init" | jq -e '. == true' >/dev/null
 echo "  POST /session/$SESSION_V1/init -> true"
+WAIT_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/wait")"
+[[ "$WAIT_CODE" == "204" ]]
+echo "  POST /api/session/$SESSION_V2/wait -> 204"
 
 TODO_LEN="$(curl -s "$BRIDGE/session/$SESSION_V1/todo" | jq -e 'type == "array"' >/dev/null && echo array)"
 echo "  todo: $TODO_LEN"

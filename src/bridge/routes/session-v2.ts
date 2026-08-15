@@ -2,7 +2,7 @@
 import * as R from '../router.js'
 import type { SessionMessagesResponse } from '@opencode-ai/sdk/v2/types'
 import type { SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
-import { badRequest } from '../errors.js'
+import { badRequest, notFound } from '../errors.js'
 import { convertMessagesV2 } from '../convert/message.js'
 import { convertSessionSummary, convertSessionSummaryV2 } from '../convert/session.js'
 import { filterGitTrackedDiffs } from '../git.js'
@@ -71,6 +71,19 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
   register('GET', '/api/session/active', 'json', async (_req, ctx) => {
     const id = ctx.state.currentSessionId
     return R.json(200, { data: id === undefined ? {} : { [id]: { type: 'running' } } })
+  })
+
+  register('POST', '/api/session/:sessionID/wait', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    const deadline = Date.now() + 30_000
+    while (Date.now() < deadline) {
+      const list = await R.rpc(ctx, 'session.list', {})
+      const item = list.items.find((entry) => String(entry.sessionId) === id)
+      if (item === undefined) throw notFound('session not found', { sessionID: id })
+      if (!item.running) return R.json(204)
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    return R.json(503, { name: 'ServiceUnavailableError', message: 'session still busy' })
   })
 
   register('POST', '/api/session/:sessionID/fork', 'json', (req, ctx) => R.forkSession(req, ctx, true))
