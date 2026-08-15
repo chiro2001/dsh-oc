@@ -21,12 +21,16 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 
 ## 演示
 
-[![dsh-oc 核心功能演示](https://asciinema.org/a/PTxhTFDZED74S0jk.svg)](https://asciinema.org/a/PTxhTFDZED74S0jk)
+<img src="docs/demo/dsh-oc-demo.gif" alt="dsh-oc 核心功能演示（真实 DeepSeek 模型）" width="900">
 
-演示内容：DSH OC 品牌启动画面 → 会话列表真实标题 → 打开历史会话 →
-工具调用卡片 → 慢速流式回复 → Esc 打断 → 错误提示 → 推理回复 → 退出提示说明。
-点击图片在 asciinema 在线播放器播放；也可下载
-[dsh-oc-demo.cast](docs/demo/dsh-oc-demo.cast) 后用 `asciinema play` 原速重放。
+真实录制（DeepSeek V4 Flash + 本仓库真实任务）：输入 `dsh --profile oc` →
+DSH OC 品牌启动画面 → 用真实模型提问「运行 `pnpm test` 并汇报结果」→
+Thought 推理 → bash 工具调用 → 19 个测试文件 / 266 个测试全部通过 → 退出提示。
+
+GitHub README 不执行 `<script>`，所以不能直接嵌入 asciinema 在线播放器；
+这里按 asciinema 官方建议用 `agg` 生成 GIF。cast 源文件在
+[docs/demo/dsh-oc-demo.cast](docs/demo/dsh-oc-demo.cast)，可执行
+`asciinema play docs/demo/dsh-oc-demo.cast` 交互式回放。
 
 ## 文档
 
@@ -53,6 +57,8 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 - 会话列表真实标题补读（小规模全量、大列表后台补温）。
 - Esc 打断/取消（全量双按、mini 单按），`/preset` 新会话继承 preset。
 - 退出 splash 下方输出 dsh 恢复说明。
+- README 演示改为真实模型录制的 GIF（asciinema cast + `agg`），启动到进入
+  opencode 的等待被压缩，适合还没用过 dsh-oc 的用户快速了解。
 - 路由注册按域拆分（`src/bridge/routes/`），协议探针自动扫描。
 - push 自动跑 API e2e 子集；完整变更见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 

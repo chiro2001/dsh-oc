@@ -35,9 +35,10 @@
 - `scripts/perf.mjs` 新增 `measurements.titleCoverage`：量化列表真实标题覆盖率。
 - `e2e-tui-abort.sh`：mini 分支改为等 SSE 出现真实流式增量后再按 Esc，断言确实
   打断进行中的流（长 mock 开启 `repeatLast`，修复此前第二次请求被 500 拒绝的假通过）。
-- README 新增核心功能演示：asciinema 录制真实 TUI，上传 asciinema.org 在线
-  播放器（cast 源文件存 `docs/demo/`），覆盖品牌 logo、会话标题、流式回复、
-  Esc 打断、工具卡片、退出提示。
+- README 演示改为真实模型录制的 GIF：asciinema cast（`docs/demo/`）经官方
+  `agg` 渲染成 GIF 嵌入 README（GitHub 不执行 `<script>`，无法用播放器脚本），
+  cast 保留供 `asciinema play` 交互回放；录制用真实 DeepSeek 模型完成真实任务，
+  不用 mock。
 - 报错显示：dsh `host/agent-error` 现在除了 `session.error` 还会广播一条可见的
   assistant 文本消息（`[错误] …`），TUI 对话区能直接看到错误，不再静默或渲染异常。
 

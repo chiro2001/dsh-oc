@@ -133,16 +133,23 @@ e2e 脚本只允许在 `main` / `develop` / `chore-*` / `feat-*` 分支运行（
 
 ## 演示录制与发布（README 演示）
 
-依赖：`asciinema`（`pip install asciinema`）。
+面向还没用过 dsh-oc 的用户：用真实模型 + 有意义的任务，不要用 mock 或无意义
+任务。GitHub README 不执行 `<script>`，无法直接嵌入 asciinema 播放器；按
+asciinema 官方建议用 `agg` 生成 GIF 以 `<img>` 嵌入，cast 源文件保留在仓库。
 
-1. 准备隔离 DSH_HOME（`node tests/e2e/env.mjs new-run ...`）并自建 mock：
-   用 `tests/e2e/mock-llm.mjs` 的 `slow_success` / `reasoning_success` /
-   `tool_call_success` / `partial_disconnect` 行为组合序列；先通过 bridge API
-   种两个带真实标题的会话。
-2. 在 tmux 中 `asciinema rec --cols 110 --rows 30 docs/demo/dsh-oc-demo.cast`，
-   启动 `dsh --profile oc`，按脚本驱动按键（会话列表、prompt、Esc 打断、退出）。
-3. 上传：`asciinema upload docs/demo/dsh-oc-demo.cast`，把返回的
-   `https://asciinema.org/a/<id>` 填进 README 的演示链接与
-   `https://asciinema.org/a/<id>.svg` 缩略图。
-4. 注意：匿名上传的录像 7 天后会被删除；要长期保留，需在 asciinema.org
-   认领（注册并关联 CLI，或按上传输出里的提示操作）。
+依赖：`asciinema`（`pip install asciinema`）与 `agg`
+（`gh release download -R asciinema/agg -p 'agg-<platform>'` 或
+`cargo install agg`）。
+
+1. 在已安装的 dsh 上准备：先手动启动一次 `dsh --profile oc` 预热 opencode
+   二进制与缓存，避免正式录制里出现首次下载/解析的长等待。
+2. 在 tmux / PTY 中录制，`-i 2` 会把播放时的空闲段压缩到最多 2 秒：
+   `asciinema rec --cols 110 --rows 30 -i 2 -t 'dsh-oc demo' -q docs/demo/dsh-oc-demo.cast`
+   然后启动 `dsh --profile oc`，用真实模型完成一个有意义的短任务（例如
+   「运行 `pnpm test` 并汇报结果」），最后 Ctrl+C 退出并结束录制。
+3. 生成 GIF（README 用）：
+   `agg --font-family 'Hack,Noto Sans Mono CJK SC' --idle-time-limit 1 --speed 1.2 --fps-cap 15 --font-size 14 docs/demo/dsh-oc-demo.cast docs/demo/dsh-oc-demo.gif`
+   - `Hack` 是等宽字体，`Noto Sans Mono CJK SC` 兜底中文；不要用 SVG 方案，
+     尺寸/字体/报错渲染都容易出问题。
+   - 可选上传：`asciinema upload docs/demo/dsh-oc-demo.cast`，匿名上传 7 天
+     过期，需在 asciinema.org 认领；README 的主嵌入仍是 GIF。
