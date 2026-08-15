@@ -376,6 +376,48 @@ describe('bridge router: session routes', () => {
     expect(historyCalls).toEqual(['10', '10'])
   })
 
+  it('serves the dsh skill catalog for the matching session', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [item] }),
+      },
+      skills: {
+        list: async () => okRpc({
+          skills: [{
+            name: 'code-review',
+            description: 'Review code before merge',
+            whenToUse: 'Before merging',
+            modelInvocable: true,
+          }],
+        }),
+      },
+    }
+    const { server } = await boot(api)
+
+    const v1 = await request(server, 'GET', '/skill?directory=/work')
+    expect(v1.status).toBe(200)
+    expect(v1.body).toEqual([{
+      name: 'code-review',
+      description: 'Review code before merge',
+      whenToUse: 'Before merging',
+    }])
+
+    const v2 = await request(server, 'GET', '/api/skill')
+    expect(v2.status).toBe(200)
+    expect(v2.body).toMatchObject({
+      location: { directory: '/work' },
+      data: [{ name: 'code-review', description: 'Review code before merge' }],
+    })
+  })
+
+  it('returns an empty skill catalog without sessions', async () => {
+    const { server } = await boot(fakeApi())
+    expect((await request(server, 'GET', '/skill')).body).toEqual([])
+  })
+
   it('searches v2 session lists through session.search and applies limit', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }

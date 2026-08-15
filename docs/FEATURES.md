@@ -77,7 +77,8 @@
 | `/goal` 生命周期（complete/pause/resume/clear） | ✅ | `complete` 走 `goal.complete` RPC，其余走 registry | `tests/bridge-router.spec.ts`、`scripts/e2e-api-goal.sh` | 本提交 |
 | TUI `/help` 能力摘要 | ✅ | `src/help.ts` `ocHelp` + `runHelpCommand`（不触发模型轮次） | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | `/compact` / summarize | ✅ | `POST /session/:id/summarize`、`POST /session/:id/compact`、`POST /api/session/:id/compact` | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
-| Skills / references / integrations | ❌ | `GET /skill`、`GET /api/skill`、`GET /reference`、`GET /integration` 等返回 `[]` | `e2e-api.sh` | `f30b156` |
+| Skills 目录 | ✅ | `GET /skill`、`GET /api/skill` 经 dsh `skill.list`（按目录匹配会话；无会话返回 `[]`） | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
+| References / integrations | ❌ | `GET /reference`、`GET /api/reference`、`GET /integration` 等返回 schema-valid `[]` | `e2e-api.sh` | `f30b156` |
 
 ## 7. TUI
 
@@ -128,7 +129,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`45b794e`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`3005a4f`（2026-08-15）。
 
 ### 路由注册表
 
@@ -209,9 +210,9 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 33 | 45b794e feat(bridge): retry transient host stream errors alongside mux |
+| `tests/bridge-events.spec.ts` | 33 | 3005a4f feat(bridge): dedupe replayed approval/question frames after SSE retries |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 57 | d1f4186 perf(bridge): prefetch recent session histories after startup |
+| `tests/bridge-router.spec.ts` | 59 | d1f4186 perf(bridge): prefetch recent session histories after startup |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -243,11 +244,11 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | 4e91439 feat(bridge): emit session.next.tool.progress when a tool call starts |
+| `src/bridge/events.ts` | 3005a4f feat(bridge): dedupe replayed approval/question frames after SSE retries |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
-| `src/bridge/router.ts` | 45b794e feat(bridge): retry transient host stream errors alongside mux |
+| `src/bridge/router.ts` | 3005a4f feat(bridge): dedupe replayed approval/question frames after SSE retries |
 | `src/bridge/rpc.ts` | ecb00f1 feat(bridge): v2 session search with limit and directory filters |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 5743dd1 perf(bridge): short-TTL list/history caches with mutation and SSE invalidation |

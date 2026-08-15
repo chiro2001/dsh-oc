@@ -69,6 +69,9 @@ export function fakeApi(overrides: Partial<BridgeApi> = {}): BridgeApi {
       complete: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 4 } }),
       clear: async () => okRpc({ cleared: true }),
     },
+    skills: {
+      list: async () => okRpc({ skills: [] }),
+    },
     llm: {
       models: async () => okRpc({ groups: [], failures: [] }),
     },

@@ -347,6 +347,39 @@ async function cachedSessionHistory(
   return value
 }
 
+/** Pick a session for a directory query (or the most recent one). */
+async function sessionForDirectory(
+  ctx: BridgeRouteContext,
+  directory: string | undefined,
+): Promise<SessionSummary | undefined> {
+  const items = await cachedSessionList(ctx)
+  if (directory !== undefined && directory.length > 0) {
+    const normalized = resolve(directory)
+    return items.find((item) => typeof item.cwd === 'string' && resolve(item.cwd) === normalized)
+  }
+  return items[0]
+}
+
+/** Resolve the dsh skill catalog for the session matching a directory query. */
+async function skillList(
+  ctx: BridgeRouteContext,
+  directory: string | undefined,
+): Promise<Array<{ name: string; description: string; whenToUse?: string }>> {
+  const session = await sessionForDirectory(ctx, directory)
+  if (session === undefined) return []
+  try {
+    const result = await rpc(ctx, 'skill.list', { sessionId: sid(String(session.sessionId)) })
+    return result.skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      ...(skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse }),
+    }))
+  } catch (error) {
+    ctx.log(`[bridge] skill.list failed: ${error instanceof Error ? error.message : String(error)}`)
+    return []
+  }
+}
+
 function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
   if (view.summary) {
     return convertSessionSummary(view.summary, {
@@ -1354,7 +1387,8 @@ export function createBridgeRouter(
   // prompt routes below additionally capture `/preset` typed with a trailing
   // space (or after Esc), so every path ends with a visible SSE result.
   register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1, GOAL_COMMAND_V1, HELP_COMMAND_V1]))
-  for (const bare of ['/skill', '/reference', '/integration']) {
+  register('GET', '/skill', 'json', async (req, ctx) => json(200, await skillList(ctx, req.query.get('directory') ?? undefined)))
+  for (const bare of ['/reference', '/integration']) {
     register('GET', bare, 'json', async () => json(200, []))
   }
 
@@ -1370,7 +1404,11 @@ export function createBridgeRouter(
     location: locationInfo(ctx),
     data: [PRESET_COMMAND_V2, GOAL_COMMAND_V2, HELP_COMMAND_V2],
   }))
-  for (const bare of ['/api/skill', '/api/reference', '/api/integration']) {
+  register('GET', '/api/skill', 'json', async (req, ctx) => json(200, {
+    location: locationInfo(ctx),
+    data: await skillList(ctx, req.query.get('directory') ?? undefined),
+  }))
+  for (const bare of ['/api/reference', '/api/integration']) {
     register('GET', bare, 'json', async (_req, ctx) => json(200, v2LocationBody(ctx)))
   }
 

@@ -33,6 +33,7 @@ export interface BridgeApi {
   llm: Pick<ApiProxy['llm'], 'models'>
   agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>
   goals: Pick<ApiProxy['goals'], 'create' | 'edit' | 'pause' | 'resume' | 'complete' | 'clear'>
+  skills: Pick<ApiProxy['skills'], 'list'>
   events: Pick<ApiProxy['events'], 'mux' | 'host'>
   respond: ApiProxy['respond']
   /**
@@ -79,6 +80,7 @@ const DOMAIN_ALIASES: Record<string, string> = {
   session: 'sessions',
   agentPreset: 'agentPresets',
   goal: 'goals',
+  skill: 'skills',
 }
 
 function resolveMethod(
