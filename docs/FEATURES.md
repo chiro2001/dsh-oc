@@ -120,6 +120,7 @@
 | Help e2e | ✅ | `scripts/e2e-tui-help.sh` | `bash scripts/e2e-tui-help.sh` | 本提交 |
 | 品牌 logo e2e | ✅ | `scripts/e2e-tui-brand.sh` | `bash scripts/e2e-tui-brand.sh` | 本提交 |
 | `--dir` attach e2e | ✅ | `scripts/e2e-tui-dir.sh` | `bash scripts/e2e-tui-dir.sh` | 本提交 |
+| `--dir` 相对路径 e2e | ✅ | `scripts/e2e-tui-dir.sh` 使用相对 `sub-project` | `bash scripts/e2e-tui-dir.sh` | 本提交 |
 | `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | `--continue` attach e2e | ✅ | `scripts/e2e-tui-continue.sh`（恢复最新会话） | `bash scripts/e2e-tui-continue.sh` | 本提交 |
 | `--mini` attach e2e | ✅ | `scripts/e2e-tui-mini.sh` | `bash scripts/e2e-tui-mini.sh` | 本提交 |
@@ -137,7 +138,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`160b07f`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`7192ed9`（2026-08-15）。
 
 ### 路由注册表
 
@@ -220,7 +221,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 35 | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 62 | 7b7fa5b feat(bridge): support DSH_OC_E2E_FAKE_SKILLS test seam |
+| `tests/bridge-router.spec.ts` | 62 | 7192ed9 fix(bridge): resolve relative directory queries against bridge cwd |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -256,7 +257,7 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
-| `src/bridge/router.ts` | 169c750 feat(bridge): keep todo/goal projection state across SSE translator rebuilds |
+| `src/bridge/router.ts` | 7192ed9 fix(bridge): resolve relative directory queries against bridge cwd |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 5743dd1 perf(bridge): short-TTL list/history caches with mutation and SSE invalidation |

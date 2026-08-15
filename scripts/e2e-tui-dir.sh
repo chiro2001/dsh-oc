@@ -19,8 +19,8 @@ trap cleanup EXIT
 
 e2e_new_run "tui-dir" "danger-full-access" "success" "1"
 
-SUB_DIR="$E2E_WORKDIR/sub-project"
-mkdir -p "$SUB_DIR"
+mkdir -p "$E2E_WORKDIR/sub-project"
+SUB_DIR="sub-project"
 
 echo "== boot real opencode attach with --dir =="
 e2e_tui_start "--dir $SUB_DIR"
