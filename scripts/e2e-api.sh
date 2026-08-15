@@ -235,6 +235,14 @@ curl -s "$BRIDGE/api/session/$FORKED_V2" | jq -e --arg f "$FORKED_V2" --arg t 'e
   '.data.id == $f and (.data | has("parentID") | not) and .data.title == $t' >/dev/null
 echo "  v2 fork: $FORKED_V2 (fork #3)"
 
+# Forking a fork advances its chain instead of stacking another suffix.
+FORK_CHAIN_JSON="$(curl -s -X POST "$BRIDGE/session/$FORKED_AT_MSG/fork" -H 'Content-Type: application/json' -d '{}')"
+FORK_CHAIN="$(jq -er .id <<<"$FORK_CHAIN_JSON")"
+[[ -n "$FORK_CHAIN" && "$FORK_CHAIN" != "$FORKED_AT_MSG" ]]
+jq -e --arg f "$FORK_CHAIN" --arg t 'e2e renamed (fork #2)'   '.id == $f and (has("parentID") | not) and .title == $t' <<<"$FORK_CHAIN_JSON" >/dev/null
+curl -s "$BRIDGE/session/$FORK_CHAIN" | jq -e --arg f "$FORK_CHAIN" --arg t 'e2e renamed (fork #2)'   '.id == $f and (has("parentID") | not) and .title == $t' >/dev/null
+echo "  fork chain: $FORKED_AT_MSG -> $FORK_CHAIN (fork #2)"
+
 echo "== compact =="
 COMPACT_CODE="$(curl -s -o "$E2E_RUN/compact-summarize.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V1/summarize" \
   -H 'Content-Type: application/json' -d '{"providerID":"deepseek","modelID":"mock-model"}')"
