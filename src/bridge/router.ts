@@ -89,6 +89,8 @@ export interface BridgeRouteContext {
 export interface HandlerResult {
   status: number
   body?: unknown
+  /** Raw (non-JSON) response body, written verbatim when present. */
+  raw?: string | Buffer
   headers?: Record<string, string>
 }
 
@@ -1804,6 +1806,17 @@ export function createBridgeRouter(
 export function matchPattern(pattern: string, pathname: string): boolean {
   const patternSegments = pattern.split('/')
   const pathSegments = pathname.split('/')
+  const starIndex = patternSegments.indexOf('*')
+  if (starIndex !== -1) {
+    if (starIndex !== patternSegments.length - 1) return false
+    if (pathSegments.length <= starIndex) return false
+    const prefixPattern = patternSegments.slice(0, starIndex)
+    const prefixPath = pathSegments.slice(0, starIndex)
+    if (prefixPattern.length !== prefixPath.length) return false
+    return prefixPattern.every(
+      (segment, index) => segment === prefixPath[index] || segment.startsWith(':'),
+    )
+  }
   if (patternSegments.length !== pathSegments.length) return false
   return patternSegments.every(
     (segment, index) => segment === pathSegments[index] || segment.startsWith(':'),
@@ -1814,6 +1827,16 @@ export function extractParams(pattern: string, pathname: string): Record<string,
   const patternSegments = pattern.split('/')
   const pathSegments = pathname.split('/')
   const params: Record<string, string> = {}
+  const starIndex = patternSegments.indexOf('*')
+  if (starIndex !== -1) {
+    params['*'] = pathSegments.slice(starIndex).join('/')
+    patternSegments.slice(0, starIndex).forEach((segment, index) => {
+      if (segment.startsWith(':')) {
+        params[segment.slice(1)] = decodeURIComponent(pathSegments[index] ?? '')
+      }
+    })
+    return params
+  }
   patternSegments.forEach((segment, index) => {
     if (segment.startsWith(':')) {
       params[segment.slice(1)] = decodeURIComponent(pathSegments[index] ?? '')

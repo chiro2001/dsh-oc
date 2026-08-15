@@ -36,6 +36,9 @@
 - 真实 VCS 面：`GET /vcs`、`GET /vcs/status`、`GET /vcs/diff`、`GET /vcs/diff/raw`
   从 stub 升级为真实 git 读取（当前分支、origin 默认分支、staged+unstaged
   文件状态与行数、每文件/原始 unified diff；untracked 不进入 status）。
+- 工作区文件系统面：`GET /api/fs/read/{path}`（原始字节，越界路径 400，
+  单文件 5 MiB 上限）、`GET /api/fs/list`、`GET /api/fs/find`（递归查找，
+  跳过依赖/构建目录并限制结果数）；路由匹配新增尾段 `*` 通配支持。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温

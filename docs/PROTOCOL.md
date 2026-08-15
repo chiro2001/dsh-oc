@@ -201,6 +201,9 @@ GET /api/integration?location[directory]=...
 | `GET /api/question/request` | MAP | SDK v2 全局 pending questions 别名，`{ location, data }` |
 | `GET /api/permission/saved` | MAP | 内存中的 always 授权列表（`PermissionSavedInfo` + `sessionID/grantedAt`） |
 | `DELETE /api/permission/saved/{id}` | MAP | 删除 `sessionID:toolName` 内存授权（不存在 404） |
+| `GET /api/fs/read/{path}` | MAP | 读取工作区内文件原始字节（`*` 通配路径，越界 400，上限 5 MiB） |
+| `GET /api/fs/list` | MAP | 列目录（`{ location, data: FileSystemEntry[] }`，目录优先） |
+| `GET /api/fs/find` | MAP | 递归查找（query/type/limit，跳过依赖与构建目录） |
 | 其他未列路由 | LATER | 501 或 schema-valid 空响应 |
 
 ---

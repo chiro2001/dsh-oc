@@ -109,6 +109,20 @@ echo "  /vcs/diff returns a per-file patch"
 curl -s "$BRIDGE/vcs/diff/raw" | grep -qa 'diff --git'
 echo "  /vcs/diff/raw returns the unified diff"
 
+echo "== fs assertions =="
+FS_CONTENT="$(curl -s "$BRIDGE/api/fs/read/readme.txt")"
+[[ "$FS_CONTENT" == $'one\ntwo' ]]
+echo "  /api/fs/read/readme.txt returns raw file content"
+curl -s "$BRIDGE/api/fs/list" | jq -e \
+  --arg w "$E2E_WORKDIR" '.location.directory == $w and any(.data[]; .path == "readme.txt" and .type == "file")' >/dev/null
+echo "  /api/fs/list includes readme.txt"
+curl -s "$BRIDGE/api/fs/find?query=readme&type=file" | jq -e \
+  'any(.data[]; .path == "readme.txt" and .type == "file")' >/dev/null
+echo "  /api/fs/find locates readme.txt"
+CODE="$(curl -s -o "$E2E_RUN/fs-escape.json" -w '%{http_code}' "$BRIDGE/api/fs/read/..%2Fescape.txt")"
+[[ "$CODE" == "400" ]]
+echo "  /api/fs/read path escape -> 400"
+
 echo "== key route shapes =="
 curl -s "$BRIDGE/path" | jq -e --arg w "$E2E_WORKDIR" '.directory == $w' >/dev/null
 echo "  /path.directory == workdir"

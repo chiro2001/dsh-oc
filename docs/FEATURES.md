@@ -172,6 +172,9 @@
 | `GET` | `/vcs/status` | json | `src/bridge/routes/vcs.ts` |
 | `GET` | `/vcs/diff` | json | `src/bridge/routes/vcs.ts` |
 | `GET` | `/vcs/diff/raw` | json | `src/bridge/routes/vcs.ts` |
+| `GET` | `/api/fs/read/*` | json(raw) | `src/bridge/routes/fs.ts`（工作区文件读取，越界 400） |
+| `GET` | `/api/fs/list` | json | `src/bridge/routes/fs.ts` |
+| `GET` | `/api/fs/find` | json | `src/bridge/routes/fs.ts`（跳过依赖/构建目录） |
 
 ### 测试覆盖
 
@@ -264,7 +267,6 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
-
 
 
 

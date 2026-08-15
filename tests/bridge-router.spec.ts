@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { createBridgeRouter, type BridgeRouter } from '../src/bridge/router.js'
+import { extractParams, matchPattern } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import type { BridgeApi } from '../src/bridge/rpc.js'
 import {
@@ -214,6 +215,53 @@ describe('bridge router: startup GET routes', () => {
     expect(v2.body).toMatchObject({
       location: { directory: '/work' },
       data: [{ id: 'build', mode: 'primary', hidden: false, model: { id: 'mock-model', providerID: 'deepseek' } }],
+    })
+  })
+})
+
+describe('bridge router: wildcard pattern and workspace fs routes', () => {
+  it('matches a trailing * segment and captures the remaining path', () => {
+    expect(matchPattern('/api/fs/read/*', '/api/fs/read/a/b.txt')).toBe(true)
+    expect(matchPattern('/api/fs/read/*', '/api/fs/read')).toBe(false)
+    expect(matchPattern('/api/fs/read/*', '/api/fs/list')).toBe(false)
+    expect(extractParams('/api/fs/read/*', '/api/fs/read/a/b.txt')).toEqual({
+      '*': 'a/b.txt',
+    })
+  })
+
+  it('reads workspace files raw and guards escapes', async () => {
+    const work = mkdtempSync(join(tmpdir(), 'dsh-oc-router-fs-'))
+    tempDirs.push(work)
+    writeFileSync(join(work, 'readme.txt'), 'hello fs\n')
+    const { server } = await boot(fakeApi(), work)
+    const read = await request(server, 'GET', '/api/fs/read/readme.txt')
+    expect(read.status).toBe(200)
+    expect(read.contentType).toContain('application/octet-stream')
+    expect(read.body).toBe('hello fs\n')
+    expect((await request(server, 'GET', '/api/fs/read/missing.txt')).status).toBe(404)
+    expect((await request(server, 'GET', '/api/fs/read/..%2Fescape.txt')).status).toBe(400)
+  })
+
+  it('lists and finds workspace entries', async () => {
+    const work = mkdtempSync(join(tmpdir(), 'dsh-oc-router-fs-'))
+    tempDirs.push(work)
+    mkdirSync(join(work, 'src'), { recursive: true })
+    writeFileSync(join(work, 'readme.txt'), 'hello fs\n')
+    writeFileSync(join(work, 'src', 'main.ts'), 'export {}\n')
+    const { server } = await boot(fakeApi(), work)
+    const listed = await request(server, 'GET', '/api/fs/list')
+    expect(listed.status).toBe(200)
+    expect(listed.body).toMatchObject({
+      location: { directory: work },
+      data: [
+        { path: 'src', type: 'directory' },
+        { path: 'readme.txt', type: 'file' },
+      ],
+    })
+    const found = await request(server, 'GET', '/api/fs/find?query=.txt&type=file')
+    expect(found.status).toBe(200)
+    expect(found.body).toMatchObject({
+      data: [{ path: 'readme.txt', type: 'file' }],
     })
   })
 })

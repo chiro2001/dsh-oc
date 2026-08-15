@@ -122,7 +122,7 @@ async function handleRequest(
   }
 
   const result = await route.handler(request, router.ctx)
-  sendJson(res, result.status, result.body, result.headers)
+  sendResult(res, result.status, result.body, result.raw, result.headers)
 }
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
@@ -145,12 +145,24 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-function sendJson(
+function sendResult(
   res: ServerResponse,
   status: number,
   body?: unknown,
+  raw?: string | Buffer,
   headers?: Record<string, string>,
 ): void {
+  if (raw !== undefined) {
+    const data = typeof raw === 'string' ? raw : raw.toString('utf8')
+    res.writeHead(status, {
+      ...CORS_HEADERS,
+      ...headers,
+      'Content-Type': headers?.['Content-Type'] ?? 'text/plain; charset=utf-8',
+      'Content-Length': Buffer.byteLength(data),
+    })
+    res.end(data)
+    return
+  }
   if (status === 204 || status === 304 || body === undefined) {
     res.writeHead(status, { ...CORS_HEADERS, ...headers, 'Content-Length': '0' })
     res.end()
@@ -167,5 +179,5 @@ function sendJson(
 }
 
 function sendError(res: ServerResponse, error: HttpError): void {
-  sendJson(res, error.status, error.body as OpenCodeErrorBody)
+  sendResult(res, error.status, error.body as OpenCodeErrorBody)
 }
