@@ -275,6 +275,20 @@ function toolCallId(resultEvent: SessionEvent<'tool/result'>): string {
   return String(block?.toolCallId ?? resultEvent.data.message.source.callId)
 }
 
+/** Best-effort structured progress label for a started tool call. */
+function toolProgressStructured(call: ToolCallInfo): Record<string, unknown> {
+  const present = call.view?.for === 'call'
+    ? (call.view.view as unknown as { title?: unknown; card?: unknown })
+    : undefined
+  const title = typeof present?.title === 'string'
+    ? present.title
+    : opencodeToolName(call.name, safeJsonParse(call.arguments))
+  return {
+    title,
+    ...(typeof present?.card === 'string' ? { card: present.card } : {}),
+  }
+}
+
 function earliestBlockStart(
   blockStarts: Map<string, number>,
   turn: number,
@@ -546,6 +560,14 @@ export class MuxEventTranslator {
         input,
         provider: { executed: false },
       }, project),
+      makeEvent(directory, 'session.next.tool.progress', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: state.messageID,
+        callID: state.callId,
+        structured: { title: opencodeToolName(state.name, safeJsonParse(state.text)) },
+        content: [],
+      }, project),
     )
     return events
   }
@@ -583,6 +605,14 @@ export class MuxEventTranslator {
         tool: opencodeToolName(call.name, input),
         input,
         provider: { executed: false },
+      }, project),
+      makeEvent(directory, 'session.next.tool.progress', {
+        timestamp: time,
+        sessionID: sessionId,
+        assistantMessageID: messageID,
+        callID: call.callId,
+        structured: toolProgressStructured(call),
+        content: [],
       }, project),
     ]
   }

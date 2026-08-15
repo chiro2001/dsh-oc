@@ -411,13 +411,14 @@ for pattern in \
   '"type":"session.next.tool.input.started"' \
   '"type":"session.next.tool.input.delta"' \
   '"type":"session.next.tool.called"' \
+  '"type":"session.next.tool.progress"' \
   '"type":"session.next.tool.success"'; do
   if ! grep -q "$pattern" "$APPROVAL_SSE_DATA"; then
     echo "e2e: missing streamed tool event $pattern" >&2
     exit 1
   fi
 done
-echo "  session.next.tool.input.started/delta/called/success seen"
+echo "  session.next.tool.input.started/delta/called/progress/success seen"
 
 kill "$APPROVAL_SSE_PID" 2>/dev/null || true
 wait "$APPROVAL_SSE_PID" 2>/dev/null || true

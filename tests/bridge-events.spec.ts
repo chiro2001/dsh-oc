@@ -689,6 +689,7 @@ describe('bridge events: session event mapping', () => {
     const types = done.map((event) => event.payload.type)
     expect(types).toContain('session.next.tool.input.ended')
     expect(types).toContain('session.next.tool.called')
+    expect(types).toContain('session.next.tool.progress')
     expect(types).toContain('message.part.updated')
     expect(types).toContain('session.next.tool.success')
     expect(done.find((event) => event.payload.type === 'session.next.tool.called')?.payload.properties)
@@ -798,8 +799,15 @@ describe('bridge events: session event mapping', () => {
       'session.next.tool.input.started',
       'session.next.tool.input.ended',
       'session.next.tool.called',
+      'session.next.tool.progress',
       'message.part.updated',
     ])
+    expect(events.find((event) => event.payload.type === 'session.next.tool.progress')?.payload.properties)
+      .toMatchObject({
+        callID: 'c3',
+        structured: { title: 'read' },
+        content: [],
+      })
   })
 
   it('emits snapshot/patch parts and session.diff after a file-changing tool', () => {
