@@ -49,6 +49,27 @@ dsh --profile oc
 > 如需固定版本或分支，可使用 pnpm 支持的完整 git spec，例如
 > `dsh plugin --profile oc add 'github:chiro2001/dsh-oc#main'`。
 
+## 更新
+
+从 GitHub 源安装时，更新到最新 `main`：
+
+```bash
+cd "$DSH_HOME/profiles/oc"        # 默认 $DSH_HOME=~/.dsh
+pnpm update @deepseek-ai/dsh-oc
+dsh --profile oc --help            # 验证新版本已生效
+```
+
+本地开发时（仓库已 clone 到本地），重新构建并指向本地路径即可：
+
+```bash
+cd dsh-oc
+pnpm build
+dsh plugin --profile oc add .
+```
+
+> 本地安装会以 `link:` 方式链接仓库，`pnpm build` 后新逻辑立即生效；
+> 但 `lib/` 仍需随提交一起推送，GitHub 直装才会包含最新构建产物。
+
 首次启动会解析并缓存 opencode 官方二进制（版本锁定 `1.18.18`）。分发优先级：
 
 1. `DSH_OC_OPENCODE_BIN`（绝对路径）
