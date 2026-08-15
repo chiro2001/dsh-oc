@@ -214,14 +214,14 @@ echo "  v2 fork: $FORKED_V2 (parent $SESSION_V1)"
 echo "== compact =="
 COMPACT_CODE="$(curl -s -o "$E2E_RUN/compact-summarize.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V1/summarize" \
   -H 'Content-Type: application/json' -d '{"providerID":"deepseek","modelID":"mock-model"}')"
-[[ "$COMPACT_CODE" =~ ^(200|204)$ ]]
 if jq -e '. == true' "$E2E_RUN/compact-summarize.json" >/dev/null; then
   COMPACT_OK=yes
-elif jq -e '.name == "BadRequest" and .data.code == "command-error"' "$E2E_RUN/compact-summarize.json" >/dev/null; then
+elif [[ "$COMPACT_CODE" =~ ^(400|409)$ ]] && jq -e '.name == "BadRequest" and .data.code == "command-error"' "$E2E_RUN/compact-summarize.json" >/dev/null; then
   # The mock LLM cannot produce a useful compaction summary; the route and dsh
   # command still executed correctly. Real-model compaction is covered manually.
   COMPACT_OK=mock-summary-unavailable
 else
+  [[ "$COMPACT_CODE" =~ ^(200|204)$ ]]
   COMPACT_OK=""
 fi
 echo "  POST /session/$SESSION_V1/summarize -> $COMPACT_CODE ($COMPACT_OK)"
