@@ -1000,8 +1000,11 @@ async function permissionReply(
   } else if (reply === 'reject') {
     outcome = 'rejected'
   } else if (reply === 'always') {
-    // dsh has no persistent grant; degrade to a one-shot allow.
-    ctx.log('[bridge] permission "always" downgraded to "allowed-once" (dsh limitation)')
+    // dsh has no persistent grant; keep a memory-scoped grant on the bridge so
+    // later requests for the same session + tool auto-allow. The current
+    // request still resolves as one-shot because dsh only knows allowed-once.
+    ctx.state.savePermission(entry.sessionId, entry.toolName)
+    ctx.log(`[bridge] permission "always" saved for ${entry.sessionId} ${entry.toolName} (memory scope)`)
     outcome = 'allowed-once'
   } else {
     throw badRequest('invalid permission reply', { reply })
@@ -1213,7 +1216,13 @@ export function createBridgeRouter(
     return json(200, { location: locationInfo(ctx), data: convertToV2Providers(groups) })
   })
 
-  register('GET', '/api/permission/saved', 'json', async () => json(200, { data: [] }))
+  register('GET', '/api/permission/saved', 'json', async (_req, ctx) => json(200, {
+    data: ctx.state.savedPermissionsList().map((saved) => ({
+      id: saved.toolName,
+      sessionID: saved.sessionId,
+      grantedAt: saved.grantedAt,
+    })),
+  }))
 
   // ---- v1 sessions ----
   register('GET', '/session', 'json', async (_req, ctx) => {
@@ -1590,6 +1599,24 @@ export function createBridgeRouter(
         })
         void hostLoop
         for await (const frame of stream) {
+          if (frame.payload.type === 'approval/requested') {
+            const sessionId = String(frame.payload.sessionId)
+            const toolName = frame.payload.toolName
+            if (ctx.state.savedPermissionFor(sessionId, toolName) !== undefined) {
+              try {
+                await respondApproval(
+                  api,
+                  String(frame.rpcId),
+                  sessionId,
+                  String(frame.payload.approvalId),
+                  'allowed-once',
+                )
+              } catch (error) {
+                log(`[bridge/sse] auto-approval failed: ${error instanceof Error ? error.message : String(error)}`)
+              }
+              continue
+            }
+          }
           if (frame.payload.type === 'session/event') {
             const sessionEvent = frame.payload.event as unknown as { type: string }
             if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {

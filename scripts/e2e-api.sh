@@ -347,7 +347,7 @@ e2e_stop_run
 echo "== approval/permission run =="
 # dsh's DSH_PERMISSION_MODE accepts sandbox modes only; workspace-write maps
 # to sandbox=workspace-write + approval=ask, which is what this test needs.
-e2e_new_run "api-approval" "workspace-write" "tool_call_success,success,success,success" "0"
+e2e_new_run "api-approval" "workspace-write" "tool_call_success,tool_call_success,success,success" "0"
 E2E_SESSION="dsh-oc-api-approval"
 E2E_ACTIVE_SESSION="$E2E_SESSION"
 e2e_start_dsh "$E2E_SESSION"
@@ -391,7 +391,7 @@ fi
 echo "$PERMISSION_JSON" | jq -e '.[0].sessionID == "'"$APPR_SESSION"'"' >/dev/null
 
 REPLY_CODE="$(curl -s -o "$E2E_RUN/permission-reply.json" -w '%{http_code}' -X POST "$BRIDGE/permission/$PERMISSION_ID/reply" \
-  -H 'Content-Type: application/json' -d '{"reply":"once"}')"
+  -H 'Content-Type: application/json' -d '{"reply":"always"}')"
 [[ "$REPLY_CODE" =~ ^(200|204)$ ]]
 echo "  POST /permission/$PERMISSION_ID/reply -> $REPLY_CODE"
 
@@ -419,6 +419,28 @@ for pattern in \
   fi
 done
 echo "  session.next.tool.input.started/delta/called/progress/success seen"
+
+SAVED_CHECK="$(curl -s "$BRIDGE/api/permission/saved")"
+jq -e --arg s "$APPR_SESSION" '.data | any(.sessionID == $s and .id == "bash")' <<<"$SAVED_CHECK" >/dev/null
+echo "  saved permission listed for bash"
+
+SECOND_PROMPT="$(curl -s -X POST "$BRIDGE/session/$APPR_SESSION/message" -H 'Content-Type: application/json' \
+  -d '{"parts":[{"type":"text","text":"e2e: second bash tool call"}]}')"
+jq -e '.info.role == "assistant"' <<<"$SECOND_PROMPT" >/dev/null
+deadline=$((SECONDS + 30))
+while (( SECONDS < deadline )); do
+  REPLY_TEXT="$(curl -s "$BRIDGE/session/$APPR_SESSION/message" | jq -r '[.. | objects | select(has("text")) | .text] | join(" ")' 2>/dev/null || true)"
+  if [[ "$(grep -o 'mock response recovered' <<<"$REPLY_TEXT" | wc -l)" -ge 2 ]]; then break; fi
+  sleep 1
+done
+if [[ "$(grep -o 'mock response recovered' <<<"$REPLY_TEXT" | wc -l)" -lt 2 ]]; then
+  echo "e2e: second tool-call assistant reply not seen" >&2
+  exit 1
+fi
+sleep 2
+PERMISSION_COUNT="$(curl -s "$BRIDGE/permission" | jq 'length')"
+[[ "$PERMISSION_COUNT" == "0" ]]
+echo "  second tool call auto-approved without a new permission"
 
 kill "$APPROVAL_SSE_PID" 2>/dev/null || true
 wait "$APPROVAL_SSE_PID" 2>/dev/null || true

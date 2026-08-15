@@ -1370,4 +1370,86 @@ describe('bridge events: SSE connection lifecycle', () => {
     expect(text).toContain('agent crashed')
     controller.abort()
   })
+
+  it('auto-approves matching requests after an always grant', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const responses: Array<{ rpcId: string; outcome?: string }> = []
+    const base = fakeApi()
+    const api = {
+      ...base,
+      events: {
+        ...base.events,
+        mux: async function* (_request: never, signal: AbortSignal) {
+          yield {
+            rpcId: 'rpc-1' as never,
+            payload: {
+              type: 'approval/requested',
+              sessionId: 's1',
+              approvalId: 'a1',
+              toolName: 'bash',
+              callId: 'c1',
+            },
+          }
+          await gate
+          yield {
+            rpcId: 'rpc-2' as never,
+            payload: {
+              type: 'approval/requested',
+              sessionId: 's1',
+              approvalId: 'a2',
+              toolName: 'bash',
+              callId: 'c2',
+            },
+          }
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve())
+          })
+        },
+      },
+      respond: async (request: { rpcId?: unknown; result?: { value?: { outcome?: string } } }) => {
+        responses.push({
+          rpcId: String(request.rpcId),
+          outcome: request.result?.value?.outcome,
+        })
+        return { accepted: true }
+      },
+    }
+    const router = createBridgeRouter(api as never, { cwd: '/work' })
+    const server = await startBridgeServer(router)
+    servers.push(server)
+
+    const controller = new AbortController()
+    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    while (reader && !text.includes('permission.asked')) {
+      const { done, value } = await reader.read()
+      text += decoder.decode(value ?? new Uint8Array())
+      if (done) break
+    }
+    const id = /"type":"permission\.asked".*?"id":"([^"]+)"/s.exec(text)?.[1] ?? ''
+    expect(id).toBeTruthy()
+
+    const reply = await fetch(server.url + `/permission/${id}/reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply: 'always' }),
+    })
+    expect(reply.status).toBe(200)
+
+    const saved = await (await fetch(server.url + '/api/permission/saved')).json() as {
+      data: Array<{ id: string; sessionID: string }>
+    }
+    expect(saved.data).toEqual([{ id: 'bash', sessionID: 's1', grantedAt: expect.any(Number) }])
+
+    release()
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(responses).toHaveLength(2)
+    expect(responses[1]?.outcome).toBe('allowed-once')
+    controller.abort()
+  })
 })

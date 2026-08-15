@@ -2,6 +2,13 @@ import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
 import type { PermissionEntry } from './convert/permission.js'
 import type { QuestionEntry } from './convert/question.js'
 
+/** A memory-scoped "always" grant for one session + tool. */
+export interface SavedPermission {
+  sessionId: string
+  toolName: string
+  grantedAt: number
+}
+
 /**
  * In-memory correlation maps between opencode-facing request ids and the dsh
  * rpcIds/approval ids that answer them. Populated from the mux stream; the
@@ -14,6 +21,25 @@ export class InteractionState {
   readonly byQuestionRpcId = new Map<string, string>()
   readonly sessionDirectories = new Map<string, string>()
   readonly sessionParents = new Map<string, string>()
+  readonly savedPermissions = new Map<string, SavedPermission>()
+
+  private static savedKey(sessionId: string, toolName: string): string {
+    return `${sessionId}\u0000${toolName}`
+  }
+
+  savePermission(sessionId: string, toolName: string): SavedPermission {
+    const saved: SavedPermission = { sessionId, toolName, grantedAt: Date.now() }
+    this.savedPermissions.set(InteractionState.savedKey(sessionId, toolName), saved)
+    return saved
+  }
+
+  savedPermissionFor(sessionId: string, toolName: string): SavedPermission | undefined {
+    return this.savedPermissions.get(InteractionState.savedKey(sessionId, toolName))
+  }
+
+  savedPermissionsList(): SavedPermission[] {
+    return [...this.savedPermissions.values()]
+  }
 
   registerApproval(entry: PermissionEntry): PermissionEntry {
     this.permissions.set(entry.opencodeId, entry)

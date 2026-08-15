@@ -20,7 +20,7 @@ export function ocHelp(version: string = DSH_OC_VERSION): string {
   ✅ 权限/提问流、子代理会话树
   ✅ 自动更新关闭、二进制版本锁定 ${OPENCODE_VERSION}
   ✅ DSH OC 品牌启动 logo
-  🟡 文件附件支持文本/图片；"Allow always" 降级为 once
+  🟡 文件附件支持文本/图片；"Allow always" 为会话内内存记忆
   ❌ MCP/LSP/formatter/skills/integration 等外围路由为 stub
 
 完整能力矩阵: docs/FEATURES.md（仓库内）

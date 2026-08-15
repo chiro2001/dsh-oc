@@ -187,7 +187,8 @@ opencode 子进程启动时被强制关闭后台外网行为（以 1.18.18 源�
 
 ## 已知限制
 
-- **`always` 权限降级**：TUI 的 `Allow always` 映射为 dsh 的 `allowed-once`，并在日志中提示。
+- **`always` 权限记忆**：TUI 的 `Allow always` 在 bridge 内存中保存（同会话同工具自动放行），
+  当前请求仍以 dsh 的 `allowed-once` 提交；进程重启后记忆清空。
 - **文件附件**：支持 `file` part 的文本文件（data URL 或 cwd 内本地路径）与
   图片（data URL）；PDF 等二进制附件暂不支持，会返回明确 400。
 - **未实现路由**：返回 schema-valid 空数据或显式 501，不伪造 diff。

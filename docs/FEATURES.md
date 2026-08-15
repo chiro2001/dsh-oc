@@ -53,8 +53,8 @@
 | 功能 | 状态 | 路由/实现 | 验证方式 | 最后更新 |
 |---|---|---|---|---|
 | Permission ask / once / reject | ✅ | `GET /permission`、`POST /permission/:id/reply`、v2 对偶路由 | `tests/convert/permission.spec.ts`、`e2e-api.sh` | `f30b156` |
-| “Always” 降级为 once | 🟡 | `src/bridge/router.ts` `permissionReply` | `tests/bridge-router.spec.ts`（degrade always） | `f30b156` |
-| Saved permissions | ❌ | `GET /api/permission/saved` 返回 `[]` | `tests/bridge-router.spec.ts` | `f30b156` |
+| “Always” 会话内记忆（同会话同工具自动放行） | ✅ | `src/bridge/state.ts` `savedPermissions` + SSE 自动 approve | `tests/bridge-events.spec.ts`、`e2e-api.sh` | 本提交 |
+| Saved permissions | ✅ | `GET /api/permission/saved` 返回内存中的 always 授权 | `tests/bridge-events.spec.ts`、`e2e-api.sh` | 本提交 |
 
 ## 5. 子代理
 
@@ -119,7 +119,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`8820b66`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`5891c05`（2026-08-15）。
 
 ### 路由注册表
 
@@ -200,7 +200,7 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 28 | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
+| `tests/bridge-events.spec.ts` | 29 | 4e91439 feat(bridge): emit session.next.tool.progress when a tool call starts |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/bridge-router.spec.ts` | 46 | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
@@ -234,7 +234,7 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
+| `src/bridge/events.ts` | 4e91439 feat(bridge): emit session.next.tool.progress when a tool call starts |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
@@ -252,7 +252,7 @@
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `scripts/e2e-api-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `scripts/e2e-api.sh` | 402a641 feat(bridge): add /help slash command with shared capability summary |
+| `scripts/e2e-api.sh` | 4e91439 feat(bridge): emit session.next.tool.progress when a tool call starts |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
