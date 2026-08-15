@@ -155,6 +155,7 @@ bash scripts/e2e-tui-help.sh        # dsh --profile oc --help 输出能力摘要
 bash scripts/e2e-tui-brand.sh       # TUI 首页显示 DSH OC 品牌 logo（替换 OpenCode 字符画）
 bash scripts/e2e-tui-dir.sh         # attach --dir 切到指定工作目录
 bash scripts/e2e-tui-fork.sh        # attach --fork --session 生成 fork #1
+bash scripts/e2e-tui-mini.sh        # attach --mini 最小界面启动渲染
 pnpm run probe                     # 协议路由清单 + 二进制/SDK 版本校验
 ```
 
