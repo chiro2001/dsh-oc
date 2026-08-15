@@ -1701,6 +1701,7 @@ export function createBridgeRouter(
     const controller = client.controller
     void (async () => {
       let translator: MuxEventTranslator | undefined
+      let listRefreshTimer: NodeJS.Timeout | undefined
       try {
         const defaultModel = await defaultModelRef(ctx)
         translator = new MuxEventTranslator({
@@ -1712,6 +1713,20 @@ export function createBridgeRouter(
             for (const event of events) hub.send(client, event)
           },
         })
+        const scheduleListRefresh = (): void => {
+          if (listRefreshTimer !== undefined) return
+          listRefreshTimer = setTimeout(() => {
+            listRefreshTimer = undefined
+            void (async () => {
+              try {
+                const list = await rpc(ctx, 'session.list', {})
+                recordSessionSummaries(ctx, list.items)
+              } catch (error) {
+                log(`[bridge/sse] session list refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+              }
+            })()
+          }, 250)
+        }
         const stream = api.events.mux(
           { rpcId: randomUUID() as never, payload: {} },
           controller.signal,
@@ -1727,6 +1742,9 @@ export function createBridgeRouter(
               const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
               const message = typeof payload.message === 'string' ? payload.message : 'agent error'
               if (sessionId) hub.send(client, agentErrorEvent(sessionId, message, cwd))
+            }
+            if (payload.type === 'host/session-added' || payload.type === 'host/session-removed') {
+              scheduleListRefresh()
             }
           }
         })().catch((error) => {
@@ -1757,12 +1775,7 @@ export function createBridgeRouter(
           if (frame.payload.type === 'session/event') {
             const sessionEvent = frame.payload.event as unknown as { type: string }
             if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {
-              try {
-                const list = await rpc(ctx, 'session.list', {})
-                recordSessionSummaries(ctx, list.items)
-              } catch (error) {
-                log(`[bridge/sse] session list refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-              }
+              scheduleListRefresh()
             }
           }
           for (const event of translator.translate(frame)) {
@@ -1774,6 +1787,10 @@ export function createBridgeRouter(
         log(`[bridge/sse] mux stream ended: ${error instanceof Error ? error.message : String(error)}`)
       } finally {
         translator?.dispose()
+        if (listRefreshTimer !== undefined) {
+          clearTimeout(listRefreshTimer)
+          listRefreshTimer = undefined
+        }
         hub.remove(client)
       }
     })()

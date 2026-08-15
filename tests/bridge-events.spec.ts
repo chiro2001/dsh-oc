@@ -1452,4 +1452,64 @@ describe('bridge events: SSE connection lifecycle', () => {
     expect(responses[1]?.outcome).toBe('allowed-once')
     controller.abort()
   })
+
+  it('does not block the mux loop on session list refresh', async () => {
+    let releaseList!: () => void
+    const listGate = new Promise<void>((resolve) => {
+      releaseList = resolve
+    })
+    const base = fakeApi()
+    const api = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => {
+          await listGate
+          return okRpc({ items: [] })
+        },
+      },
+      events: {
+        ...base.events,
+        mux: async function* (_request: never, signal: AbortSignal) {
+          yield {
+            rpcId: 'rpc-title' as never,
+            payload: {
+              type: 'session/event',
+              sessionId: 's1',
+              event: sessionEvent('session/title', { title: 't' }, 1, 100),
+            },
+          }
+          yield {
+            rpcId: 'rpc-turn' as never,
+            payload: {
+              type: 'session/event',
+              sessionId: 's1',
+              event: sessionEvent('turn/start', { turn: 1 }, 2, 200),
+            },
+          }
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve())
+          })
+        },
+      },
+    }
+    const router = createBridgeRouter(api as never, { cwd: '/work' })
+    const server = await startBridgeServer(router)
+    servers.push(server)
+
+    const controller = new AbortController()
+    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline && !text.includes('session.status')) {
+      const { done, value } = await reader?.read() ?? { done: true, value: undefined }
+      text += decoder.decode(value ?? new Uint8Array())
+      if (done) break
+    }
+    expect(text).toContain('session.status')
+    releaseList()
+    controller.abort()
+  })
 })
