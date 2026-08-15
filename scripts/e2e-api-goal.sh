@@ -83,6 +83,56 @@ GOAL_CREATE_OUT="$(curl -s -X POST "$BRIDGE/session/$SESSION2/command" -H 'Conte
 jq -e '.parts[0].text | contains("Goal created") and contains("ship a second goal")' <<<"$GOAL_CREATE_OUT" >/dev/null
 echo "  POST /session/$SESSION2/command /goal <objective> creates a goal"
 
+GOAL_COMPLETE_OUT="$(curl -s -X POST "$BRIDGE/session/$SESSION2/command" -H 'Content-Type: application/json' \
+  -d '{"command":"goal","arguments":"complete"}')"
+if ! jq -e '.parts[0].text | test("completed|complete"; "i")' <<<"$GOAL_COMPLETE_OUT" >/dev/null; then
+  echo "e2e: /goal complete unexpected output: $GOAL_COMPLETE_OUT" >&2
+  exit 1
+fi
+echo "  /goal complete -> visible completion"
+TODO_AFTER_COMPLETE="$(curl -s "$BRIDGE/session/$SESSION2/todo")"
+jq -e --arg goal 'Goal: ship a second goal' 'any(.[]; .content == $goal and .status == "completed")' <<<"$TODO_AFTER_COMPLETE" >/dev/null
+echo "  completed goal reflected in todo"
+
+SESSION3="$(curl -s -X POST "$BRIDGE/session" -H 'Content-Type: application/json' -d '{}' | jq -er .id)"
+curl -s -X POST "$BRIDGE/session/$SESSION3/command" -H 'Content-Type: application/json' \
+  -d '{"command":"goal","arguments":"ship a paused goal"}' >/dev/null
+GOAL_PAUSE_OUT="$(curl -s -X POST "$BRIDGE/session/$SESSION3/command" -H 'Content-Type: application/json' \
+  -d '{"command":"goal","arguments":"pause"}')"
+if ! jq -e '.parts[0].text | test("paused"; "i")' <<<"$GOAL_PAUSE_OUT" >/dev/null; then
+  echo "e2e: /goal pause unexpected output: $GOAL_PAUSE_OUT" >&2
+  exit 1
+fi
+echo "  /goal pause -> visible pause"
+TODO_PAUSED="$(curl -s "$BRIDGE/session/$SESSION3/todo")"
+jq -e --arg goal 'Goal: ship a paused goal' 'any(.[]; .content == $goal and .status == "pending")' <<<"$TODO_PAUSED" >/dev/null
+echo "  paused goal reflected as pending todo"
+
+GOAL_RESUME_OUT="$(curl -s -X POST "$BRIDGE/session/$SESSION3/command" -H 'Content-Type: application/json' \
+  -d '{"command":"goal","arguments":"resume"}')"
+if ! jq -e '.parts[0].text | test("resumed|resume"; "i")' <<<"$GOAL_RESUME_OUT" >/dev/null; then
+  echo "e2e: /goal resume unexpected output: $GOAL_RESUME_OUT" >&2
+  exit 1
+fi
+echo "  /goal resume -> visible resume"
+TODO_RESUMED="$(curl -s "$BRIDGE/session/$SESSION3/todo")"
+jq -e --arg goal 'Goal: ship a paused goal' 'any(.[]; .content == $goal and .status == "in_progress")' <<<"$TODO_RESUMED" >/dev/null
+echo "  resumed goal reflected as in_progress todo"
+
+GOAL_CLEAR_OUT="$(curl -s -X POST "$BRIDGE/session/$SESSION3/command" -H 'Content-Type: application/json' \
+  -d '{"command":"goal","arguments":"clear"}')"
+if ! jq -e '.parts[0].text | test("clear|cleared"; "i")' <<<"$GOAL_CLEAR_OUT" >/dev/null; then
+  echo "e2e: /goal clear unexpected output: $GOAL_CLEAR_OUT" >&2
+  exit 1
+fi
+echo "  /goal clear -> visible clear"
+TODO_CLEARED="$(curl -s "$BRIDGE/session/$SESSION3/todo")"
+if jq -e --arg goal 'Goal: ship a paused goal' 'any(.[]; .content == $goal)' <<<"$TODO_CLEARED" >/dev/null; then
+  echo "e2e: cleared goal still present in todo" >&2
+  exit 1
+fi
+echo "  cleared goal removed from todo"
+
 kill "$SSE_PID" 2>/dev/null || true
 wait "$SSE_PID" 2>/dev/null || true
 SSE_PID=""

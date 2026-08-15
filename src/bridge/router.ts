@@ -691,8 +691,50 @@ async function runGoalCommand(
   argument: string,
 ): Promise<RegistryCommandOutcome> {
   const trimmed = argument.trim()
+  if (trimmed === 'complete') {
+    return completeGoalCommand(ctx, sessionId)
+  }
   const commandLine = trimmed === '' ? '/goal' : `/goal ${trimmed}`
-  return runRegistryCommand(ctx, sessionId, commandLine, '/goal')
+  const outcome = await runRegistryCommand(ctx, sessionId, commandLine, '/goal')
+  if (outcome.kind === 'success' && outcome.text.includes('Commands:')) {
+    return { kind: 'success', text: `${outcome.text}, /goal complete` }
+  }
+  return outcome
+}
+
+/**
+ * dsh's `/goal` command registry has no `complete` verb (completion is
+ * normally automatic), so the bridge implements it directly through the
+ * `goal.complete` RPC with the current projection ref.
+ */
+async function completeGoalCommand(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+): Promise<RegistryCommandOutcome> {
+  broadcastCommandResult(ctx, sessionId, 'Running /goal complete…', 'busy')
+  try {
+    const history = await rpc(ctx, 'session.history', { sessionId: sid(sessionId) })
+    const current = goalFromHistory(history) as { goal?: { id: string; revision: number } } | null | undefined
+    const ref = current?.goal
+    if (current === undefined || ref === undefined) {
+      const text = current === null
+        ? 'No goal to complete.'
+        : 'Goal state unavailable; run /goal to view the current goal.'
+      broadcastCommandResult(ctx, sessionId, text, 'idle')
+      return { kind: 'error', text }
+    }
+    await rpc(ctx, 'goal.complete', {
+      sessionId: sid(sessionId),
+      ref: { id: ref.id as never, revision: ref.revision },
+    })
+    const text = 'Goal completed'
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    return { kind: 'success', text }
+  } catch (error) {
+    const text = `/goal complete failed: ${error instanceof Error ? error.message : String(error)}`
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    return { kind: 'error', text }
+  }
 }
 
 /** Run `/help`: broadcast the shared capability summary without a model turn. */

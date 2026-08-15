@@ -31,6 +31,7 @@ export interface BridgeApi {
   host: Pick<ApiProxy['host'], 'describe'>
   llm: Pick<ApiProxy['llm'], 'models'>
   agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>
+  goals: Pick<ApiProxy['goals'], 'create' | 'edit' | 'pause' | 'resume' | 'complete' | 'clear'>
   events: Pick<ApiProxy['events'], 'mux' | 'host'>
   respond: ApiProxy['respond']
   /**
@@ -76,6 +77,7 @@ export class RpcCallError extends Error {
 const DOMAIN_ALIASES: Record<string, string> = {
   session: 'sessions',
   agentPreset: 'agentPresets',
+  goal: 'goals',
 }
 
 function resolveMethod(

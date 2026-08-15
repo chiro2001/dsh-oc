@@ -1575,6 +1575,40 @@ describe('bridge router: /goal command and goal todo merge', () => {
     expect(lines).toEqual(['/goal', '/goal ship goal support'])
   })
 
+  it('completes the current goal through the goals API', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [],
+          hasMore: false,
+          projections: { asOfSeq: 1, values: { goal: activeGoal } },
+        } as never),
+      },
+      goals: {
+        ...base.goals,
+        complete: async (request) => {
+          calls.push({ method: 'goal.complete', payload: request.payload })
+          return okRpc({ ref: { id: 'g1' as never, revision: 2 } })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/command', {
+      command: 'goal',
+      arguments: 'complete',
+    })
+    expect(result.status).toBe(200)
+    expect((result.body as { parts: Array<{ text: string }> }).parts[0]?.text).toBe('Goal completed')
+    expect(calls[0]).toMatchObject({
+      method: 'goal.complete',
+      payload: { sessionId: 's1', ref: { id: 'g1', revision: 1 } },
+    })
+  })
+
   it('captures /goal from prompt routes without triggering a model turn', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []

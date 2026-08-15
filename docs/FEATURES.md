@@ -69,6 +69,8 @@
 | 功能 | 状态 | 路由/实现 | 验证方式 | 最后更新 |
 |---|---|---|---|---|
 | 命令列表 | ✅ | `GET /command`、`GET /api/command` 注册 `/preset` `/goal` `/help` | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
+| `/goal` 创建/查看/切换 | ✅ | `src/bridge/router.ts` `runGoalCommand` + dsh command registry | `tests/bridge-router.spec.ts`、`scripts/e2e-api-goal.sh` | 本提交 |
+| `/goal` 生命周期（complete/pause/resume/clear） | ✅ | `complete` 走 `goal.complete` RPC，其余走 registry | `tests/bridge-router.spec.ts`、`scripts/e2e-api-goal.sh` | 本提交 |
 | TUI `/help` 能力摘要 | ✅ | `src/help.ts` `ocHelp` + `runHelpCommand`（不触发模型轮次） | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | `/compact` / summarize | ✅ | `POST /session/:id/summarize`、`POST /session/:id/compact`、`POST /api/session/:id/compact` | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
 | Skills / references / integrations | ❌ | `GET /skill`、`GET /api/skill`、`GET /reference`、`GET /integration` 等返回 `[]` | `e2e-api.sh` | `f30b156` |
@@ -120,7 +122,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`e256572`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`90c2260`（2026-08-15）。
 
 ### 路由注册表
 
@@ -203,7 +205,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 29 | e256572 feat(bridge): session-scoped always permission memory |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 46 | 18741fd feat(tui): make --dir switch the bridge working directory |
+| `tests/bridge-router.spec.ts` | 47 | 18741fd feat(tui): make --dir switch the bridge working directory |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -261,7 +263,7 @@
 | `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
 | `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
-| `scripts/e2e-tui-mini.sh` | — |
+| `scripts/e2e-tui-mini.sh` | 90c2260 test(e2e): cover attach --mini boot rendering |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
 | `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |

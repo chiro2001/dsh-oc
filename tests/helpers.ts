@@ -60,6 +60,14 @@ export function fakeApi(overrides: Partial<BridgeApi> = {}): BridgeApi {
       list: async () => okRpc({ presets: [], authorable: false, hasDocument: false }),
       select: async () => okRpc({ agentPreset: 'minimal' }),
     },
+    goals: {
+      create: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 1 } }),
+      edit: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 2 } }),
+      pause: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 2 } }),
+      resume: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 3 } }),
+      complete: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 4 } }),
+      clear: async () => okRpc({ cleared: true }),
+    },
     llm: {
       models: async () => okRpc({ groups: [], failures: [] }),
     },
