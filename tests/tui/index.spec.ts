@@ -1,15 +1,33 @@
-import { describe, expect, it, vi } from 'vitest'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildChildEnv,
+  DSH_OC_TUI_TIMESTAMPS,
   filterSupportedArgs,
   installSignalForwarding,
   OcTuiConfig,
+  prepareOpenCodeTuiState,
   requestExit,
   startOpenCodeTui,
+  tuiTimestampsEnabled,
   type RunningTui,
   type TimerHandle,
   type TuiChild,
 } from '../../src/tui/index.ts'
+
+const tmpDirs: string[] = []
+
+afterEach(() => {
+  for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+function tmpDir(label: string): string {
+  const dir = mkdtempSync(join(tmpdir(), `dsh-oc-tui-${label}-`))
+  tmpDirs.push(dir)
+  return dir
+}
 
 describe('oc-tui config schema', () => {
   it('defaults to an empty config when the patch row carries no config', () => {
@@ -127,6 +145,60 @@ describe('buildChildEnv', () => {
   it('never passes OPENCODE_CONFIG_CONTENT even when the parent set it', () => {
     const env = buildChildEnv({ OPENCODE_CONFIG_CONTENT: '{"provider":"deepseek"}' }, '/home/dsh')
     expect(env.OPENCODE_CONFIG_CONTENT).toBeUndefined()
+  })
+
+  it('points OPENCODE_TUI_CONFIG at the seeded tui.json when timestamps are enabled', () => {
+    const env = buildChildEnv({ [DSH_OC_TUI_TIMESTAMPS]: '1' }, '/home/dsh')
+    expect(env.OPENCODE_TUI_CONFIG).toBe('/home/dsh/opencode/config/tui.json')
+  })
+
+  it('does not set OPENCODE_TUI_CONFIG without the timestamp switch', () => {
+    const env = buildChildEnv({ FOO: 'bar' }, '/home/dsh')
+    expect(env.OPENCODE_TUI_CONFIG).toBeUndefined()
+  })
+})
+
+describe('tuiTimestampsEnabled', () => {
+  it('accepts 1/true/yes/on case-insensitively and rejects everything else', () => {
+    expect(tuiTimestampsEnabled({ [DSH_OC_TUI_TIMESTAMPS]: '1' })).toBe(true)
+    expect(tuiTimestampsEnabled({ [DSH_OC_TUI_TIMESTAMPS]: 'TRUE' })).toBe(true)
+    expect(tuiTimestampsEnabled({ [DSH_OC_TUI_TIMESTAMPS]: 'yes' })).toBe(true)
+    expect(tuiTimestampsEnabled({ [DSH_OC_TUI_TIMESTAMPS]: 'on' })).toBe(true)
+    expect(tuiTimestampsEnabled({ [DSH_OC_TUI_TIMESTAMPS]: '0' })).toBe(false)
+    expect(tuiTimestampsEnabled({})).toBe(false)
+  })
+})
+
+describe('prepareOpenCodeTuiState', () => {
+  it('writes kv.json with timestamps shown and a tui.json keybind, preserving existing values', () => {
+    const home = tmpDir('timestamps')
+    const configDir = join(home, 'opencode', 'config')
+    const stateDir = join(home, 'opencode', 'state', 'opencode')
+    mkdirSync(configDir, { recursive: true })
+    mkdirSync(stateDir, { recursive: true })
+    writeFileSync(join(configDir, 'tui.json'), JSON.stringify({ theme: 'dark', keybinds: { session_rename: 'ctrl+r' } }))
+    writeFileSync(join(stateDir, 'kv.json'), JSON.stringify({ sidebar: 'hide' }))
+
+    prepareOpenCodeTuiState(home, { [DSH_OC_TUI_TIMESTAMPS]: '1' })
+
+    const tui = JSON.parse(readFileSync(join(configDir, 'tui.json'), 'utf8'))
+    expect(tui).toMatchObject({
+      theme: 'dark',
+      keybinds: {
+        session_rename: 'ctrl+r',
+        session_toggle_timestamps: 'ctrl+shift+t',
+        messages_toggle_timestamps: 'ctrl+shift+t',
+      },
+    })
+    const kv = JSON.parse(readFileSync(join(stateDir, 'kv.json'), 'utf8'))
+    expect(kv).toEqual({ sidebar: 'hide', timestamps: 'show' })
+  })
+
+  it('does nothing when timestamps are not enabled', () => {
+    const home = tmpDir('timestamps-off')
+    prepareOpenCodeTuiState(home, {})
+    expect(existsSync(join(home, 'opencode', 'state', 'opencode', 'kv.json'))).toBe(false)
+    expect(existsSync(join(home, 'opencode', 'config', 'tui.json'))).toBe(false)
   })
 })
 

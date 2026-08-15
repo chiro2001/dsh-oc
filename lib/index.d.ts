@@ -4,6 +4,17 @@ interface OcBridgeService {
   readonly port: number;
 }
 interface OpenCodeAsset {
+  /** Platform facts derived from the asset key. */
+  platform?: {
+    os: string;
+    arch: string;
+    baseline: boolean;
+    musl: boolean;
+  };
+  /** Official npm platform package name, e.g. `opencode-linux-x64`. */
+  npm?: string;
+  /** npm registry tarball integrity (sha512), verified by the package manager. */
+  npmIntegrity?: string;
   url: string;
   sha256: string;
   size: number;

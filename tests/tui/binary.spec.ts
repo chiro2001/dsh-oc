@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { resolveOpenCodeBinary } from '../../src/tui/binary.ts'
+import type { PlatformSelection } from '../../src/tui/platform.ts'
 
 const dirs: string[] = []
 
@@ -29,7 +30,33 @@ function writeOpenCodePackage(packageDir: string): void {
   )
 }
 
+function writeNpmPlatformPackage(home: string, key: string, executable = 'opencode'): string {
+  const bin = join(
+    home,
+    'opencode',
+    'packages',
+    key,
+    'node_modules',
+    `opencode-${key}`,
+    'bin',
+    executable,
+  )
+  touch(bin)
+  return bin
+}
+
 const versionProbe = async (): Promise<string> => 'opencode 1.18.18'
+
+const linuxPlatform: PlatformSelection = {
+  platform: 'linux',
+  arch: 'x64',
+  musl: false,
+  avx2: true,
+  candidates: ['linux-x64'],
+  key: 'linux-x64',
+  extension: '.tar.gz',
+  executableName: 'opencode',
+}
 
 describe('resolveOpenCodeBinary', () => {
   it('prefers DSH_OC_OPENCODE_BIN when it matches', async () => {
@@ -95,6 +122,7 @@ describe('resolveOpenCodeBinary', () => {
       packageRoots: [packageDir],
       probe: versionProbe,
       runPackagePostinstall: runPostinstall,
+      installNpmPackage: async () => false,
     })
 
     expect(runPostinstall).toHaveBeenCalledWith(packageDir)
@@ -131,8 +159,79 @@ describe('resolveOpenCodeBinary', () => {
       packageRoots: [packageDir],
       probe: async bin => (bin === pathBin ? 'opencode 0.0.0' : 'opencode 1.18.18'),
       runPackagePostinstall: async () => {},
+      installNpmPackage: async () => false,
     })
     expect(result).toEqual({ bin: packageBin, source: 'package' })
+  })
+
+  it('uses a preinstalled official npm platform package after PATH misses', async () => {
+    const root = tmpDir('npm-preinstalled')
+    const home = join(root, 'home')
+    const pathBin = join(root, 'bin', 'opencode')
+    const packageBin = writeNpmPlatformPackage(home, 'linux-x64')
+    touch(pathBin)
+    const download = vi.fn(async () => join(root, 'downloaded', 'opencode'))
+
+    const result = await resolveOpenCodeBinary({
+      env: { PATH: join(root, 'bin') },
+      home,
+      platform: linuxPlatform,
+      probe: async bin => (bin === pathBin ? 'opencode 0.0.0' : 'opencode 1.18.18'),
+      installNpmPackage: async () => false,
+      download,
+    })
+
+    expect(result).toEqual({ bin: packageBin, source: 'package' })
+    expect(download).not.toHaveBeenCalled()
+  })
+
+  it('tries npm platform packages in official candidate order and installs the first match', async () => {
+    const root = tmpDir('npm-candidates')
+    const home = join(root, 'home')
+    const calls: string[] = []
+    const install = vi.fn(async (packageName: string) => {
+      calls.push(packageName)
+      if (packageName === 'opencode-linux-x64') {
+        writeNpmPlatformPackage(home, 'linux-x64')
+      }
+      return true
+    })
+    const platform: PlatformSelection = {
+      ...linuxPlatform,
+      key: 'linux-x64-baseline',
+      candidates: ['linux-x64-baseline', 'linux-x64'],
+    }
+
+    const result = await resolveOpenCodeBinary({
+      env: { PATH: '' },
+      home,
+      platform,
+      probe: versionProbe,
+      installNpmPackage: install,
+    })
+
+    expect(calls).toEqual(['opencode-linux-x64-baseline', 'opencode-linux-x64'])
+    expect(result.source).toBe('package')
+    expect(result.bin).toBe(writeNpmPlatformPackage(home, 'linux-x64'))
+  })
+
+  it('continues to the GitHub download when no npm platform package matches', async () => {
+    const root = tmpDir('npm-download')
+    const download = vi.fn(async () => join(root, 'downloaded', 'opencode'))
+    const install = vi.fn(async () => true)
+
+    const result = await resolveOpenCodeBinary({
+      env: { PATH: '' },
+      home: join(root, 'home'),
+      platform: linuxPlatform,
+      probe: async () => undefined,
+      installNpmPackage: install,
+      download,
+    })
+
+    expect(install).toHaveBeenCalledWith('opencode-linux-x64', '1.18.18', expect.stringContaining('packages/linux-x64'))
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ bin: join(root, 'downloaded', 'opencode'), source: 'download' })
   })
 
   it('calls the injected download function only after every cache-style miss', async () => {
@@ -143,6 +242,7 @@ describe('resolveOpenCodeBinary', () => {
       env: { PATH: '' },
       home: join(root, 'home'),
       probe: async () => undefined,
+      installNpmPackage: async () => false,
       download,
     })
 

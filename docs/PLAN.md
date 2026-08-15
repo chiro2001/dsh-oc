@@ -452,13 +452,16 @@ metadata     = dsh meta（JSON-safe）
 1. env DSH_OC_OPENCODE_BIN（绝对路径）
 2. $DSH_HOME/opencode/bin/<version>/opencode(.exe) 缓存，且 --version 匹配
 3. PATH 上的 opencode，且 --version 匹配
-4. profile 内已安装的 opencode-ai 包（若存在，自动运行其官方 postinstall 后使用）
-5. 从 GitHub Release 惰性下载官方单平台 asset
+4. 官方 npm 平台包（opencode-<platform>-<arch>[-baseline][-musl]@1.18.18），
+   惰性安装到 $DSH_HOME/opencode/packages/<platform-key>，npm integrity 校验
+5. profile 内已安装的 opencode-ai 包（若存在，自动运行其官方 postinstall 后使用）
+6. 从 GitHub Release 惰性下载官方单平台 asset（manifest per-platform sha256）
 ```
 
 - 版本来自 `opencode-version.json`，当前固定 `1.18.18`。
 - 缓存路径：`$DSH_HOME/opencode/bin/1.18.18/opencode`（Windows `.exe`）。
-- 下载 URL 与 sha256 来自 `opencode-assets.json`，该文件由脚本生成（见 `PROTOCOL.md` 附录）。
+- npm 平台包候选顺序与官方 `postinstall.mjs` 一致；下载 URL 与每平台 sha256
+  来自 `opencode-assets.json`，该文件由脚本生成（见 `PROTOCOL.md` 附录）。
 
 ### 8.2 平台选择
 
@@ -506,6 +509,8 @@ spawn(opencodeBin, ['attach', bridgeUrl, ...tuiArgs], {
   - `XDG_STATE_HOME=$DSH_HOME/opencode/state`
   - `XDG_CACHE_HOME=$DSH_HOME/opencode/cache`
   - **不要设置** `OPENCODE_CONFIG_CONTENT` 来配置 DeepSeek provider/key；模型与凭据由 dsh 后端处理。
+  - `DSH_OC_TUI_TIMESTAMPS=1` 时额外在 `$DSH_HOME/opencode/state/opencode/kv.json`
+    写入 `timestamps: show`，并生成带 `ctrl+shift+t` 的 `tui.json`。
 
 ### 8.5 信号与退出
 
@@ -687,7 +692,7 @@ spawn(opencodeBin, ['attach', bridgeUrl, ...tuiArgs], {
 | scaffold | ✅ 已落地 | `src/`、`tests/`、`tsdown.config.ts`、`cordis.patch.yml`、`opencode-version.json`/`opencode-assets.json` 齐备 |
 | bridge | ✅ 已落地 | oc-bridge：OpenCode v1/v2 路由、SSE、会话/模型/权限/问题转换 |
 | tui | ✅ 已落地 | oc-tui：二进制解析/下载/校验、`attach` 参数过滤、信号转发、数据隔离 |
-| e2e | ✅ 已落地 | `scripts/e2e-api.sh`、`e2e-tui-boot.sh`、`e2e-tui-turn.sh` 与 `tests/e2e/{env.mjs,common.sh}` 驱动 |
+| e2e | ✅ 已落地 | `scripts/e2e-api.sh`、`e2e-tui-boot.sh`、`e2e-tui-turn.sh`、`e2e-tui-stream.sh`、`e2e-tui-timestamps.sh` 与 `tests/e2e/{env.mjs,common.sh}` 驱动 |
 | profile-fix | ✅ 已落地 | 宿主行（`storage`/`storage-json`/`storage-domain`/`webserver`）并入 bundle patch，`dsh --profile oc` 直接启动 |
 | release | ✅ 已落地 | README/PROTOCOL/PLAN 收尾；支持 `DSH_OC_E2E_ADD_SPEC=<tgz>` 的 npm tarball e2e |
 
@@ -706,6 +711,6 @@ beca54d merge: integrate oc-bridge and oc-tui
 ### 验证结果
 
 - `pnpm install` / `pnpm build` / `pnpm typecheck` / `pnpm test` / `pnpm pack:dry` 全部通过，`pack:dry` 无 warning/error。
-- 本地路径安装 e2e（`dsh plugin --profile oc add .`）：三个脚本全部 `PASSED`。
-- npm tarball 安装 e2e（`DSH_OC_E2E_ADD_SPEC=<tgz>`）：三个脚本全部 `PASSED`，profile 中安装的是 tarball。
+- 本地路径安装 e2e（`dsh plugin --profile oc add .`）：五个脚本全部 `PASSED`。
+- npm tarball 安装 e2e（`DSH_OC_E2E_ADD_SPEC=<tgz>`）：五个脚本全部 `PASSED`，profile 中安装的是 tarball。
 - tarball 内容包含 `lib/index.js`、`lib/bridge/**`、`lib/tui/**`、`cordis.patch.yml`、`opencode-version.json`、`opencode-assets.json`、`package.json`、`README.md`。

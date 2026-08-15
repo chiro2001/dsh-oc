@@ -5,8 +5,10 @@
  * 1. `DSH_OC_OPENCODE_BIN` (absolute path only)
  * 2. `$DSH_HOME/opencode/bin/<version>/opencode(.exe)`
  * 3. `opencode` on `PATH`
- * 4. an installed `opencode-ai` package (its official postinstall is run first)
- * 5. lazy GitHub Release download
+ * 4. official npm platform package (`opencode-<platform>-<arch>[-baseline][-musl]`)
+ *    lazily installed under `$DSH_HOME/opencode/packages/<platform-key>`
+ * 5. an installed `opencode-ai` package (its official postinstall is run first)
+ * 6. lazy GitHub Release download (per-platform `sha256` from the manifest)
  */
 
 import { spawnSync } from 'node:child_process'
@@ -42,6 +44,8 @@ export interface BinaryResolverDeps {
   readdir?: (path: string) => readonly { name: string; isDirectory(): boolean }[]
   packageRoots?: readonly string[]
   runPackagePostinstall?: (packageDir: string) => Promise<void>
+  /** Install a platform package into `targetDir`; tests inject a no-op/fixture. */
+  installNpmPackage?: (packageName: string, version: string, targetDir: string) => Promise<boolean>
   download?: (options: DownloadOpenCodeOptions) => Promise<string>
 }
 
@@ -82,6 +86,27 @@ export async function resolveOpenCodeBinary(deps: BinaryResolverDeps = {}): Prom
     if (exists(candidate) && await matches(candidate)) return { bin: candidate, source: 'path' }
   }
 
+  // Official npm platform packages are preferred over the GitHub fallback.
+  // The candidate order is the same one used by the official postinstall
+  // script, so baseline/musl variants are tried before the generic asset.
+  for (const key of platform.candidates) {
+    const packageName = npmPackageNameFor(key)
+    const targetDir = npmPackageTargetDir(home, key)
+    const packageBin = npmPackageBinaryPath(targetDir, packageName, platform)
+    if (exists(packageBin) && await matches(packageBin)) {
+      return { bin: packageBin, source: 'package' }
+    }
+    const install = deps.installNpmPackage ?? installNpmPackage
+    try {
+      const installed = await install(packageName, version, targetDir)
+      if (installed && exists(packageBin) && await matches(packageBin)) {
+        return { bin: packageBin, source: 'package' }
+      }
+    } catch {
+      // A broken npm install only loses this candidate; later priorities remain.
+    }
+  }
+
   for (const packageDir of findPackageDirs(home, deps)) {
     const manifestPath = join(packageDir, 'package.json')
     if (!exists(manifestPath)) continue
@@ -99,6 +124,67 @@ export async function resolveOpenCodeBinary(deps: BinaryResolverDeps = {}): Prom
   const download = deps.download ?? downloadOpenCode
   const bin = await download({ env, home, version, platform, manifest: deps.assets })
   return { bin, source: 'download' }
+}
+
+/** Official npm platform package name for a manifest asset key. */
+export function npmPackageNameFor(key: string): string {
+  return `opencode-${key}`
+}
+
+/** Cache directory for an installed npm platform package. */
+export function npmPackageTargetDir(home: string, key: string): string {
+  return join(home, 'opencode', 'packages', key)
+}
+
+/** Binary path inside an npm platform package installed with `npm --prefix`. */
+export function npmPackageBinaryPath(
+  targetDir: string,
+  packageName: string,
+  platform: PlatformSelection,
+): string {
+  return join(targetDir, 'node_modules', packageName, 'bin', platform.executableName)
+}
+
+async function installNpmPackage(
+  packageName: string,
+  version: string,
+  targetDir: string,
+): Promise<boolean> {
+  const spec = `${packageName}@${version}`
+  const npmResult = spawnSync(
+    'npm',
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-save',
+      '--no-audit',
+      '--no-fund',
+      '--loglevel=error',
+      '--prefix',
+      targetDir,
+      spec,
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 120_000,
+      windowsHide: true,
+      stdio: 'ignore',
+    },
+  )
+  if (npmResult.error === undefined && npmResult.status === 0) return true
+
+  // Fall back to pnpm when npm is unavailable or fails (e.g. pnpm-only hosts).
+  const pnpmResult = spawnSync(
+    'pnpm',
+    ['install', '--ignore-scripts', '--no-save', '--dir', targetDir, spec],
+    {
+      encoding: 'utf8',
+      timeout: 120_000,
+      windowsHide: true,
+      stdio: 'ignore',
+    },
+  )
+  return pnpmResult.error === undefined && pnpmResult.status === 0
 }
 
 function defaultProbe(bin: string): string | undefined {
