@@ -778,6 +778,22 @@ export class MuxEventTranslator {
       default: {
         const type = event.type as string
         const data = (event as unknown as { data: { time?: number; title?: unknown; text?: unknown } }).data
+        if (type === 'session') {
+          const header = data as { createdAt?: number; cwd?: string; title?: string }
+          const childDirectory = header.cwd ?? this.deps.state.sessionDirectories.get(sessionId) ?? directory
+          const parentID = this.deps.state.sessionParents.get(sessionId)
+          return [
+            makeEvent(childDirectory, 'session.updated', {
+              sessionID: sessionId,
+              info: minimalSession(sessionId, {
+                cwd: childDirectory,
+                title: header.title ?? '',
+                createdAt: header.createdAt ?? Date.now(),
+                ...(parentID === undefined ? {} : { parentID }),
+              }),
+            }, projectIdFor(childDirectory)),
+          ]
+        }
         if (type === 'session/created') {
           const parentID = this.deps.state.sessionParents.get(sessionId)
           return [

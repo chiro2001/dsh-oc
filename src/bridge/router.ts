@@ -1318,6 +1318,17 @@ export function createBridgeRouter(
           controller.signal,
         )
         for await (const frame of stream) {
+          if (frame.payload.type === 'session/event') {
+            const sessionEvent = frame.payload.event as unknown as { type: string }
+            if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {
+              try {
+                const list = await rpc(ctx, 'session.list', {})
+                recordSessionSummaries(ctx, list.items)
+              } catch (error) {
+                log(`[bridge/sse] session list refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+              }
+            }
+          }
           for (const event of translator.translate(frame)) {
             hub.send(client, event)
           }

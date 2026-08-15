@@ -716,6 +716,35 @@ describe('bridge events: session event mapping', () => {
     expect((events[1]?.payload.properties.info as { title: string }).title).toBe('Titled')
   })
 
+  it('emits a child session header with parent and directory', () => {
+    const state = new InteractionState()
+    state.sessionParents.set('child', 'parent')
+    state.sessionDirectories.set('child', '/child-work')
+    const { translate } = translator(state)
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 'child' as never,
+        event: sessionEvent('session', {
+          id: 'child',
+          createdAt: 500,
+          cwd: '/child-work',
+        }, 1, 500),
+      }),
+    ])
+    expect(events[0]?.payload.type).toBe('session.updated')
+    expect(events[0]?.payload.properties).toMatchObject({
+      sessionID: 'child',
+      info: {
+        id: 'child',
+        directory: '/child-work',
+        parentID: 'parent',
+        time: { created: 500 },
+      },
+    })
+    expect(events[0]?.directory).toBe('/child-work')
+  })
+
   it('uses the session directory when known and logs unknown events', () => {
     const state = new InteractionState()
     state.sessionDirectories.set('s1', '/other')
