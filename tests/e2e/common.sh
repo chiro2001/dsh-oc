@@ -6,13 +6,17 @@ export HTTPS_PROXY="${HTTPS_PROXY:-http://127.0.0.1:14514}"
 export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:14514}"
 
 E2E_REPO_ROOT="$(git rev-parse --show-toplevel)"
-if [[ "$E2E_REPO_ROOT" != "/home/chiro/projects/dsh-oc/dsh-oc-feat-e2e" ]]; then
-  echo "e2e: must run from /home/chiro/projects/dsh-oc/dsh-oc-feat-e2e (got $E2E_REPO_ROOT)" >&2
-  exit 2
-fi
+case "$E2E_REPO_ROOT" in
+  /home/chiro/projects/dsh-oc/dsh-oc-feat-*)
+    ;;
+  *)
+    echo "e2e: must run from /home/chiro/projects/dsh-oc/dsh-oc-feat-* (got $E2E_REPO_ROOT)" >&2
+    exit 2
+    ;;
+esac
 E2E_BRANCH="$(git -C "$E2E_REPO_ROOT" branch --show-current)"
-if [[ "$E2E_BRANCH" != "feat-e2e" ]]; then
-  echo "e2e: branch must be feat-e2e (got $E2E_BRANCH)" >&2
+if [[ "$E2E_BRANCH" != "feat-profile-fix" ]]; then
+  echo "e2e: branch must be feat-profile-fix (got $E2E_BRANCH)" >&2
   exit 2
 fi
 
@@ -27,7 +31,6 @@ E2E_DSH_HOME=""
 E2E_WORKDIR=""
 E2E_PROFILE_DIR=""
 E2E_OVERLAY=""
-E2E_HOST_OVERLAY=""
 E2E_SETTINGS=""
 E2E_MOCK_PORT=""
 E2E_MOCK_PID=""
@@ -56,7 +59,6 @@ e2e_new_run() {
   E2E_WORKDIR="$(jq -r .workdir <<<"$json")"
   E2E_PROFILE_DIR="$(jq -r .profileDir <<<"$json")"
   E2E_OVERLAY="$(jq -r .overlay <<<"$json")"
-  E2E_HOST_OVERLAY="$(jq -r .hostOverlay <<<"$json")"
   E2E_SETTINGS="$(jq -r .settings <<<"$json")"
   E2E_MOCK_PORT="$(jq -r .mockPort <<<"$json")"
   E2E_MOCK_PID="$(jq -r .mockPid <<<"$json")"
@@ -75,7 +77,7 @@ e2e_start_dsh() {
   tmux kill-session -t "$session" 2>/dev/null || true
   tmux new-session -d -s "$session" -x 200 -y 50
   local cmd
-  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' DSH_OC_OPENCODE_BIN='$E2E_FAKE_BIN' DSH_OC_FAKE_LOG='$E2E_FAKE_LOG' $extra_env && dsh --profile oc --patch '$E2E_HOST_OVERLAY' --patch '$E2E_OVERLAY'"
+  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' DSH_OC_OPENCODE_BIN='$E2E_FAKE_BIN' DSH_OC_FAKE_LOG='$E2E_FAKE_LOG' $extra_env && dsh --profile oc --patch '$E2E_OVERLAY'"
   tmux send-keys -t "$session" "$cmd" Enter
 }
 
@@ -129,7 +131,7 @@ e2e_tui_start() {
   tmux send-keys -t "$E2E_TUI_SESSION" "stty -a > '$E2E_RUN_DIR/stty-before.txt'" Enter
   sleep 1
   local cmd
-  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' && dsh --profile oc --patch '$E2E_HOST_OVERLAY' --patch '$E2E_OVERLAY' --print-logs $extra; echo DSH_EXIT=\$? > '$exit_file'"
+  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' && dsh --profile oc --patch '$E2E_OVERLAY' --print-logs $extra; echo DSH_EXIT=\$? > '$exit_file'"
   tmux send-keys -t "$E2E_TUI_SESSION" "$cmd" Enter
 }
 

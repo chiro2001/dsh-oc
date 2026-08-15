@@ -254,7 +254,7 @@ e2e_stop_dsh "$E2E_SESSION"
 e2e_stop_run
 
 echo "== orphan check =="
-ORPHANS="$(ps -eo args= | grep -E 'dsh-oc-feat-e2e/\.e2e/.*/agent-model\.patch\.yml' | grep -v grep || true)"
+ORPHANS="$(ps -eo args= | grep -F "$E2E_REPO_ROOT/.e2e/" | grep -F 'agent-model.patch.yml' | grep -v grep || true)"
 if [[ -n "$ORPHANS" ]]; then
   echo "e2e: orphan processes:" >&2
   echo "$ORPHANS" >&2

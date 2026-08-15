@@ -300,5 +300,5 @@ gh api repos/anomalyco/opencode/releases/tags/v1.18.18 \
 | `GET /api/model` | MAP | 返回 `{ location, data: ModelV2Info[] }`（协议对象，非裸数组） |
 | `GET /permission` + `POST /permission/{id}/reply` | MAP | 需保持至少一个 SSE 连接（与真实 TUI 一致）才能收到 mux approval 帧 |
 | `DSH_PERMISSION_MODE=ask` | 不支持 | dsh 只接受 `read-only`/`workspace-write`/`danger-full-access`；approval=ask 用 `workspace-write` |
-| oc profile 宿主行 | 运行期 overlay | oc bundle 依赖 `storage`/`storage-json`/`storage-domain`/`webserver`，dsh-base 未挂载；e2e 通过 `--patch oc-host.patch.yml` 注入（见 `tests/e2e/env.mjs`） |
+| oc profile 宿主行 | 已并入 bundle patch | `storage`/`storage-json`/`storage-domain`/`webserver` 已由 `cordis.patch.yml` 挂载；`dsh --profile oc` 直接启动（无需宿主 overlay） |
 | `--print-logs` | 透传 | oc-tui 已把 `--print-logs` 传给 `opencode attach`（opencode 顶层全局选项，设置 `OPENCODE_PRINT_LOGS=1`） |

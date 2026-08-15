@@ -51,7 +51,7 @@ function run(command, args, options = {}) {
 
 function assertBranch() {
   const branch = run('git', ['branch', '--show-current'], { cwd: repoRoot }).trim()
-  if (branch !== 'feat-e2e') fail(`branch must be feat-e2e, got ${branch}`)
+  if (branch !== 'feat-profile-fix') fail(`branch must be feat-profile-fix, got ${branch}`)
 }
 
 async function newRun(argv) {
@@ -85,7 +85,17 @@ async function newRun(argv) {
   const dump = run('dsh', ['--profile', 'oc', '--dump-config'], { env: dshEnv })
   const ocBlock = dump.split('# == @deepseek-ai/dsh-oc')[1]
   if (!ocBlock) fail('dump-config: missing @deepseek-ai/dsh-oc bundle block')
-  for (const id of ['workspace', 'directory-picker', 'api-proxy', 'oc-bridge', 'oc-tui']) {
+  for (const id of [
+    'storage',
+    'storage-json',
+    'storage-domain',
+    'webserver',
+    'workspace',
+    'directory-picker',
+    'api-proxy',
+    'oc-bridge',
+    'oc-tui',
+  ]) {
     if (!ocBlock.includes(`- id: ${id}`)) fail(`dump-config: missing id ${id}`)
   }
   if (!ocBlock.includes('inject:\n    - apiProxy')) fail('dump-config: oc-bridge must inject apiProxy')
@@ -99,36 +109,6 @@ async function newRun(argv) {
       '  config:',
       '    provider: deepseek-official',
       '    model: mock-model',
-      '',
-    ].join('\n'),
-  )
-
-  // The oc bundle relies on web-app host rows (storage backend + loopback
-  // webserver) that dsh-base does not mount. The e2e supplies them as a
-  // runtime overlay until the bundle's own patch layer grows them.
-  const hostOverlay = join(runDir, 'oc-host.patch.yml')
-  writeFileSync(
-    hostOverlay,
-    [
-      '- insert:',
-      '    - id: storage',
-      "      name: '@deepseek-ai/dsh-storage'",
-      '',
-      '    - id: storage-json',
-      "      name: '@deepseek-ai/dsh-storage-json'",
-      '      config:',
-      "        root: !!js dshHomePath('storages')",
-      '',
-      '    - id: storage-domain',
-      "      name: '@deepseek-ai/dsh-storage-domain'",
-      '      config:',
-      '        backend: json',
-      '',
-      '    - id: webserver',
-      "      name: '@deepseek-ai/dsh-host-webserver'",
-      '      config:',
-      '        host: 127.0.0.1',
-      '        port: 0',
       '',
     ].join('\n'),
   )
@@ -199,7 +179,6 @@ async function newRun(argv) {
     workdir,
     profileDir,
     overlay,
-    hostOverlay,
     settings: join(dshHome, 'settings.yaml'),
     mockPort,
     mockPid: mock.pid,
