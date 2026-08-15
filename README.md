@@ -20,9 +20,14 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 ## 安装使用
 
 ```bash
-dsh plugin --profile oc add @deepseek-ai/dsh-oc
+dsh plugin --profile oc add chiro2001/dsh-oc
 dsh --profile oc
 ```
+
+> `chiro2001/dsh-oc` 会解析为
+> `git+https://github.com/chiro2001/dsh-oc.git`，安装 `main` 分支的最新版本。
+> 如需固定版本或分支，可使用 pnpm 支持的完整 git spec，例如
+> `dsh plugin --profile oc add 'github:chiro2001/dsh-oc#main'`。
 
 首次启动会惰性下载并缓存 opencode 官方二进制（版本锁定 `1.18.18`，按
 `opencode-version.json` / `opencode-assets.json` 校验 sha256，支持代理与镜像）。
