@@ -9,6 +9,8 @@ interface OcBridgeValue {
   setCwd(directory: string): void;
   /** Warm one session's tail history (attach `--session` resume support). */
   prefetchSession(sessionId: string): void;
+  /** Whether this run accepted new user input. */
+  hasNewActivity(): boolean;
 }
 /**
  * oc-bridge cordis service: owns the loopback HTTP/SSE server and exposes
@@ -26,6 +28,7 @@ declare class OcBridgeService extends Service implements OcBridgeValue {
   [Service.init](): AsyncGenerator<() => Promise<void>>;
   setCwd(directory: string): void;
   prefetchSession(sessionId: string): void;
+  hasNewActivity(): boolean;
   private stop;
 }
 //#endregion

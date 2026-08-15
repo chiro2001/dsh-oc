@@ -285,6 +285,33 @@ describe('bridge router: session routes', () => {
     expect(historyCalls).toBe(1)
   })
 
+  it('does not flag a bare new session as exit-note activity', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        create: async () => okRpc({ sessionId: 's-new' as never }),
+      },
+    }
+    const { server, router } = await boot(api)
+    expect(router.hasNewActivity()).toBe(false)
+    const result = await request(server, 'POST', '/session', {})
+    expect(result.status).toBe(200)
+    expect(router.hasNewActivity()).toBe(false)
+  })
+
+  it('tracks new prompt input for the exit note signal', async () => {
+    const base = fakeApi()
+    const { server, router } = await boot(base)
+    expect(router.hasNewActivity()).toBe(false)
+    const result = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(result.status).toBe(200)
+    expect(router.hasNewActivity()).toBe(true)
+  })
+
   it('filters session lists by the directory query', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }

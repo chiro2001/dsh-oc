@@ -11,6 +11,7 @@ import {
   installSignalForwarding,
   OcTuiConfig,
   ocHelp,
+  ocExitNote,
   OPENCODE_CONFIG_FILE,
   OPENCODE_BRANDING_PLUGIN,
   OPENCODE_NETWORK_SAFETY_ENV,
@@ -18,6 +19,7 @@ import {
   prepareOpenCodeTuiState,
   requestExit,
   resolveTuiDir,
+  shouldPrintOcExitNote,
   startOpenCodeTui,
   tuiDirFromArgs,
   tuiSessionFromArgs,
@@ -248,6 +250,22 @@ describe('tuiTimestampsEnabled', () => {
     expect(tuiTimestampsEnabled({ [DSH_OC_TUI_TIMESTAMPS]: 'on' })).toBe(true)
     expect(tuiTimestampsEnabled({ [DSH_OC_TUI_TIMESTAMPS]: '0' })).toBe(false)
     expect(tuiTimestampsEnabled({})).toBe(false)
+  })
+})
+
+describe('ocExitNote', () => {
+  it('tells the user the banner is opencode output and the id is a dsh id', () => {
+    const note = ocExitNote()
+    expect(note).toContain('opencode 的退出提示')
+    expect(note).toContain('dsh --profile oc --session')
+    expect(note).toContain('不要直接运行 opencode --mini -s')
+  })
+
+  it('prints only for mini runs with new sessions or new input', () => {
+    expect(shouldPrintOcExitNote(['--mini'], true)).toBe(true)
+    expect(shouldPrintOcExitNote(['--mini'], false)).toBe(false)
+    expect(shouldPrintOcExitNote([], true)).toBe(false)
+    expect(shouldPrintOcExitNote(['--session', 's1'], true)).toBe(false)
   })
 })
 

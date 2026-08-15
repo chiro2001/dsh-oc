@@ -6,6 +6,8 @@ interface OcBridgeService {
   setCwd?(directory: string): void;
   /** Warm one session's tail history (attach `--session` resume support). */
   prefetchSession?(sessionId: string): void;
+  /** Whether this run accepted new user input. */
+  hasNewActivity?(): boolean;
 }
 interface OpenCodeAsset {
   /** Platform facts derived from the asset key. */

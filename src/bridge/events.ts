@@ -868,6 +868,7 @@ export class MuxEventTranslator {
     const project = projectIdFor(directory)
     switch (event.type) {
       case 'user/message': {
+        this.deps.state.markInput()
         const events = messageEvents(sessionId, this.deps, () => {
           const entry = userMessageFromEvent(event, messageOptions(sessionId, this.deps))
           return {

@@ -13,6 +13,8 @@ export interface OcBridgeValue {
   setCwd(directory: string): void
   /** Warm one session's tail history (attach `--session` resume support). */
   prefetchSession(sessionId: string): void
+  /** Whether this run accepted new user input. */
+  hasNewActivity(): boolean
 }
 
 /**
@@ -59,6 +61,10 @@ export class OcBridgeService extends Service implements OcBridgeValue {
 
   prefetchSession(sessionId: string): void {
     this.router?.prefetchSession(sessionId)
+  }
+
+  hasNewActivity(): boolean {
+    return this.router?.hasNewActivity() ?? false
   }
 
   private async stop(): Promise<void> {

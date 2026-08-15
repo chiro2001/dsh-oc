@@ -107,6 +107,8 @@ export interface BridgeRouter {
   prefetchSessionList(): void
   /** Warm one session's tail history in the background. */
   prefetchSession(sessionId: string): void
+  /** Whether this bridge run accepted new user input. */
+  hasNewActivity(): boolean
 }
 
 export interface RouterOptions {
@@ -1676,6 +1678,7 @@ export function createBridgeRouter(
     }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return json(200, pendingAssistantPlaceholder(id, cwd))
   })
@@ -1693,6 +1696,7 @@ export function createBridgeRouter(
     }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return json(200, pendingAssistantPlaceholder(id, cwd))
   })
@@ -1718,6 +1722,7 @@ export function createBridgeRouter(
     }
     await applyModelSelection(ctx, id, body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return json(204)
   })
@@ -1877,6 +1882,7 @@ export function createBridgeRouter(
     }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
+    ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return json(200, {
       data: {
@@ -2171,6 +2177,9 @@ export function createBridgeRouter(
       void cachedSessionHistory(ctx, sessionId, { maxMessages: 100 }).catch((error) => {
         log(`[bridge] session history prefetch failed: ${error instanceof Error ? error.message : String(error)}`)
       })
+    },
+    hasNewActivity() {
+      return ctx.state.newInputDuringRun
     },
   }
 }

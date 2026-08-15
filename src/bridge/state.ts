@@ -36,6 +36,8 @@ export class InteractionState {
   /** In-flight session.list RPC shared by concurrent callers (incl. prefetch). */
   sessionListLoading?: Promise<SessionSummary[]>
   private sessionListGeneration = 0
+  /** Whether this bridge run accepted new user input (banner-bearing content). */
+  newInputDuringRun = false
   readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
   private readonly historyLoading = new Map<string, Promise<CachedHistory>>()
   private readonly historyGenerations = new Map<string, number>()
@@ -140,6 +142,11 @@ export class InteractionState {
 
   sessionTitleFor(sessionId: string): string | undefined {
     return this.sessionTitles.get(sessionId)
+  }
+
+  /** Record that the user submitted new input during this run. */
+  markInput(): void {
+    this.newInputDuringRun = true
   }
 
   registerApproval(entry: PermissionEntry): PermissionEntry {

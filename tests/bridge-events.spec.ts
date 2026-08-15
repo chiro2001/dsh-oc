@@ -1042,6 +1042,30 @@ describe('bridge events: session event mapping', () => {
     expect((events[1]?.payload.properties.info as { title: string }).title).toBe('Titled')
   })
 
+  it('marks run input activity on user messages but not bare session creation', () => {
+    const created = new InteractionState()
+    const createdTranslate = translator(created).translate
+    createdTranslate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('session/created', {}, 1, 100),
+      }),
+    ])
+    expect(created.newInputDuringRun).toBe(false)
+
+    const input = new InteractionState()
+    const inputTranslate = translator(input).translate
+    inputTranslate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello'),
+      }),
+    ])
+    expect(input.newInputDuringRun).toBe(true)
+  })
+
   it('emits a child session header with parent and directory', () => {
     const state = new InteractionState()
     state.sessionParents.set('child', 'parent')

@@ -434,6 +434,27 @@ export function requestExit(
   return false
 }
 
+/**
+ * One-line clarification printed after the opencode mini TUI exits. The
+ * banner above belongs to the official opencode binary; the printed session
+ * id is a dsh session id and must be resumed through dsh, not opencode.
+ */
+export function ocExitNote(): string {
+  return '[dsh-oc] 上面是 opencode 的退出提示；session id 是 dsh 会话 id，恢复请使用 dsh --profile oc --session <id>，不要直接运行 opencode --mini -s'
+}
+
+/**
+ * Print the exit note only for `--mini` runs that accepted new input — the
+ * runs where opencode actually renders the `Session … / Continue opencode
+ * --mini -s …` banner on exit (bare session creation exits without a banner).
+ */
+export function shouldPrintOcExitNote(
+  tuiArgs: readonly string[],
+  hasNewActivity: boolean,
+): boolean {
+  return tuiArgs.includes('--mini') && hasNewActivity
+}
+
 /** Input accepted by {@link resolveOpenCodeBinary}. */
 export type ResolveBinaryInput = BinaryResolverDeps & { config?: { binary?: string } }
 
@@ -526,7 +547,12 @@ export class OcTuiService extends Service {
         tuiArgs,
         cwd: process.cwd(),
         env: childEnv,
-        onExit: code => requestExit(this.ctx, code),
+        onExit: code => {
+          if (shouldPrintOcExitNote(tuiArgs, bridge.hasNewActivity?.() ?? false)) {
+            process.stdout.write(`${ocExitNote()}\n`)
+          }
+          requestExit(this.ctx, code)
+        },
         onError: error => {
           this.ctx.logger.error(error)
           requestExit(this.ctx, 1)
