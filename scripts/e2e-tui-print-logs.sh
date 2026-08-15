@@ -59,4 +59,18 @@ e2e_stop_dsh "$E2E_ACTIVE_SESSION"
 E2E_ACTIVE_SESSION=""
 node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null
 
+echo "== --log-level value forwarded to the opencode child =="
+e2e_new_run "tui-log-level" "danger-full-access" "success" "1"
+E2E_ACTIVE_SESSION="dsh-oc-log-level"
+LOG_LEVEL="$E2E_RUN_DIR/fake-level.log"
+start_fake_dsh "--log-level debug" "$LOG_LEVEL"
+E2E_FAKE_LOG="$LOG_LEVEL"
+e2e_wait_bridge_url
+grep -q -- "--log-level" "$LOG_LEVEL"
+grep -q -- "debug" "$LOG_LEVEL"
+echo "  child argv contains --log-level debug"
+e2e_stop_dsh "$E2E_ACTIVE_SESSION"
+E2E_ACTIVE_SESSION=""
+node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null
+
 echo "e2e-tui-print-logs: PASSED in $((SECONDS - SCRIPT_START))s"
