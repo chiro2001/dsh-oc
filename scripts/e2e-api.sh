@@ -109,6 +109,10 @@ curl -s "$BRIDGE/api/command" | jq -e '([.data[].name] | index("preset") != null
 echo "  /api/command advertises /preset"
 curl -s "$BRIDGE/command" | jq -e '([.[].name] | index("help") != null)' >/dev/null
 echo "  /command advertises /help"
+curl -s "$BRIDGE/experimental/capabilities" | jq -e '.backgroundSubagents == true' >/dev/null
+echo "  background subagents capability enabled"
+curl -s -X POST "$BRIDGE/experimental/session/s1/background" | jq -e '. == true' >/dev/null
+echo "  background endpoint returns true (no-op)"
 
 AGENT_IDS="$(curl -s "$BRIDGE/api/agent" | jq -r '[.data[].id] | join(",")')"
 echo "  /api/agent ids: $AGENT_IDS"
