@@ -1473,7 +1473,12 @@ export function createBridgeRouter(
 
   register('GET', '/api/session/:sessionID/message', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
-    const history = await rpc(ctx, 'session.history', { sessionId: sid(id) })
+    const limitRaw = req.query.get('limit')
+    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
+    const history = await rpc(ctx, 'session.history', {
+      sessionId: sid(id),
+      ...(limit === undefined ? {} : { maxMessages: limit }),
+    })
     const defaultModel = await defaultModelRef(ctx)
     const entries = history.events
     const response: SessionMessagesResponse = {

@@ -669,6 +669,28 @@ describe('bridge router: session routes', () => {
     expect(binary.body).toMatchObject({ name: 'BadRequest' })
   })
 
+  it('passes the v2 message limit query into session.history', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async (request) => {
+          calls.push({ method: 'session.history', payload: request.payload })
+          return okRpc({ events: [], hasMore: false })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'GET', '/api/session/s1/message?limit=3')
+    expect(result.status).toBe(200)
+    expect(calls[0]).toMatchObject({
+      method: 'session.history',
+      payload: { sessionId: 's1', maxMessages: 3 },
+    })
+  })
+
   it('serves todo and diff from history/projections', async () => {
     const work = gitFixture({ 'src/a.ts': 'const a = 1' })
     const base = fakeApi()

@@ -117,7 +117,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`402a641`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`87f19e9`（2026-08-15）。
 
 ### 路由注册表
 
@@ -198,9 +198,9 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 28 | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
+| `tests/bridge-events.spec.ts` | 28 | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 44 | 402a641 feat(bridge): add /help slash command with shared capability summary |
+| `tests/bridge-router.spec.ts` | 45 | 402a641 feat(bridge): add /help slash command with shared capability summary |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -232,12 +232,12 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
+| `src/bridge/events.ts` | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
-| `src/bridge/router.ts` | 402a641 feat(bridge): add /help slash command with shared capability summary |
-| `src/bridge/rpc.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
+| `src/bridge/router.ts` | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
+| `src/bridge/rpc.ts` | 87f19e9 feat(bridge): surface agent/stream errors as opencode session.error |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `src/bridge/stubs.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -269,6 +269,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 
