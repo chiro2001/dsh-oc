@@ -389,6 +389,130 @@ describe('bridge router: session routes', () => {
     expect(historyCalls).toEqual(['10', '10'])
   })
 
+  it('coalesces concurrent session list loads into one RPC', async () => {
+    let listCalls = 0
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => {
+          listCalls += 1
+          await new Promise((resolve) => setTimeout(resolve, 20))
+          return okRpc({ items: [item, { ...item, sessionId: 's2' as never }] })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const [first, second] = await Promise.all([
+      request(server, 'GET', '/session'),
+      request(server, 'GET', '/session'),
+    ])
+    expect(listCalls).toBe(1)
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    expect((first.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s1', 's2'])
+    expect((second.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s1', 's2'])
+  })
+
+  it('coalesces concurrent history page loads into one RPC', async () => {
+    let historyCalls = 0
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => {
+          historyCalls += 1
+          await new Promise((resolve) => setTimeout(resolve, 20))
+          return okRpc({ events: [], hasMore: false })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const [first, second] = await Promise.all([
+      request(server, 'GET', '/session/s1/message?limit=10'),
+      request(server, 'GET', '/session/s1/message?limit=10'),
+    ])
+    expect(historyCalls).toBe(1)
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+  })
+
+  it('serves the message page from a previously loaded full tail', async () => {
+    let historyCalls = 0
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => {
+          historyCalls += 1
+          return okRpc({ events: [{ event: makeUserEvent('hi') }], hasMore: false })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    await request(server, 'GET', '/session/s1')
+    await request(server, 'GET', '/session/s1/message?limit=100')
+    expect(historyCalls).toBe(1)
+  })
+
+  it('serves the full tail from a complete 100-message page', async () => {
+    let historyCalls = 0
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => {
+          historyCalls += 1
+          return okRpc({ events: [{ event: makeUserEvent('hi') }], hasMore: false })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    await request(server, 'GET', '/session/s1/message?limit=100')
+    await request(server, 'GET', '/session/s1')
+    expect(historyCalls).toBe(1)
+  })
+
+  it('starts a fresh list scan after invalidation during an in-flight load', async () => {
+    let listCalls = 0
+    const base = fakeApi()
+    const stale = { ...item, sessionId: 's-stale' as never }
+    const fresh = { ...item, sessionId: 's-fresh' as never }
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => {
+          listCalls += 1
+          const value = listCalls === 1 ? stale : fresh
+          await new Promise((resolve) => setTimeout(resolve, 20))
+          return okRpc({ items: [value] })
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const inFlight = request(server, 'GET', '/session')
+    const listStarted = Date.now() + 2000
+    while (listCalls === 0 && Date.now() < listStarted) {
+      await new Promise((resolve) => setTimeout(resolve, 1))
+    }
+    expect(listCalls).toBe(1)
+    await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    const [first, second] = await Promise.all([
+      inFlight,
+      request(server, 'GET', '/session'),
+    ])
+    expect(listCalls).toBe(2)
+    expect((first.body as Array<{ id: string }>).at(0)?.id).toBe('s-stale')
+    expect((second.body as Array<{ id: string }>).at(0)?.id).toBe('s-fresh')
+  })
+
   it('serves the dsh skill catalog for the matching session', async () => {
     const base = fakeApi()
     const api: BridgeApi = {

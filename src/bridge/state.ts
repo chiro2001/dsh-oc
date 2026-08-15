@@ -31,7 +31,12 @@ export class InteractionState {
   readonly sessionParents = new Map<string, string>()
   readonly savedPermissions = new Map<string, SavedPermission>()
   sessionListCache?: { items: SessionSummary[]; at: number }
+  /** In-flight session.list RPC shared by concurrent callers (incl. prefetch). */
+  sessionListLoading?: Promise<SessionSummary[]>
+  private sessionListGeneration = 0
   readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
+  private readonly historyLoading = new Map<string, Promise<CachedHistory>>()
+  private readonly historyGenerations = new Map<string, number>()
 
   getSessionListCache(ttlMs: number): SessionSummary[] | undefined {
     const cached = this.sessionListCache
@@ -53,20 +58,57 @@ export class InteractionState {
     this.historyCache.set(key, { value, at: Date.now() })
   }
 
+  getHistoryLoading(key: string): Promise<CachedHistory> | undefined {
+    return this.historyLoading.get(key)
+  }
+
+  setHistoryLoading(key: string, promise: Promise<CachedHistory>): void {
+    this.historyLoading.set(key, promise)
+  }
+
+  clearHistoryLoading(key: string, promise: Promise<CachedHistory>): void {
+    if (this.historyLoading.get(key) === promise) this.historyLoading.delete(key)
+  }
+
+  historyGeneration(key: string): number {
+    return this.historyGenerations.get(key) ?? 0
+  }
+
+  listGeneration(): number {
+    return this.sessionListGeneration
+  }
+
   /** Drop list and (optionally per-session) history caches after any mutation. */
   invalidateSession(sessionId?: string): void {
     this.sessionListCache = undefined
+    this.sessionListLoading = undefined
+    this.sessionListGeneration += 1
     this.invalidateHistory(sessionId)
   }
 
   /** Drop only history pages (used by the live SSE feed). */
   invalidateHistory(sessionId?: string): void {
+    const bump = (key: string): void => {
+      this.historyGenerations.set(key, (this.historyGenerations.get(key) ?? 0) + 1)
+    }
     if (sessionId === undefined) {
+      for (const key of [...this.historyCache.keys()]) bump(key)
+      for (const key of [...this.historyLoading.keys()]) bump(key)
       this.historyCache.clear()
+      this.historyLoading.clear()
       return
     }
     for (const key of [...this.historyCache.keys()]) {
-      if (key === sessionId || key.startsWith(`${sessionId}:`)) this.historyCache.delete(key)
+      if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+        bump(key)
+        this.historyCache.delete(key)
+      }
+    }
+    for (const key of [...this.historyLoading.keys()]) {
+      if (key === sessionId || key.startsWith(`${sessionId}:`)) {
+        bump(key)
+        this.historyLoading.delete(key)
+      }
     }
   }
 

@@ -320,9 +320,22 @@ function historyCacheKey(sessionId: string, maxMessages?: number, beforeSeq?: nu
 async function cachedSessionList(ctx: BridgeRouteContext): Promise<SessionSummary[]> {
   const cached = ctx.state.getSessionListCache(SESSION_LIST_CACHE_MS)
   if (cached !== undefined) return cached
-  const list = await rpc(ctx, 'session.list', {})
-  ctx.state.setSessionListCache(list.items)
-  return list.items
+  const existing = ctx.state.sessionListLoading
+  if (existing !== undefined) return existing
+  const generation = ctx.state.listGeneration()
+  const promise = rpc(ctx, 'session.list', {}).then((list) => list.items)
+  ctx.state.sessionListLoading = promise
+  try {
+    const items = await promise
+    // Only publish to the shared cache if no invalidation happened while the
+    // scan was in flight; concurrent callers still get this same snapshot.
+    if (ctx.state.listGeneration() === generation) {
+      ctx.state.setSessionListCache(items)
+    }
+    return items
+  } finally {
+    if (ctx.state.sessionListLoading === promise) ctx.state.sessionListLoading = undefined
+  }
 }
 
 /** Read a history page through a short-lived per-page cache. */
@@ -334,18 +347,60 @@ async function cachedSessionHistory(
   const key = historyCacheKey(sessionId, options.maxMessages, options.beforeSeq)
   const cached = ctx.state.getHistoryCache(key, HISTORY_CACHE_MS)
   if (cached !== undefined) return cached
-  const history = await rpc(ctx, 'session.history', {
+  const existing = ctx.state.getHistoryLoading(key)
+  if (existing !== undefined) return existing
+  const generation = ctx.state.historyGeneration(key)
+  const promise = rpc(ctx, 'session.history', {
     sessionId: sid(sessionId),
     ...(options.maxMessages === undefined ? {} : { maxMessages: options.maxMessages }),
     ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
-  })
-  const value: CachedHistory = {
+  }).then((history): CachedHistory => ({
     events: history.events,
     hasMore: history.hasMore,
     ...(history.projections === undefined ? {} : { projections: history.projections }),
+  }))
+  ctx.state.setHistoryLoading(key, promise)
+  try {
+    const value = await promise
+    if (ctx.state.historyGeneration(key) === generation) {
+      ctx.state.setHistoryCache(key, value)
+      seedDerivedHistoryPage(ctx, sessionId, value, options)
+    }
+    return value
+  } finally {
+    ctx.state.clearHistoryLoading(key, promise)
   }
-  ctx.state.setHistoryCache(key, value)
-  return value
+}
+
+/**
+ * The TUI opens a session through `/session/:id` (full tail) and then fetches
+ * `/session/:id/message` (default limit 100). Those are different cache keys,
+ * so without seeding the second read would repeat the same dsh history RPC.
+ * Seed the derived page when the loaded window provably covers it (and vice
+ * versa when a 100-message page is the whole history).
+ */
+function seedDerivedHistoryPage(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  value: CachedHistory,
+  options: { maxMessages?: number; beforeSeq?: number },
+): void {
+  if (options.beforeSeq !== undefined) return
+  if (options.maxMessages === undefined) {
+    const pageKey = historyCacheKey(sessionId, 100, undefined)
+    if (ctx.state.getHistoryCache(pageKey, HISTORY_CACHE_MS) === undefined) {
+      ctx.state.setHistoryCache(pageKey, {
+        events: value.events.slice(-100),
+        hasMore: value.events.length > 100 || value.hasMore,
+        ...(value.projections === undefined ? {} : { projections: value.projections }),
+      })
+    }
+  } else if (options.maxMessages === 100 && !value.hasMore) {
+    const tailKey = historyCacheKey(sessionId, undefined, undefined)
+    if (ctx.state.getHistoryCache(tailKey, HISTORY_CACHE_MS) === undefined) {
+      ctx.state.setHistoryCache(tailKey, value)
+    }
+  }
 }
 
 /** Pick a session for a directory query (or the most recent one). */

@@ -137,6 +137,7 @@
 | 功能矩阵自动追踪 | ✅ | `scripts/update-feature-matrix.mjs` | `pnpm run features:update` | 本提交 |
 | 会话性能测试（生成器 + 指标 + 报告） | ✅ | `scripts/perf.mjs` + `scripts/perf-session-gen.mjs`（dsh Session API 合成日志、zstd 分帧写入） | `pnpm run perf`、`tests/perf.spec.ts` | 本提交 |
 | 大会话性能验证（200/1000/5000/10000） | ✅ | `docs/perf/results-2026-08-15.md`：SSE 防抖 + list/history 短 TTL 缓存 + 上游瓶颈记录 | `pnpm run perf -- --sessions 10000` | 本提交 |
+| 历史读取在途合并与派生页缓存 | ✅ | 并发调用/启动预取共享同一次 `session.list`/`session.history` RPC；full tail 与 100 条页互相派生，TUI 打开会话只扫描一次 | `tests/bridge-router.spec.ts` | 本提交 |
 | perf 生成器单测（编码/round-trip/子代理场景） | ✅ | `tests/perf.spec.ts` | `pnpm test` | 本提交 |
 
 <!-- FEATURES:AUTO:START -->
@@ -303,7 +304,6 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
-
 
 
 
