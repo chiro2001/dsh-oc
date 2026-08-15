@@ -157,6 +157,7 @@ bash scripts/e2e-tui-dir.sh         # attach --dir 切到指定工作目录
 bash scripts/e2e-tui-fork.sh        # attach --fork --session 生成 fork #1
 bash scripts/e2e-tui-mini.sh        # attach --mini 最小界面启动渲染
 bash scripts/e2e-tui-print-logs.sh  # --print-logs 透传给 opencode 子进程
+bash scripts/e2e-tui-skill.sh      # 技能斜杠命令（DSH_OC_E2E_FAKE_SKILLS 注入）
 pnpm run probe                     # 协议路由清单 + 二进制/SDK 版本校验
 ```
 
