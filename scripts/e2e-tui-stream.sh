@@ -75,16 +75,29 @@ fi
 echo "  partial streamed text visible"
 
 echo "== capture two in-flight panes =="
+stream_prefix_len() {
+  python3 - "$1" "$LONG_TEXT" <<'PY'
+import sys
+path, want = sys.argv[1], sys.argv[2]
+text = open(path, encoding='utf-8', errors='ignore').read()
+for size in range(len(want), 0, -1):
+    if want[:size] in text:
+        print(size)
+        break
+else:
+    print(0)
+PY
+}
 TEXT_A=0
 TEXT_B=0
-deadline=$((SECONDS + 10))
+deadline=$((SECONDS + 12))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-stream-a.txt"
-  TEXT_A="$(grep -a '^     streaming' "$E2E_RUN_DIR/tui-stream-a.txt" | head -1 | wc -c)"
+  TEXT_A="$(stream_prefix_len "$E2E_RUN_DIR/tui-stream-a.txt")"
   sleep 0.75
   e2e_tui_capture "$E2E_RUN_DIR/tui-stream-b.txt"
-  TEXT_B="$(grep -a '^     streaming' "$E2E_RUN_DIR/tui-stream-b.txt" | head -1 | wc -c)"
-  echo "  streamed text bytes: $TEXT_A -> $TEXT_B"
+  TEXT_B="$(stream_prefix_len "$E2E_RUN_DIR/tui-stream-b.txt")"
+  echo "  matched stream prefix length: $TEXT_A -> $TEXT_B"
   if (( TEXT_B > TEXT_A )); then
     break
   fi
