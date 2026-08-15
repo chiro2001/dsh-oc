@@ -458,6 +458,32 @@ describe('bridge router: session routes', () => {
     expect((await request(server, 'GET', '/skill')).body).toEqual([])
   })
 
+  it('injects fake skills for e2e when DSH_OC_E2E_FAKE_SKILLS is set', async () => {
+    const previous = process.env.DSH_OC_E2E_FAKE_SKILLS
+    process.env.DSH_OC_E2E_FAKE_SKILLS = 'code-review,smoke'
+    try {
+      const base = fakeApi()
+      const api: BridgeApi = {
+        ...base,
+        sessions: { ...base.sessions, list: async () => okRpc({ items: [item] }) },
+      }
+      const { server } = await boot(api)
+      const v1 = await request(server, 'GET', '/skill')
+      expect((v1.body as Array<{ name: string }>).map((skill) => skill.name)).toEqual([
+        'code-review',
+        'smoke',
+      ])
+      const commands = await request(server, 'GET', '/command')
+      expect((commands.body as Array<{ name: string }>).map((command) => command.name)).toContain('code-review')
+    } finally {
+      if (previous === undefined) {
+        delete process.env.DSH_OC_E2E_FAKE_SKILLS
+      } else {
+        process.env.DSH_OC_E2E_FAKE_SKILLS = previous
+      }
+    }
+  })
+
   it('searches v2 session lists through session.search and applies limit', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }

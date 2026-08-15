@@ -366,18 +366,21 @@ async function skillList(
   directory: string | undefined,
 ): Promise<Array<{ name: string; description: string; whenToUse?: string }>> {
   const session = await sessionForDirectory(ctx, directory)
-  if (session === undefined) return []
-  try {
-    const result = await rpc(ctx, 'skill.list', { sessionId: sid(String(session.sessionId)) })
-    return result.skills.map((skill) => ({
-      name: skill.name,
-      description: skill.description,
-      ...(skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse }),
-    }))
-  } catch (error) {
-    ctx.log(`[bridge] skill.list failed: ${error instanceof Error ? error.message : String(error)}`)
-    return []
+  const skills: Array<{ name: string; description: string; whenToUse?: string }> = []
+  if (session !== undefined) {
+    try {
+      const result = await rpc(ctx, 'skill.list', { sessionId: sid(String(session.sessionId)) })
+      skills.push(...result.skills.map((skill) => ({
+        name: skill.name,
+        description: skill.description,
+        ...(skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse }),
+      })))
+    } catch (error) {
+      ctx.log(`[bridge] skill.list failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
+  skills.push(...fakeSkillEntries())
+  return skills
 }
 
 /** dsh skills exposed as opencode v1 slash commands. */
@@ -409,16 +412,29 @@ async function skillListForSession(
   ctx: BridgeRouteContext,
   sessionId: string,
 ): Promise<Array<{ name: string; description: string }>> {
+  const skills: Array<{ name: string; description: string }> = []
   try {
     const result = await rpc(ctx, 'skill.list', { sessionId: sid(sessionId) })
-    return result.skills.map((skill) => ({
+    skills.push(...result.skills.map((skill) => ({
       name: skill.name,
       description: skill.description,
-    }))
+    })))
   } catch (error) {
     ctx.log(`[bridge] skill.list failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
-    return []
   }
+  skills.push(...fakeSkillEntries())
+  return skills
+}
+
+/** Test-only fake skills injected via `DSH_OC_E2E_FAKE_SKILLS=name1,name2`. */
+function fakeSkillEntries(): Array<{ name: string; description: string; whenToUse?: string }> {
+  const raw = process.env.DSH_OC_E2E_FAKE_SKILLS
+  if (raw === undefined || raw.trim() === '') return []
+  return raw.split(',').map((item) => item.trim()).filter(Boolean).map((name) => ({
+    name,
+    description: `e2e fake skill ${name}`,
+    whenToUse: `Use ${name} in e2e`,
+  }))
 }
 
 function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
