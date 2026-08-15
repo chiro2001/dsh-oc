@@ -11,6 +11,7 @@ import {
   type MessageConvertOptions,
 } from './convert/message.js'
 import {
+  DEFAULT_AGENT,
   projectIdFor,
   provisionalMessageId,
   provisionalPartId,
@@ -56,6 +57,69 @@ export interface TranslateDeps {
 }
 
 /**
+ * Build the opencode SSE events that make a server-side command result
+ * visible in the TUI: an optional session status change plus one synthetic
+ * assistant message with a text part. The message is intentionally
+ * ephemeral — dsh history is not touched, so no model turn is triggered.
+ */
+export function commandResultEvents(
+  deps: TranslateDeps,
+  sessionId: string,
+  text: string,
+  options: { status?: 'busy' | 'idle'; parentID?: string } = {},
+): BridgeGlobalEvent[] {
+  const directory = directoryFor(sessionId, deps)
+  const project = projectIdFor(directory)
+  const events: BridgeGlobalEvent[] = []
+  if (options.status !== undefined) {
+    events.push(
+      makeEvent(directory, 'session.status', {
+        sessionID: sessionId,
+        status: { type: options.status },
+      }, project),
+    )
+  }
+  const id = `msg_cmd:${randomUUID()}`
+  const partId = `prt_cmd:${randomUUID()}`
+  const created = Date.now()
+  const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  events.push(
+    makeEvent(directory, 'message.updated', {
+      sessionID: sessionId,
+      info: {
+        id,
+        sessionID: sessionId,
+        role: 'assistant',
+        agent: DEFAULT_AGENT,
+        time: { created },
+        parentID: options.parentID ?? `pending:${sessionId}:user`,
+        modelID: model.modelID,
+        providerID: model.providerID,
+        mode: DEFAULT_AGENT,
+        path: { cwd: directory, root: directory },
+        cost: 0,
+        tokens: zeroTokens(),
+      },
+    }, project),
+  )
+  events.push(
+    makeEvent(directory, 'message.part.updated', {
+      sessionID: sessionId,
+      part: {
+        id: partId,
+        sessionID: sessionId,
+        messageID: id,
+        type: 'text',
+        text,
+        time: { start: created },
+      },
+      time: created,
+    }, project),
+  )
+  return events
+}
+
+/**
  * Packed dsh chunk rows (`text-chunks` / `reasoning-chunks`) arrive through
  * the session event stream. They carry the first member's time at `time0`
  * plus per-member texts/gaps in `data`.
@@ -83,6 +147,33 @@ interface StreamBlockState {
   sent: number
 }
 
+/**
+ * Narrow runtime view of the dsh compaction lifecycle events
+ * (`compaction/start`, `compaction/summary`, `compaction/end`). These are
+ * plugin-merged session events, so they are read structurally instead of
+ * through the public `SessionEvent` union.
+ */
+interface CompactionEvent {
+  type: 'compaction/start' | 'compaction/summary' | 'compaction/end'
+  seq: number
+  time: number
+  data: {
+    compactionId?: unknown
+    sourceCommandId?: unknown
+    turn?: unknown
+    summary?: readonly { type: string; text?: unknown }[]
+    error?: unknown
+  }
+}
+
+/** Per-compaction opencode event state (one SSE client's stream view). */
+interface CompactionStreamState {
+  messageID: string
+  text: string
+  reason: 'auto' | 'manual'
+  ended: boolean
+}
+
 interface SessionStreamState {
   turnStartTime?: number
   lastUserMessageId?: string
@@ -90,6 +181,7 @@ interface SessionStreamState {
   blockStarts: Map<string, number>
   finishReasons: Map<string, string>
   blocks: Map<string, StreamBlockState>
+  compactions: Map<string, CompactionStreamState>
 }
 
 function makeEvent(
@@ -236,10 +328,79 @@ export class MuxEventTranslator {
         blockStarts: new Map(),
         finishReasons: new Map(),
         blocks: new Map(),
+        compactions: new Map(),
       }
       this.streams.set(sessionId, state)
     }
     return state
+  }
+
+  /**
+   * Translate the dsh compaction lifecycle to the opencode
+   * `session.next.compaction.*` family. The replacement checkpoint
+   * `user/message` emits `session.next.compaction.ended` itself, so
+   * `compaction/end` only emits when the checkpoint never appeared (e.g. a
+   * failed summary) to avoid duplicate compaction entries in the TUI.
+   */
+  private translateCompactionEvent(
+    sessionId: string,
+    event: CompactionEvent,
+    directory: string,
+    project: string,
+  ): BridgeGlobalEvent[] {
+    const key = typeof event.data.compactionId === 'string'
+      ? event.data.compactionId
+      : String(event.data.compactionId ?? '')
+    if (!key) return []
+    const state = this.streamState(sessionId)
+    const reason = event.data.sourceCommandId === undefined ? 'auto' : 'manual'
+    switch (event.type) {
+      case 'compaction/start': {
+        const messageID = `checkpoint:${key}`
+        state.compactions.set(key, { messageID, text: '', reason, ended: false })
+        return [
+          makeEvent(directory, 'session.next.compaction.started', {
+            timestamp: event.time,
+            sessionID: sessionId,
+            messageID,
+            reason,
+          }, project),
+        ]
+      }
+      case 'compaction/summary': {
+        const pending = state.compactions.get(key)
+        if (!pending) return []
+        pending.text = textFromBlocks(event.data.summary ?? [])
+        return [
+          makeEvent(directory, 'session.next.compaction.delta', {
+            timestamp: event.time,
+            sessionID: sessionId,
+            messageID: pending.messageID,
+            text: pending.text,
+          }, project),
+        ]
+      }
+      case 'compaction/end': {
+        const pending = state.compactions.get(key)
+        if (!pending || pending.ended) return []
+        pending.ended = true
+        state.compactions.delete(key)
+        const text = pending.text
+          || (typeof event.data.error === 'string' && event.data.error
+            ? `Compaction failed: ${event.data.error}`
+            : '')
+        return [
+          makeEvent(directory, 'session.next.compaction.ended', {
+            timestamp: event.time,
+            sessionID: sessionId,
+            messageID: pending.messageID,
+            reason: pending.reason,
+            text,
+            recent: '',
+          }, project),
+        ]
+      }
+    }
   }
 
   translate(frame: RpcRequest<MuxFrame>): BridgeGlobalEvent[] {
@@ -396,6 +557,20 @@ export class MuxEventTranslator {
           }
         })
         if (isCompactCheckpoint(event)) {
+          const source = event.data.source as { compactionId?: unknown; sourceCommandId?: unknown }
+          const key = typeof source.compactionId === 'string' ? source.compactionId : undefined
+          if (key !== undefined) {
+            const pending = this.streamState(sessionId).compactions.get(key)
+            if (pending) {
+              pending.messageID = String(event.data.id)
+              pending.text = textFromBlocks(
+                event.data.content as readonly { type: string; text?: unknown }[],
+              )
+              pending.reason = isAutoCompactCheckpoint(event) ? 'auto' : 'manual'
+              pending.ended = true
+              this.streamState(sessionId).compactions.delete(key)
+            }
+          }
           events.push(
             makeEvent(
               directory,
@@ -417,6 +592,15 @@ export class MuxEventTranslator {
         this.streamState(sessionId).lastUserMessageId = String(event.data.id)
         return events
       }
+      case 'compaction/start' as SessionEvent['type']:
+      case 'compaction/summary' as SessionEvent['type']:
+      case 'compaction/end' as SessionEvent['type']:
+        return this.translateCompactionEvent(
+          sessionId,
+          event as unknown as CompactionEvent,
+          directory,
+          project,
+        )
       case 'assistant/chunk': {
         const chunk = event.data.chunk
         if (chunk.type === 'block-start') {

@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { MuxEventTranslator, type BridgeGlobalEvent } from '../src/bridge/events.js'
+import {
+  commandResultEvents,
+  MuxEventTranslator,
+  type BridgeGlobalEvent,
+} from '../src/bridge/events.js'
 import { InteractionState } from '../src/bridge/state.js'
 import { createBridgeRouter } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
@@ -108,6 +112,159 @@ describe('bridge events: session event mapping', () => {
       reason: 'manual',
       text: '<compacted-summary>done</compacted-summary>',
     })
+  })
+
+  it('translates the compaction lifecycle without duplicating the end event', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('compaction/start', {
+          compactionId: 'c1',
+          sourceCommandId: 'cmd-1',
+          turn: null,
+        }, 1, 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('compaction/summary', {
+          compactionId: 'c1',
+          sourceCommandId: 'cmd-1',
+          summary: [{ type: 'text', text: '<compacted-summary>done</compacted-summary>' }],
+          shadowedRange: { start: 1, end: 3 },
+          shadowedSeqs: [1, 2, 3],
+          shadowedTokenCount: 100,
+          provider: 'deepseek-official',
+          model: 'mock-model',
+        }, 2, 950),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('user/message', {
+          id: 'checkpoint-1' as never,
+          content: [{ type: 'text', text: '<compacted-summary>done</compacted-summary>' }],
+          source: {
+            kind: 'plugin',
+            plugin: 'compact',
+            compactionId: 'c1',
+            sourceCommandId: 'cmd-1',
+          },
+        }, 3, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('compaction/end', {
+          compactionId: 'c1',
+          sourceCommandId: 'cmd-1',
+          turn: null,
+        }, 4, 1050),
+      }),
+    ])
+    expect(events.map((event) => event.payload.type)).toEqual([
+      'session.next.compaction.started',
+      'session.next.compaction.delta',
+      'message.updated',
+      'message.part.updated',
+      'session.next.compaction.ended',
+    ])
+    expect(events[0]?.payload.properties).toMatchObject({
+      timestamp: 900,
+      sessionID: 's1',
+      messageID: 'checkpoint:c1',
+      reason: 'manual',
+    })
+    expect(events[1]?.payload.properties).toMatchObject({
+      timestamp: 950,
+      sessionID: 's1',
+      messageID: 'checkpoint:c1',
+      text: '<compacted-summary>done</compacted-summary>',
+    })
+    expect(events[4]?.payload.properties).toMatchObject({
+      timestamp: 1000,
+      sessionID: 's1',
+      messageID: 'checkpoint-1',
+      reason: 'manual',
+      text: '<compacted-summary>done</compacted-summary>',
+      recent: '',
+    })
+  })
+
+  it('emits a compaction end event when the summary fails before a checkpoint', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('compaction/start', {
+          compactionId: 'c2',
+          sourceCommandId: 'cmd-2',
+          turn: null,
+        }, 1, 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('compaction/end', {
+          compactionId: 'c2',
+          sourceCommandId: 'cmd-2',
+          turn: null,
+          error: 'summary',
+        }, 2, 1100),
+      }),
+    ])
+    expect(events.map((event) => event.payload.type)).toEqual([
+      'session.next.compaction.started',
+      'session.next.compaction.ended',
+    ])
+    expect(events[1]?.payload.properties).toMatchObject({
+      timestamp: 1100,
+      sessionID: 's1',
+      messageID: 'checkpoint:c2',
+      reason: 'manual',
+      text: 'Compaction failed: summary',
+      recent: '',
+    })
+  })
+
+  it('builds synthetic command result events with busy/idle status', () => {
+    const state = new InteractionState()
+    const events = commandResultEvents(
+      { cwd: '/work', state, log: () => {} },
+      's1',
+      'minimal\nstandard (default)',
+      { status: 'busy' },
+    )
+    expect(events.map((event) => event.payload.type)).toEqual([
+      'session.status',
+      'message.updated',
+      'message.part.updated',
+    ])
+    expect(events[0]?.payload.properties).toEqual({
+      sessionID: 's1',
+      status: { type: 'busy' },
+    })
+    const info = events[1]?.payload.properties.info as { id: string; role: string; parentID: string }
+    expect(info).toMatchObject({
+      role: 'assistant',
+      agent: 'build',
+      mode: 'build',
+      modelID: 'deepseek-chat',
+      providerID: 'deepseek',
+    })
+    expect(info.id).toMatch(/^msg_cmd:/)
+    expect(info.parentID).toBe('pending:s1:user')
+    const part = events[2]?.payload.properties.part as { id: string; messageID: string; type: string; text: string }
+    expect(part).toMatchObject({
+      messageID: info.id,
+      type: 'text',
+      text: 'minimal\nstandard (default)',
+    })
+    expect(part.id).toMatch(/^prt_cmd:/)
+    expect(events[2]?.payload.properties.time).toBeTypeOf('number')
   })
 
   it('streams text chunks through a provisional message and reports real duration', () => {

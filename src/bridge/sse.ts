@@ -49,6 +49,13 @@ export class SseHub {
     }
   }
 
+  /** Fan one event batch out to every connected SSE client. */
+  broadcast(events: BridgeGlobalEvent[]): void {
+    for (const client of [...this.clients]) {
+      for (const event of events) this.send(client, event)
+    }
+  }
+
   closeAll(): void {
     for (const client of [...this.clients]) {
       this.remove(client)

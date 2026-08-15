@@ -142,6 +142,18 @@ PRESET_LIST_CODE="$(curl -s -o "$E2E_RUN/preset-list.json" -w '%{http_code}' -X 
 jq -e '.parts[0].text | type == "string"' "$E2E_RUN/preset-list.json" >/dev/null
 echo "  POST /session/$SESSION_V2/command /preset list -> 200"
 
+PRESET_PROMPT_BODY="$E2E_RUN/preset-prompt.json"
+PRESET_PROMPT_CODE="$(curl -s -o "$PRESET_PROMPT_BODY" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V2/message" \
+  -H 'Content-Type: application/json' -d '{"parts":[{"type":"text","text":"/preset"}]}')"
+[[ "$PRESET_PROMPT_CODE" == "200" ]]
+jq -e '.parts[0].text | type == "string"' "$PRESET_PROMPT_BODY" >/dev/null
+if ! jq -e '.parts[0].text | test("standard|minimal|No switchable dsh agent presets")' "$PRESET_PROMPT_BODY" >/dev/null; then
+  echo "e2e: prompt-route /preset did not return a visible preset result" >&2
+  cat "$PRESET_PROMPT_BODY" >&2
+  exit 1
+fi
+echo "  POST /session/$SESSION_V2/message /preset captured -> visible preset result"
+
 if [[ "$AGENT_IDS" == *minimal* ]]; then
   AGENT_SWITCH_CODE="$(curl -s -o "$E2E_RUN/agent-switch.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/agent" \
     -H 'Content-Type: application/json' -d '{"agent":"minimal"}')"

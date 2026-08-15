@@ -47,7 +47,7 @@ import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertTodos } from './convert/todo.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
-import { convertProducedFiles, toSnapshotFileDiffs } from './events.js'
+import { commandResultEvents, convertProducedFiles, toSnapshotFileDiffs } from './events.js'
 import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { InteractionState } from './state.js'
 import { SseHub } from './sse.js'
@@ -433,6 +433,77 @@ async function switchAgentPreset(
   })
 }
 
+/** All text parts of a prompt body, joined the way the TUI renders them. */
+function textFromPromptParts(content: readonly PromptContentPart[]): string {
+  return content
+    .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n')
+}
+
+/**
+ * `/preset` typed with a trailing space (or after dismissing the slash popup)
+ * reaches the prompt routes as a plain prompt. Returns the trailing argument,
+ * or `undefined` when the prompt is not a `/preset` invocation.
+ */
+function presetArgumentFromPrompt(content: readonly PromptContentPart[]): string | undefined {
+  const text = textFromPromptParts(content).trim()
+  if (!/^\/preset(?:\s|$)/.test(text)) return undefined
+  return text.slice('/preset'.length).trim()
+}
+
+interface PresetCommandOutcome {
+  kind: 'success' | 'error'
+  text: string
+}
+
+async function presetCommandOutcome(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  argument: string,
+): Promise<PresetCommandOutcome> {
+  try {
+    if (argument === '') {
+      const roster = await presetRoster(ctx)
+      const text = roster.length === 0
+        ? 'No switchable dsh agent presets'
+        : roster.map((preset) => `${preset.id}${preset.isDefault ? ' (default)' : ''}`).join('\n')
+      return { kind: 'success', text }
+    }
+    await switchAgentPreset(ctx, sessionId, argument)
+    return { kind: 'success', text: `Switched dsh agent preset to ${argument}` }
+  } catch (error) {
+    return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/** Broadcast one synthetic command-result message (with optional status). */
+function broadcastCommandResult(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  text: string,
+  status?: 'busy' | 'idle',
+): void {
+  ctx.hub.broadcast(commandResultEvents(
+    { cwd: ctx.cwd, state: ctx.state, log: ctx.log },
+    sessionId,
+    text,
+    status === undefined ? {} : { status },
+  ))
+}
+
+/** Run a `/preset` list/switch with visible TUI progress and result. */
+async function runPresetCommand(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  argument: string,
+): Promise<PresetCommandOutcome> {
+  broadcastCommandResult(ctx, sessionId, 'Running /preset…', 'busy')
+  const outcome = await presetCommandOutcome(ctx, sessionId, argument)
+  broadcastCommandResult(ctx, sessionId, outcome.text, 'idle')
+  return outcome
+}
+
 async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
   try {
     return (await presetRoster(ctx))
@@ -558,40 +629,47 @@ async function forkSession(
  * registry. The opencode TUI's slash command is `session.summarize`, which
  * posts `/session/{id}/summarize`; dsh owns the model-backed compaction
  * inside command-compact, so we address the live session agent here rather
- * than sending a slash prompt to the model.
+ * than sending a slash prompt to the model. Every outcome is broadcast as a
+ * synthetic assistant message plus busy/idle status so the TUI visibly moves
+ * while the command runs, even when the mock LLM cannot produce a summary.
  */
-async function compactSession(
+async function runCompactCommand(
   ctx: BridgeRouteContext,
   sessionId: string,
 ): Promise<void> {
+  broadcastCommandResult(ctx, sessionId, 'Running /compact…', 'busy')
   const agent = ctx.api.agents?.get(sessionId)
   if (agent === undefined) {
+    broadcastCommandResult(ctx, sessionId, 'Compaction unavailable: session is not attached', 'idle')
     throw conflict('session is not attached; cannot compact', { sessionId })
   }
   if (!ctx.api.commands) {
+    broadcastCommandResult(ctx, sessionId, 'Compaction unavailable: dsh command registry is missing', 'idle')
     throw internalError('dsh command registry is unavailable; cannot compact', { sessionId })
   }
   let execution: BridgeCommandExecution | undefined
   try {
     execution = await ctx.api.commands.execute(agent, '/compact', new AbortController().signal)
   } catch (error) {
-    throw internalError(
-      `compact command failed: ${error instanceof Error ? error.message : String(error)}`,
-      { sessionId },
-    )
+    const text = `Compaction failed: ${error instanceof Error ? error.message : String(error)}`
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    throw internalError(text, { sessionId })
   }
   if (execution === undefined) {
+    broadcastCommandResult(ctx, sessionId, 'Compaction failed: unknown command /compact', 'idle')
     throw badRequest('unknown command /compact', { code: 'unknown-command', sessionId })
   }
   if (execution.result.kind === 'error') {
-    throw badRequest(execution.result.text ?? 'compact command failed', {
+    const text = execution.result.text ?? 'Compaction failed'
+    broadcastCommandResult(ctx, sessionId, text, 'idle')
+    throw badRequest(text, {
       code: 'command-error',
       sessionId,
     })
   }
-  if (execution.result.text) {
-    ctx.log(`[bridge] /compact: ${execution.result.text}`)
-  }
+  const text = execution.result.text ?? 'Compaction completed'
+  broadcastCommandResult(ctx, sessionId, text, 'idle')
+  ctx.log(`[bridge] /compact: ${text}`)
 }
 
 async function createSession(
@@ -807,6 +885,11 @@ export function createBridgeRouter(
     await v1DefaultAgent(ctx),
     ...(await dshPresetAgents(ctx)),
   ]))
+  // `/preset` stays advertised as a server command: the 1.18.18 TUI opens a
+  // slash popup for any `/` input, so the first Enter completes to `/preset `
+  // and the second Enter executes through `POST /session/:id/command`. The
+  // prompt routes below additionally capture `/preset` typed with a trailing
+  // space (or after Esc), so every path ends with a visible SSE result.
   register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1]))
   for (const bare of ['/skill', '/reference', '/integration']) {
     register('GET', bare, 'json', async () => json(200, []))
@@ -864,14 +947,14 @@ export function createBridgeRouter(
 
   register('POST', '/session/:id/summarize', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    await compactSession(ctx, id)
+    await runCompactCommand(ctx, id)
     return json(200, true)
   })
 
   // Legacy alias kept for clients that call the endpoint by its action name.
   register('POST', '/session/:id/compact', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    await compactSession(ctx, id)
+    await runCompactCommand(ctx, id)
     return json(200, true)
   })
 
@@ -912,6 +995,12 @@ export function createBridgeRouter(
   register('POST', '/session/:id/message', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    const presetArgument = presetArgumentFromPrompt(content)
+    if (presetArgument !== undefined) {
+      const outcome = await runPresetCommand(ctx, id, presetArgument)
+      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
+    }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
     return json(200, pendingAssistantPlaceholder(id, cwd))
@@ -922,6 +1011,12 @@ export function createBridgeRouter(
   register('POST', '/session/:id/prompt', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    const presetArgument = presetArgumentFromPrompt(content)
+    if (presetArgument !== undefined) {
+      const outcome = await runPresetCommand(ctx, id, presetArgument)
+      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+      return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
+    }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
     return json(200, pendingAssistantPlaceholder(id, cwd))
@@ -939,16 +1034,9 @@ export function createBridgeRouter(
     const command = typeof body.command === 'string' ? body.command : ''
     const argumentsRaw = typeof body.arguments === 'string' ? body.arguments : ''
     if (command.replace(/^\//, '') !== 'preset') throw badRequest(`unsupported command "${command}"`)
-    const argument = argumentsRaw.trim()
-    if (argument === '') {
-      const roster = await presetRoster(ctx)
-      const text = roster.length === 0
-        ? 'No switchable dsh agent presets'
-        : roster.map((preset) => `${preset.id}${preset.isDefault ? ' (default)' : ''}`).join('\n')
-      return json(200, pendingAssistantPlaceholder(id, cwd, text))
-    }
-    await switchAgentPreset(ctx, id, argument)
-    return json(200, pendingAssistantPlaceholder(id, cwd, `Switched dsh agent preset to ${argument}`))
+    const outcome = await runPresetCommand(ctx, id, argumentsRaw.trim())
+    if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+    return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
   })
 
   register('GET', '/session/:id/todo', 'json', async (req, ctx) => {
@@ -1020,13 +1108,28 @@ export function createBridgeRouter(
 
   register('POST', '/api/session/:sessionID/compact', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
-    await compactSession(ctx, id)
+    await runCompactCommand(ctx, id)
     return json(204)
   })
 
   register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const content = parsePromptParts(bodyAsRecord(req.body).parts)
+    const presetArgument = presetArgumentFromPrompt(content)
+    if (presetArgument !== undefined) {
+      const outcome = await runPresetCommand(ctx, id, presetArgument)
+      if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
+      return json(200, {
+        data: {
+          id: `msg_${randomUUID()}`,
+          sessionID: id,
+          prompt: { parts: content },
+          delivery: 'queue',
+          timeCreated: Date.now(),
+          admittedSeq: 0,
+        },
+      })
+    }
     await applyModelSelection(ctx, id, req.body)
     await rpc(ctx, 'session.prompt', { sessionId: sid(id), mode: 'queue', content })
     return json(200, {
