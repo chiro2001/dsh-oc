@@ -134,6 +134,7 @@ GET /api/integration?location[directory]=...
 | `GET /session/{id}` | MAP | history + summary |
 | `PATCH /session/{id}` | MAP | `apiProxy.sessions.rename` |
 | `GET /session/{id}/message` | MAP | `apiProxy.sessions.history` |
+| `GET /session/{id}/message/{messageID}` | MAP | 复用 v1 转换，按 `info.id` 单条查询；未找到 404 |
 | `POST /session/{id}/prompt` | MAP | `apiProxy.sessions.prompt` |
 | `POST /session/{id}/abort` | MAP | `apiProxy.sessions.cancel` |
 | `POST /session/{id}/init` | MAP | no-op 成功 `true`（dsh 会话创建即初始化） |

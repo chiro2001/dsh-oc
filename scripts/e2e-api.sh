@@ -240,6 +240,8 @@ wait_assistant "$BRIDGE/api/session/$SESSION_V2/message" "mock response recovere
 echo "== fork lineage =="
 USER_MESSAGE_ID="$(curl -s "$BRIDGE/session/$SESSION_V1/message" | jq -er '.[] | select(.info.role == "user") | .info.id' | head -1)"
 [[ -n "$USER_MESSAGE_ID" ]]
+curl -s "$BRIDGE/session/$SESSION_V1/message/$USER_MESSAGE_ID" | jq -e --arg id "$USER_MESSAGE_ID" '.info.id == $id' >/dev/null
+echo "  GET single message by id ok"
 FORKED_AT_MSG_JSON="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' \
   -d "{\"messageID\":\"$USER_MESSAGE_ID\"}")"
 FORKED_AT_MSG="$(jq -er .id <<<"$FORKED_AT_MSG_JSON")"

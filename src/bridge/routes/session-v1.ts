@@ -2,7 +2,7 @@
 import * as R from '../router.js'
 import type { HistoryEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionStatus } from '@opencode-ai/sdk/v2/types'
-import { badRequest } from '../errors.js'
+import { badRequest, notFound } from '../errors.js'
 import { call } from '../rpc.js'
 import { convertGoalTodos } from '../convert/goal.js'
 import { convertMessagesV1 } from '../convert/message.js'
@@ -99,6 +99,26 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       },
       entries.map((entry) => entry.view),
     ))
+  })
+
+  register('GET', '/session/:id/message/:messageID', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    const messageID = req.params.messageID as string
+    const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
+    const defaultModel = await R.defaultModelRef(ctx)
+    const entries = convertMessagesV1(
+      history.events.map((entry) => entry.event),
+      {
+        sessionId: id,
+        cwd: ctx.cwd,
+        defaultModel,
+        onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`),
+      },
+      history.events.map((entry) => entry.view),
+    )
+    const found = entries.find((entry) => entry.info.id === messageID)
+    if (found === undefined) throw notFound('message not found', { messageID })
+    return R.json(200, found)
   })
 
   register('POST', '/session/:id/message', 'json', async (req, ctx) => {

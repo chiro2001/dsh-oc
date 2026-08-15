@@ -147,7 +147,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`0919c30`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`ba323f9`（2026-08-16）。
 
 ### 路由注册表
 
@@ -173,7 +173,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 40 | 2e52727 feat(bridge): add v2 interrupt route and dedupe replayed stream chunks |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 79 | 0919c30 feat(bridge): add experimental global session list endpoint |
+| `tests/bridge-router.spec.ts` | 79 | 65af98d feat(bridge): accept session init as a no-op success |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 20 | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -213,13 +213,13 @@
 | `src/bridge/routes.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/routes/boot.ts` | 3b56c7c feat(bridge): enable background subagents capability and background endpoint |
 | `src/bridge/routes/permission.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
-| `src/bridge/routes/session-v1.ts` | 0d72edc feat(bridge): add subagent children listing endpoint |
+| `src/bridge/routes/session-v1.ts` | 65af98d feat(bridge): accept session init as a no-op success |
 | `src/bridge/routes/session-v2.ts` | 0919c30 feat(bridge): add experimental global session list endpoint |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
 | `src/bridge/stubs.ts` | 3b56c7c feat(bridge): enable background subagents capability and background endpoint |
-| `src/help.ts` | 77f5c63 docs(help): reflect real titles, Esc interrupt and preset inheritance |
+| `src/help.ts` | a289e00 docs(help): mention background subagents in capability summary |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
@@ -230,7 +230,7 @@
 | `scripts/check-all.sh` | 396b49b test(e2e): add real TUI permission and question dialog coverage |
 | `scripts/cleanup-merged-branches.sh` | 2848dc8 fix(scripts): accept --apply/--remote flags before the target branch |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
-| `scripts/e2e-api.sh` | 0919c30 feat(bridge): add experimental global session list endpoint |
+| `scripts/e2e-api.sh` | 65af98d feat(bridge): accept session init as a no-op success |
 | `scripts/e2e-tui-abort.sh` | 2e52727 feat(bridge): add v2 interrupt route and dedupe replayed stream chunks |
 | `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
@@ -258,6 +258,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

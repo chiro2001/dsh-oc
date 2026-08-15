@@ -900,6 +900,13 @@ describe('bridge router: session routes', () => {
     const messages = await request(server, 'GET', '/session/s1/message')
     expect(messages.status).toBe(200)
     expect(messages.body).toHaveLength(2)
+    const firstID = (messages.body as Array<{ info: { id: string } }>)[0]?.info.id
+    expect(firstID).toBeDefined()
+    const single = await request(server, 'GET', `/session/s1/message/${firstID}`)
+    expect(single.status).toBe(200)
+    expect((single.body as { info: { id: string } }).info.id).toBe(firstID)
+    const missing = await request(server, 'GET', '/session/s1/message/nope')
+    expect(missing.status).toBe(404)
     const v2Messages = await request(server, 'GET', '/api/session/s1/message')
     expect(v2Messages.status).toBe(200)
     expect(v2Messages.body).toMatchObject({ data: [{ type: 'user' }, { type: 'assistant' }], cursor: {} })
