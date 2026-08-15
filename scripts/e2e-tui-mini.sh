@@ -78,7 +78,34 @@ if [[ "$REPLY_COUNT" != "1" ]]; then
 fi
 echo "  mini reply rendered once ($REPLY_COUNT)"
 
-echo "== stop the mini TUI harness =="
+echo "== exit the mini TUI and verify the dsh-oc exit note =="
+tmux send-keys -t "$E2E_TUI_SESSION" C-c
+sleep 1
+tmux send-keys -t "$E2E_TUI_SESSION" C-c
+sleep 1
+tmux send-keys -t "$E2E_TUI_SESSION" C-c
+deadline=$((SECONDS + 20))
+while (( SECONDS < deadline )); do
+  if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then break; fi
+  sleep 1
+done
+if [[ ! -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+  echo "e2e: mini TUI did not exit after triple C-c" >&2
+  e2e_tui_capture "$E2E_RUN_DIR/tui-mini-stuck.txt"
+  exit 1
+fi
+grep -q '^DSH_EXIT=0$' "$E2E_RUN_DIR/dsh-exit.txt"
+sleep 1
+e2e_tui_capture "$E2E_RUN_DIR/tui-mini-exit.txt"
+tmux capture-pane -p -S -300 -t "$E2E_TUI_SESSION" > "$E2E_RUN_DIR/tui-mini-exit-scrollback.txt" 2>/dev/null || true
+if ! grep -qa '\[dsh-oc\] 上面是 opencode 的退出提示' "$E2E_RUN_DIR/tui-mini-exit.txt" \
+  && ! grep -qa '\[dsh-oc\] 上面是 opencode 的退出提示' "$E2E_RUN_DIR/tui-mini-exit-scrollback.txt"; then
+  echo "e2e: mini exit note missing after graceful exit" >&2
+  tail -40 "$E2E_RUN_DIR/tui-mini-exit.txt" >&2 || true
+  exit 1
+fi
+echo "  mini exit note visible"
+
 e2e_stop_dsh "$E2E_TUI_SESSION"
 node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null
 
