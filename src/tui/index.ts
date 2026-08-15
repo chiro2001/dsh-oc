@@ -5,7 +5,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context, Service } from '@deepseek-ai/cordis'
@@ -370,6 +370,21 @@ export function tuiSessionFromArgs(args: readonly string[]): string | undefined 
   return undefined
 }
 
+/** Resolve and validate an attach `--dir` value before handing it to opencode. */
+export function resolveTuiDir(dir: string): string {
+  const resolved = resolve(dir)
+  let stat
+  try {
+    stat = statSync(resolved)
+  } catch {
+    throw new Error(`--dir path does not exist: ${resolved}`)
+  }
+  if (!stat.isDirectory()) {
+    throw new Error(`--dir is not a directory: ${resolved}`)
+  }
+  return resolved
+}
+
 /**
  * Build the child environment: inherit the parent and isolate opencode state
  * under `$DSH_HOME/opencode`. `OPENCODE_CONFIG_CONTENT` is intentionally
@@ -467,7 +482,7 @@ export class OcTuiService extends Service {
     const dirArg = tuiDirFromArgs(rawArgs)
     if (dirArg !== undefined) {
       try {
-        bridge.setCwd?.(resolve(dirArg))
+        bridge.setCwd?.(resolveTuiDir(dirArg))
       } catch (error) {
         this.fail(error)
         return

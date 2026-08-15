@@ -217,6 +217,8 @@ declare function filterSupportedArgs(args: readonly string[]): {
 declare function tuiDirFromArgs(args: readonly string[]): string | undefined;
 /** Extract the `--session <id>` / `-s <id>` / `--session=<id>` value. */
 declare function tuiSessionFromArgs(args: readonly string[]): string | undefined;
+/** Resolve and validate an attach `--dir` value before handing it to opencode. */
+declare function resolveTuiDir(dir: string): string;
 /**
  * Build the child environment: inherit the parent and isolate opencode state
  * under `$DSH_HOME/opencode`. `OPENCODE_CONFIG_CONTENT` is intentionally
@@ -260,5 +262,5 @@ declare class OcTuiService extends Service {
   private fail;
 }
 //#endregion
-export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_BRANDING_PLUGIN, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, brandingSourceDir, buildChildEnv, filterSupportedArgs, helpRequested, installSignalForwarding, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, startOpenCodeTui, tuiDirFromArgs, tuiSessionFromArgs, tuiTimestampsEnabled };
+export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_BRANDING_PLUGIN, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, brandingSourceDir, buildChildEnv, filterSupportedArgs, helpRequested, installSignalForwarding, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, resolveTuiDir, startOpenCodeTui, tuiDirFromArgs, tuiSessionFromArgs, tuiTimestampsEnabled };
 //# sourceMappingURL=index.d.ts.map

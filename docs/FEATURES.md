@@ -90,6 +90,7 @@
 |---|---|---|---|---|
 | `opencode attach` 启动/退出/信号转发 | ✅ | `src/tui/index.ts` `startOpenCodeTui` | `tests/tui/index.spec.ts`、`e2e-tui-boot.sh` | `f30b156` |
 | attach 参数过滤（`--session/--dir/--mini/--print-logs/...`） | ✅ | `src/tui/index.ts` `filterSupportedArgs`；`--dir` 同步写入 bridge cwd | `tests/tui/index.spec.ts`、`scripts/e2e-tui-dir.sh` | 本提交 |
+| `--dir` 路径校验 | ✅ | `resolveTuiDir`：不存在/非目录时明确报错 | `tests/tui/index.spec.ts` | 本提交 |
 | 数据隔离（config/data/state/cache 在 `$DSH_HOME/opencode`） | ✅ | `src/tui/index.ts` `buildChildEnv` | `tests/tui/index.spec.ts` | `f30b156` |
 | 消息时间戳默认开启 | ✅ | `DSH_OC_TUI_TIMESTAMPS=1` → `kv.json` `timestamps: show` + `tui.json` 快捷键 | `tests/tui/index.spec.ts`、`scripts/e2e-tui-timestamps.sh` | 本提交 |
 | 时间戳运行时切换 | ✅ | `tui.json` 绑定 `session_toggle_timestamps` / `messages_toggle_timestamps` 为 `ctrl+shift+t`，也可用 `/timestamps` | 手工 TUI 验证 | 本提交 |
@@ -139,7 +140,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`f8bad18`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`bca2ad6`（2026-08-15）。
 
 ### 路由注册表
 
@@ -237,7 +238,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 28 | 69f5bbd perf(tui): prefetch the resumed session history for --session |
+| `tests/tui/index.spec.ts` | 30 | 69f5bbd perf(tui): prefetch the resumed session history for --session |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -271,14 +272,14 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 69f5bbd perf(tui): prefetch the resumed session history for --session |
-| `scripts/check-all.sh` | cbc2717 ci: run API e2e only in the manual e2e workflow |
+| `scripts/check-all.sh` | de6e601 test(e2e): verify --dir scopes new sessions and filters the list |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
 | `scripts/e2e-tui-boot.sh` | 776d145 test(e2e): remove remaining machine-specific absolute paths |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
 | `scripts/e2e-tui-continue.sh` | 9cf9fb8 test(e2e): cover attach --continue resuming the newest session |
-| `scripts/e2e-tui-dir-filter.sh` | — |
+| `scripts/e2e-tui-dir-filter.sh` | bca2ad6 test(e2e): use jq @uri instead of python3 for URL encoding |
 | `scripts/e2e-tui-dir.sh` | 7ed9ee0 test(e2e): cover relative --dir resolution in the real TUI |
 | `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
 | `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |

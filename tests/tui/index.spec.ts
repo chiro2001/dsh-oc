@@ -17,6 +17,7 @@ import {
   prepareOpenCodeConfig,
   prepareOpenCodeTuiState,
   requestExit,
+  resolveTuiDir,
   startOpenCodeTui,
   tuiDirFromArgs,
   tuiSessionFromArgs,
@@ -155,6 +156,21 @@ describe('tuiSessionFromArgs', () => {
     expect(tuiSessionFromArgs(['--session=abc-123'])).toBe('abc-123')
     expect(tuiSessionFromArgs(['-s', 'abc-123'])).toBe('abc-123')
     expect(tuiSessionFromArgs(['--session', '--mini'])).toBeUndefined()
+  })
+})
+
+describe('resolveTuiDir', () => {
+  it('resolves an existing directory to an absolute path', () => {
+    const dir = tmpDir('resolve-dir')
+    expect(resolveTuiDir(dir)).toBe(dir)
+  })
+
+  it('rejects missing paths and regular files', () => {
+    const base = tmpDir('resolve-bad')
+    expect(() => resolveTuiDir(join(base, 'missing'))).toThrow(/does not exist/)
+    const file = join(base, 'file.txt')
+    writeFileSync(file, 'x')
+    expect(() => resolveTuiDir(file)).toThrow(/not a directory/)
   })
 })
 
