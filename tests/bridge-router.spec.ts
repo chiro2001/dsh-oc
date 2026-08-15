@@ -22,7 +22,7 @@ const tempDirs: string[] = []
 
 function gitFixture(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-oc-git-'))
-  execFileSync('git', ['init', '-q'], { cwd: dir })
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir })
   execFileSync('git', ['config', 'user.email', 'e2e@dsh-oc.test'], { cwd: dir })
   execFileSync('git', ['config', 'user.name', 'dsh-oc e2e'], { cwd: dir })
   for (const [path, content] of Object.entries(files)) {
@@ -132,9 +132,24 @@ describe('bridge router: startup GET routes', () => {
     })
     expect((await request(server, 'GET', '/api/health')).body).toEqual({ healthy: true })
     expect((await request(server, 'POST', '/experimental/session/s1/background')).body).toBe(true)
-    expect((await request(server, 'GET', '/vcs')).body).toEqual({ branch: '' })
+    expect((await request(server, 'GET', '/vcs')).body).toEqual({})
     expect((await request(server, 'GET', '/experimental/workspace')).body).toEqual([])
     expect((await request(server, 'GET', '/experimental/workspace/status')).body).toEqual([])
+  })
+
+  it('serves real vcs info, status, diff and raw diff from the workspace', async () => {
+    const work = gitFixture({ 'a.txt': 'one\n' })
+    writeFileSync(join(work, 'a.txt'), 'two\n')
+    const { server } = await boot(fakeApi(), work)
+    const info = await request(server, 'GET', '/vcs')
+    expect(info.body).toMatchObject({ branch: 'main' })
+    const status = await request(server, 'GET', '/vcs/status')
+    expect(status.body).toEqual([{ file: 'a.txt', additions: 1, deletions: 1, status: 'modified' }])
+    const diff = await request(server, 'GET', '/vcs/diff')
+    expect(diff.body).toHaveLength(1)
+    expect((diff.body as Array<{ patch?: string }>)[0]?.patch).toContain('diff --git')
+    const raw = await request(server, 'GET', '/vcs/diff/raw')
+    expect(raw.body).toContain('diff --git')
   })
 
   it('setCwd changes /path and session create honors the directory query', async () => {

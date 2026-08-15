@@ -82,7 +82,7 @@ async function newRun(argv) {
   const resolvedToolArguments = toolArguments.replaceAll('@WORKDIR@', workdir)
 
   const dshEnv = { ...process.env, DSH_HOME: dshHome }
-  run('git', ['init', '-q'], { cwd: workdir })
+  run('git', ['init', '-q', '-b', 'main'], { cwd: workdir })
 
   run('dsh', ['plugin', '--profile', 'oc', 'add', addSpec], { env: dshEnv })
   run('dsh', ['plugin', '--profile', 'oc', 'add', '@deepseek-ai/dsh-llm-mock-server@0.1.0-rc.6'], { env: dshEnv })

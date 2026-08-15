@@ -168,7 +168,10 @@
 | `GET` | `/formatter` | json | `src/bridge/stubs.ts` |
 | `GET` | `/lsp` | json | `src/bridge/stubs.ts` |
 | `GET` | `/mcp` | json | `src/bridge/stubs.ts` |
-| `GET` | `/vcs` | json | `src/bridge/stubs.ts` |
+| `GET` | `/vcs` | json | `src/bridge/routes/vcs.ts`（真实 git 信息） |
+| `GET` | `/vcs/status` | json | `src/bridge/routes/vcs.ts` |
+| `GET` | `/vcs/diff` | json | `src/bridge/routes/vcs.ts` |
+| `GET` | `/vcs/diff/raw` | json | `src/bridge/routes/vcs.ts` |
 
 ### 测试覆盖
 
@@ -261,7 +264,6 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
-
 
 
 

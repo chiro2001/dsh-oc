@@ -33,6 +33,9 @@
   （单条查询，session 不匹配 404）、`DELETE /api/permission/saved/{id}`
   （删除 `sessionID:toolName` 内存授权）；`GET /api/permission/saved` 输出对齐
   SDK `PermissionSavedInfo`（`projectID/action/resource`，保留 `sessionID/grantedAt`）。
+- 真实 VCS 面：`GET /vcs`、`GET /vcs/status`、`GET /vcs/diff`、`GET /vcs/diff/raw`
+  从 stub 升级为真实 git 读取（当前分支、origin 默认分支、staged+unstaged
+  文件状态与行数、每文件/原始 unified diff；untracked 不进入 status）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温

@@ -154,7 +154,10 @@ GET /api/integration?location[directory]=...
 | `GET /experimental/console` | STUB | `{ consoleManagedProviders: [], switchableOrgCount: 0 }` |
 | `GET /experimental/capabilities` | MAP | `{ backgroundSubagents: true }`（dsh 后台子代理真实可用） |
 | `POST /experimental/session/{id}/background` | MAP | no-op 成功 `true`（dsh 会话服务端常驻） |
-| `GET /vcs` | STUB | `{ branch: '', status: [] }` 或空形状 |
+| `GET /vcs` | MAP | 真实 git 信息：`{ branch?, default_branch? }`（`git branch --show-current` + origin HEAD） |
+| `GET /vcs/status` | MAP | 真实文件状态 `VcsFileStatus[]`（staged+unstaged，跳过 untracked） |
+| `GET /vcs/diff` | MAP | 每文件 unified diff（`mode=git|branch`、`context` 可选） |
+| `GET /vcs/diff/raw` | MAP | 原始 unified diff 文本 |
 | `GET /experimental/workspace` | STUB | `[]` |
 | `GET /experimental/workspace/status` | STUB | 空状态 |
 | 其他未列路由 | LATER | 501 或 schema-valid 空响应 |

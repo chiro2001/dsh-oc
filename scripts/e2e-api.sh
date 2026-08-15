@@ -92,6 +92,23 @@ for path in \
 done
 echo "route matrix: $(grep -c ' yes$' "$ROUTE_MATRIX")/$(wc -l < "$ROUTE_MATRIX") passed"
 
+echo "== vcs assertions =="
+git -C "$E2E_WORKDIR" config user.email e2e@dsh-oc.test
+git -C "$E2E_WORKDIR" config user.name 'dsh-oc e2e'
+printf 'one\n' > "$E2E_WORKDIR/readme.txt"
+git -C "$E2E_WORKDIR" add readme.txt
+git -C "$E2E_WORKDIR" commit -qm initial
+printf 'two\n' >> "$E2E_WORKDIR/readme.txt"
+curl -s "$BRIDGE/vcs" | jq -e '.branch == "main"' >/dev/null
+echo "  /vcs reports branch main"
+curl -s "$BRIDGE/vcs/status" | jq -e \
+  'any(. == {"file":"readme.txt","additions":1,"deletions":0,"status":"modified"})' >/dev/null
+echo "  /vcs/status lists modified readme.txt"
+curl -s "$BRIDGE/vcs/diff" | jq -e 'length >= 1 and (.[0].patch | type) == "string"' >/dev/null
+echo "  /vcs/diff returns a per-file patch"
+curl -s "$BRIDGE/vcs/diff/raw" | grep -qa 'diff --git'
+echo "  /vcs/diff/raw returns the unified diff"
+
 echo "== key route shapes =="
 curl -s "$BRIDGE/path" | jq -e --arg w "$E2E_WORKDIR" '.directory == $w' >/dev/null
 echo "  /path.directory == workdir"
