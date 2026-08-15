@@ -17,7 +17,7 @@
   会话；切换后广播 `session.updated` 携带新 agent。
 - 退出提示说明：opencode 官方退出 splash（全量/`--mini`）无法替换，dsh-oc
   在会话有内容时于其下方输出一行说明（session id 属于 dsh，恢复用
-  `dsh --profile oc --session <id>`）。
+  `dsh --profile oc --session <id>`）；`DSH_OC_DISABLE_EXIT_NOTE=1` 可关闭。
 
 ### 工程化
 

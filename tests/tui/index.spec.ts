@@ -6,6 +6,7 @@ import {
   buildChildEnv,
   brandingSourceDir,
   DSH_OC_TUI_TIMESTAMPS,
+  exitNoteEnabled,
   filterSupportedArgs,
   helpRequested,
   installSignalForwarding,
@@ -260,6 +261,12 @@ describe('ocExitNote', () => {
     expect(note).toContain('不要直接运行 opencode 的恢复命令')
   })
 
+  it('can be disabled with DSH_OC_DISABLE_EXIT_NOTE', () => {
+    expect(exitNoteEnabled({})).toBe(true)
+    expect(exitNoteEnabled({ DSH_OC_DISABLE_EXIT_NOTE: '1' })).toBe(false)
+    expect(exitNoteEnabled({ DSH_OC_DISABLE_EXIT_NOTE: 'TRUE' })).toBe(false)
+    expect(exitNoteEnabled({ DSH_OC_DISABLE_EXIT_NOTE: '0' })).toBe(true)
+  })
 })
 
 describe('prepareOpenCodeTuiState', () => {

@@ -146,7 +146,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`a6de6ce`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`eebb1a6`（2026-08-16）。
 
 ### 路由注册表
 
@@ -156,73 +156,15 @@
 
 | Method | Route | Kind | 来源 |
 |---|---|---|---|
-| `GET` | `/agent` | json | `src/bridge/router.ts` |
-| `GET` | `/api/agent` | json | `src/bridge/router.ts` |
-| `GET` | `/api/command` | json | `src/bridge/router.ts` |
-| `GET` | `/api/integration` | json | `src/bridge/router.ts` |
-| `GET` | `/api/location` | json | `src/bridge/router.ts` |
-| `GET` | `/api/model` | json | `src/bridge/router.ts` |
-| `GET` | `/api/permission/saved` | json | `src/bridge/router.ts` |
-| `GET` | `/api/provider` | json | `src/bridge/router.ts` |
-| `GET` | `/api/reference` | json | `src/bridge/router.ts` |
-| `GET` | `/api/session` | json | `src/bridge/router.ts` |
-| `GET` | `/api/session/:sessionID` | json | `src/bridge/router.ts` |
-| `GET` | `/api/session/:sessionID/diff` | json | `src/bridge/router.ts` |
-| `GET` | `/api/session/:sessionID/message` | json | `src/bridge/router.ts` |
-| `GET` | `/api/session/:sessionID/permission` | json | `src/bridge/router.ts` |
-| `GET` | `/api/session/:sessionID/question` | json | `src/bridge/router.ts` |
-| `GET` | `/api/skill` | json | `src/bridge/router.ts` |
-| `GET` | `/command` | json | `src/bridge/router.ts` |
-| `GET` | `/config` | json | `src/bridge/router.ts` |
-| `GET` | `/config/providers` | json | `src/bridge/router.ts` |
 | `GET` | `/experimental/capabilities` | json | `src/bridge/stubs.ts` |
 | `GET` | `/experimental/console` | json | `src/bridge/stubs.ts` |
 | `GET` | `/experimental/resource` | json | `src/bridge/stubs.ts` |
 | `GET` | `/experimental/workspace` | json | `src/bridge/stubs.ts` |
 | `GET` | `/experimental/workspace/status` | json | `src/bridge/stubs.ts` |
 | `GET` | `/formatter` | json | `src/bridge/stubs.ts` |
-| `GET` | `/global/event` | sse | `src/bridge/router.ts` |
-| `GET` | `/integration` | json | `src/bridge/router.ts` |
 | `GET` | `/lsp` | json | `src/bridge/stubs.ts` |
 | `GET` | `/mcp` | json | `src/bridge/stubs.ts` |
-| `GET` | `/path` | json | `src/bridge/router.ts` |
-| `GET` | `/permission` | json | `src/bridge/router.ts` |
-| `GET` | `/project/current` | json | `src/bridge/router.ts` |
-| `GET` | `/project/global/directories` | json | `src/bridge/router.ts` |
-| `GET` | `/provider` | json | `src/bridge/router.ts` |
-| `GET` | `/provider/auth` | json | `src/bridge/router.ts` |
-| `GET` | `/question` | json | `src/bridge/router.ts` |
-| `GET` | `/reference` | json | `src/bridge/router.ts` |
-| `GET` | `/session` | json | `src/bridge/router.ts` |
-| `GET` | `/session/:id` | json | `src/bridge/router.ts` |
-| `GET` | `/session/:id/diff` | json | `src/bridge/router.ts` |
-| `GET` | `/session/:id/message` | json | `src/bridge/router.ts` |
-| `GET` | `/session/:id/todo` | json | `src/bridge/router.ts` |
-| `GET` | `/session/status` | json | `src/bridge/router.ts` |
-| `GET` | `/skill` | json | `src/bridge/router.ts` |
 | `GET` | `/vcs` | json | `src/bridge/stubs.ts` |
-| `PATCH` | `/session/:id` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/agent` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/compact` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/fork` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/model` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/permission/:requestID/reply` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/prompt` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/question/:requestID/reject` | json | `src/bridge/router.ts` |
-| `POST` | `/api/session/:sessionID/question/:requestID/reply` | json | `src/bridge/router.ts` |
-| `POST` | `/permission/:requestID/reply` | json | `src/bridge/router.ts` |
-| `POST` | `/question/:requestID/reject` | json | `src/bridge/router.ts` |
-| `POST` | `/question/:requestID/reply` | json | `src/bridge/router.ts` |
-| `POST` | `/session` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/abort` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/command` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/compact` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/fork` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/message` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/prompt` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/prompt_async` | json | `src/bridge/router.ts` |
-| `POST` | `/session/:id/summarize` | json | `src/bridge/router.ts` |
 
 ### 测试覆盖
 
@@ -230,13 +172,13 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 36 | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 76 | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
+| `tests/bridge-router.spec.ts` | 76 | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `tests/convert/session.spec.ts` | 8 | 01b5bf0 feat(bridge): show real durable session titles in the list |
+| `tests/convert/session.spec.ts` | 8 | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
 | `tests/perf.spec.ts` | 5 | 776d145 test(e2e): remove remaining machine-specific absolute paths |
@@ -245,7 +187,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 31 | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
+| `tests/tui/index.spec.ts` | 32 | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -258,7 +200,7 @@
 | `src/bridge/convert/model.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/session.ts` | 01b5bf0 feat(bridge): show real durable session titles in the list |
+| `src/bridge/convert/session.ts` | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -266,7 +208,12 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
+| `src/bridge/router.ts` | a40a0da refactor(bridge): split route registrations into src/bridge/routes.ts |
+| `src/bridge/routes.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
+| `src/bridge/routes/boot.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
+| `src/bridge/routes/permission.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
+| `src/bridge/routes/session-v1.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
+| `src/bridge/routes/session-v2.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
@@ -280,10 +227,10 @@
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `scripts/check-all.sh` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
-| `scripts/cleanup-merged-branches.sh` | f021570 docs(contrib): add contribution guide, issue/PR templates and branch cleanup tooling |
+| `scripts/cleanup-merged-branches.sh` | 2848dc8 fix(scripts): accept --apply/--remote flags before the target branch |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api.sh` | e256572 feat(bridge): session-scoped always permission memory |
-| `scripts/e2e-tui-abort.sh` | a6de6ce feat(bridge): enable Esc interrupt/cancel and preset inheritance for new sessions |
+| `scripts/e2e-tui-abort.sh` | 18f17a1 feat(bridge): broadcast session.updated agent after preset switch; harden abort e2e |
 | `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
@@ -305,10 +252,11 @@
 | `scripts/generate-tui-branding-art.mjs` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/perf-session-gen.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
 | `scripts/perf.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
-| `scripts/probe-opencode.mjs` | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
+| `scripts/probe-opencode.mjs` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

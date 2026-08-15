@@ -443,6 +443,15 @@ export function ocExitNote(): string {
   return '[dsh-oc] 上面是 opencode 的退出提示；session id 是 dsh 会话 id，恢复请使用 dsh --profile oc --session <id>，不要直接运行 opencode 的恢复命令'
 }
 
+/**
+ * Whether the exit hint is enabled. Set `DSH_OC_DISABLE_EXIT_NOTE=1` to turn
+ * it off for users who do not want the extra line after the TUI exits.
+ */
+export function exitNoteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env.DSH_OC_DISABLE_EXIT_NOTE?.toLowerCase()
+  return value !== '1' && value !== 'true' && value !== 'yes' && value !== 'on'
+}
+
 /** Input accepted by {@link resolveOpenCodeBinary}. */
 export type ResolveBinaryInput = BinaryResolverDeps & { config?: { binary?: string } }
 
@@ -539,7 +548,7 @@ export class OcTuiService extends Service {
           const needed = bridge.exitNoteNeeded
             ? await bridge.exitNoteNeeded().catch(() => false)
             : (bridge.hasNewActivity?.() ?? false)
-          if (needed) {
+          if (exitNoteEnabled(process.env) && needed) {
             process.stdout.write(`${ocExitNote()}\n`)
           }
           requestExit(this.ctx, code)
