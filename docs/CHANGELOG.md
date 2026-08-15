@@ -72,6 +72,8 @@
 
 ### 修复
 
+- `/api/session/active` 只在会话实际 `running` 时返回该会话，空闲/不存在时返回
+  `{ data: {} }`（此前无条件标记为 running）。
 - 文档化 SSE 文本 delta 成对重复的已知行为（dsh 双编码 + mux 重放；TUI 以
   `message.updated` 全量文本渲染，实测不受影响）。
 - Thought（reasoning）时长：`end` 改为最后一条 reasoning chunk 的时间，不再错误地

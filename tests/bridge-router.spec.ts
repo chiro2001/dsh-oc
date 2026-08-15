@@ -923,19 +923,27 @@ describe('bridge router: session routes', () => {
   })
 
   it('reports the active session through /api/session/active', async () => {
-    const { server } = await boot(fakeApi())
+    const base = fakeApi()
+    const api = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [{
+          sessionId: 'new-session' as never,
+          updatedAt: Date.now(),
+          running: true,
+          blank: false,
+        }] }),
+      },
+    }
+    const { server } = await boot(api)
     const empty = await request(server, 'GET', '/api/session/active')
     expect(empty.status).toBe(200)
     expect(empty.body).toEqual({ data: {} })
     await request(server, 'POST', '/session', {})
     const active = await request(server, 'GET', '/api/session/active')
     expect(active.status).toBe(200)
-    const data = (active.body as { data: Record<string, { type: string }> }).data
-    const keys = Object.keys(data)
-    expect(keys).toHaveLength(1)
-    const key = keys[0]
-    expect(key).toBeDefined()
-    expect(key !== undefined && data[key]).toEqual({ type: 'running' })
+    expect(active.body).toEqual({ data: { 'new-session': { type: 'running' } } })
   })
 
   it('waits for a session to become idle', async () => {

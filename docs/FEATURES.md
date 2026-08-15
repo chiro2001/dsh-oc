@@ -148,7 +148,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`6133750`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`ccfed90`（2026-08-16）。
 
 ### 路由注册表
 
@@ -259,6 +259,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

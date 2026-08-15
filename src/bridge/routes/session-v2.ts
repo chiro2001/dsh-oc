@@ -70,7 +70,11 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
 
   register('GET', '/api/session/active', 'json', async (_req, ctx) => {
     const id = ctx.state.currentSessionId
-    return R.json(200, { data: id === undefined ? {} : { [id]: { type: 'running' } } })
+    if (id === undefined) return R.json(200, { data: {} })
+    const list = await R.cachedSessionList(ctx)
+    const item = list.find((entry) => String(entry.sessionId) === id)
+    if (item === undefined || !item.running) return R.json(200, { data: {} })
+    return R.json(200, { data: { [id]: { type: 'running' } } })
   })
 
   register('POST', '/api/session/:sessionID/wait', 'json', async (req, ctx) => {
