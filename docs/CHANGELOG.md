@@ -32,6 +32,9 @@
 - `scripts/cleanup-merged-branches.sh`：列出/删除已并入 main 的遗留分支
   （默认 dry-run，`--apply` 本地删除，`--remote` 同步删除远端）。
 - `pnpm run e2e` / `pnpm run e2e:api`：一键跑全量或 API 子集 e2e。
+- `scripts/e2e-tui-permission.sh`：真实 TUI 权限/提问 e2e（workspace-write +
+  mock LLM 升级工具调用），覆盖 Allow once、Allow always + 会话内自动放行、
+  Reject（错误回传且不落盘）与 `ask_user_question` 选项对话框。
 - `scripts/perf.mjs` 新增 `measurements.titleCoverage`：量化列表真实标题覆盖率。
 - `e2e-tui-abort.sh`：mini 分支改为等 SSE 出现真实流式增量后再按 Esc，断言确实
   打断进行中的流（长 mock 开启 `repeatLast`，修复此前第二次请求被 500 拒绝的假通过）。
