@@ -571,11 +571,12 @@ export function assistantMessageFromEvent(
   opts: MessageConvertOptions,
   blockStart?: (index: number, blockType: string) => number | undefined,
   created?: number,
+  parentID?: string,
 ): V1MessageEntry {
   const id = String(event.data.message.id)
   const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart)
   return {
-    info: assistantMessageInfo(event.data.message, event.time, id, opts, event.data.usage, created),
+    info: assistantMessageInfo(event.data.message, event.time, parentID ?? id, opts, event.data.usage, created),
     parts,
   }
 }

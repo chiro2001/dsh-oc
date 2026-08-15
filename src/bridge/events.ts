@@ -430,6 +430,7 @@ export class MuxEventTranslator {
             messageOptions(sessionId, this.deps),
             (index, blockType) => state.blockStarts.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`),
             created,
+            state.lastUserMessageId,
           )
           return {
             info: entry.info as unknown as Record<string, unknown>,

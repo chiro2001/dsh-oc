@@ -710,7 +710,7 @@ export function createBridgeRouter(
         )
         for await (const frame of stream) {
           for (const event of translator.translate(frame)) {
-            hub.broadcast(event)
+            hub.send(client, event)
           }
         }
       } catch (error) {

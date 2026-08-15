@@ -87,6 +87,11 @@ describe('bridge events: session event mapping', () => {
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
         event: sessionEvent('turn/start', { turn: 1 }, 1, 1000),
       }),
       frame({
@@ -131,6 +136,7 @@ describe('bridge events: session event mapping', () => {
 
     const firstPartIndex = events.findIndex((event) =>
       event.payload.type === 'message.part.updated'
+      && String((event.payload.properties.part as { id?: string }).id).startsWith('prt_stream:')
       && (event.payload.properties.part as { type?: string }).type === 'text')
     expect(firstPartIndex).toBeGreaterThan(provisionalIndex)
     expect(events[firstPartIndex]?.payload.properties).toMatchObject({
@@ -155,7 +161,8 @@ describe('bridge events: session event mapping', () => {
     expect(removedIndex).toBeGreaterThanOrEqual(0)
     expect(removedIndex).toBeLessThan(finalIndex)
 
-    const finalInfo = events[finalIndex]?.payload.properties.info as { time: { created: number; completed: number } }
+    const finalInfo = events[finalIndex]?.payload.properties.info as { time: { created: number; completed: number }; parentID?: string }
+    expect(finalInfo.parentID).toBe('msg-user-1')
     expect(finalInfo.time.created).toBe(1100)
     expect(finalInfo.time.completed).toBe(2000)
     expect(finalInfo.time.created).toBeLessThan(finalInfo.time.completed)
@@ -174,6 +181,11 @@ describe('bridge events: session event mapping', () => {
   it('streams reasoning chunks as reasoning parts without an end until the final message', () => {
     const { translate } = translator()
     const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
       frame({
         type: 'session/event',
         sessionId: 's1' as never,

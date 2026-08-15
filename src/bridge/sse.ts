@@ -38,16 +38,14 @@ export class SseHub {
     client.controller.abort()
   }
 
-  broadcast(event: BridgeGlobalEvent): void {
+  send(client: SseClient, event: BridgeGlobalEvent): void {
+    if (client.closed || client.res.destroyed) return
     const data = JSON.stringify(event)
-    for (const client of this.clients) {
-      if (client.closed || client.res.destroyed) continue
-      try {
-        client.res.write(`id: ${event.payload.id}\ndata: ${data}\n\n`)
-      } catch (error) {
-        this.log(`[bridge/sse] write to client ${client.id} failed: ${error instanceof Error ? error.message : String(error)}`)
-        this.remove(client)
-      }
+    try {
+      client.res.write(`id: ${event.payload.id}\ndata: ${data}\n\n`)
+    } catch (error) {
+      this.log(`[bridge/sse] write to client ${client.id} failed: ${error instanceof Error ? error.message : String(error)}`)
+      this.remove(client)
     }
   }
 
