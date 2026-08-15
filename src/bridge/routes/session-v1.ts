@@ -32,6 +32,18 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     return R.json(200, status)
   })
 
+  register('GET', '/session/:id/children', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    const list = await R.cachedSessionList(ctx)
+    const children = list.filter((item) => String(item.parentSessionId) === id)
+    R.recordSessionSummaries(ctx, children)
+    await R.warmListTitles(ctx, children)
+    return R.json(200, children.map((item) => convertSessionSummary(item, {
+      cwd: ctx.state.sessionDirectories.get(String(item.sessionId)) ?? ctx.cwd,
+      title: ctx.state.sessionTitleFor(String(item.sessionId)),
+    })))
+  })
+
   register('POST', '/session', 'json', (req, ctx) => R.createSession(req, ctx, false))
 
   register('POST', '/session/:id/fork', 'json', (req, ctx) => R.forkSession(req, ctx, false))

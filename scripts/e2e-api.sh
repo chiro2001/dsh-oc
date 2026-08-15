@@ -80,6 +80,7 @@ for path in \
   "/vcs" \
   "/experimental/workspace" \
   "/experimental/workspace/status" \
+  "/session/dummy/children" \
   "/api/model?location[directory]=$E2E_WORKDIR" \
   "/api/provider?location[directory]=$E2E_WORKDIR" \
   "/api/integration?location[directory]=$E2E_WORKDIR" \
