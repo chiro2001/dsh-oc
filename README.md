@@ -17,20 +17,87 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 - [docs/PLAN.md](docs/PLAN.md)：总体实现规划、阶段、验收标准。
 - [docs/PROTOCOL.md](docs/PROTOCOL.md)：OpenCode TUI 协议探针结果、路由兼容矩阵、SSE 映射。
 
-## 状态
-
-规划已完成，实现待开始。当前仓库只包含文档，尚无 `src/` 实现。
-
-## 目标使用方式（实现完成后）
+## 安装使用
 
 ```bash
 dsh plugin --profile oc add @deepseek-ai/dsh-oc
 dsh --profile oc
 ```
 
-## 关键边界
+首次启动会惰性下载并缓存 opencode 官方二进制（版本锁定 `1.18.18`，按
+`opencode-version.json` / `opencode-assets.json` 校验 sha256，支持代理与镜像）。
+也可以通过环境变量控制二进制来源：
 
-- 不 fork opencode 源码；TUI 使用官方 `opencode-ai` 发布物，版本与 sha256 锁定。
-- opencode 二进制只运行 `attach` 客户端模式，不创建 opencode server/agent/session。
-- opencode 的配置、会话和缓存隔离在 `$DSH_HOME/opencode` 下。
-- 首版不覆盖 opencode 全部路由；未实现能力返回 schema-valid 空数据或 501。
+- `DSH_OC_OPENCODE_BIN`：绝对路径指向已安装的 opencode 可执行文件（优先于下载）。
+- `DSH_OC_OPENCODE_MIRROR`：GitHub Release asset 的镜像前缀，用于下载源不可达时。
+
+## 本地开发
+
+```bash
+pnpm install
+pnpm build
+pnpm typecheck
+pnpm test
+dsh plugin --profile oc add .
+dsh --profile oc
+```
+
+## 参数透传
+
+支持透传给 `opencode attach` 的参数：
+
+- `--continue` / `-c`
+- `--session` / `-s`
+- `--fork`
+- `--dir`
+- `--mini`
+- `--print-logs`
+- `--log-level`
+
+示例：
+
+```bash
+dsh --profile oc --session <session-id>
+dsh --profile oc --dir ~/project --mini
+```
+
+其它参数（例如 `--model X`）会被显式打印 `ignored unsupported arg` 警告并忽略，
+不会静默丢弃。
+
+## 数据隔离
+
+opencode 的配置、数据、状态与缓存全部隔离在 `$DSH_HOME/opencode` 下：
+
+```text
+$DSH_HOME/opencode/{config,data,state,cache}
+```
+
+模型与凭据由 dsh 后端管理；dsh-oc 不向 opencode 注入 DeepSeek provider/key。
+
+## 自测
+
+```bash
+bash scripts/e2e-api.sh        # HTTP/SSE 路由矩阵 + 会话循环 + 权限流
+bash scripts/e2e-tui-boot.sh   # 真实 opencode TUI 启动/退出 + 终端恢复
+bash scripts/e2e-tui-turn.sh   # 真实 TUI 键盘输入完成一轮对话
+```
+
+tarball 验证模式（用 npm tarball 而不是本地路径安装）：
+
+```bash
+pnpm pack --pack-destination /tmp/dsh-oc-pack-release
+TGZ="$(echo /tmp/dsh-oc-pack-release/deepseek-ai-dsh-oc-0.1.0-rc.1.tgz)"
+DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-api.sh
+DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-boot.sh
+DSH_OC_E2E_ADD_SPEC="$TGZ" bash scripts/e2e-tui-turn.sh
+```
+
+三个脚本必须全部输出 `PASSED`；该模式下 profile 安装的是 tarball 而非本地路径。
+
+## 已知限制
+
+- **`always` 权限降级**：TUI 的 `Allow always` 映射为 dsh 的 `allowed-once`，并在日志中提示。
+- **文件附件**：首版只支持文本 prompt；图片/file part 后续按
+  `apiProxy.sessions.prompt` 的 `PromptContentPart` 能力补齐。
+- **未实现路由**：返回 schema-valid 空数据或显式 501，不伪造 diff。
+- **模型/权限**：由 dsh 后端管理；TUI 内模型选择器显示 dsh 模型目录。

@@ -7,16 +7,16 @@ export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:14514}"
 
 E2E_REPO_ROOT="$(git rev-parse --show-toplevel)"
 case "$E2E_REPO_ROOT" in
-  /home/chiro/projects/dsh-oc/dsh-oc-feat-*)
+  /home/chiro/projects/dsh-oc/dsh-oc-*)
     ;;
   *)
-    echo "e2e: must run from /home/chiro/projects/dsh-oc/dsh-oc-feat-* (got $E2E_REPO_ROOT)" >&2
+    echo "e2e: must run from /home/chiro/projects/dsh-oc/dsh-oc-* (got $E2E_REPO_ROOT)" >&2
     exit 2
     ;;
 esac
 E2E_BRANCH="$(git -C "$E2E_REPO_ROOT" branch --show-current)"
-if [[ "$E2E_BRANCH" != "feat-profile-fix" ]]; then
-  echo "e2e: branch must be feat-profile-fix (got $E2E_BRANCH)" >&2
+if [[ ! "$E2E_BRANCH" =~ ^(chore-.*|main|feat-.*)$ ]]; then
+  echo "e2e: branch must be chore-*/main/feat-* (got $E2E_BRANCH)" >&2
   exit 2
 fi
 

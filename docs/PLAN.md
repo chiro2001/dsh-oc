@@ -673,3 +673,39 @@ spawn(opencodeBin, ['attach', bridgeUrl, ...tuiArgs], {
   - `packages/core/agent/src/index.ts`
   - `packages/bundle/{base,web-app}/cordis.patch.yml`
   - `apps/cli/src/{args,profile-boot,plugin}.ts`
+
+---
+
+## 14. 实施状态快照（2026-08-15）
+
+> 本章是后续追加的当前实现状态，第 1-13 节的历史规划原样保留。
+
+### 已落地
+
+| 阶段 | 状态 | 说明 |
+|---|---|---|
+| scaffold | ✅ 已落地 | `src/`、`tests/`、`tsdown.config.ts`、`cordis.patch.yml`、`opencode-version.json`/`opencode-assets.json` 齐备 |
+| bridge | ✅ 已落地 | oc-bridge：OpenCode v1/v2 路由、SSE、会话/模型/权限/问题转换 |
+| tui | ✅ 已落地 | oc-tui：二进制解析/下载/校验、`attach` 参数过滤、信号转发、数据隔离 |
+| e2e | ✅ 已落地 | `scripts/e2e-api.sh`、`e2e-tui-boot.sh`、`e2e-tui-turn.sh` 与 `tests/e2e/{env.mjs,common.sh}` 驱动 |
+| profile-fix | ✅ 已落地 | 宿主行（`storage`/`storage-json`/`storage-domain`/`webserver`）并入 bundle patch，`dsh --profile oc` 直接启动 |
+| release | ✅ 已落地 | README/PROTOCOL/PLAN 收尾；支持 `DSH_OC_E2E_ADD_SPEC=<tgz>` 的 npm tarball e2e |
+
+### 关键提交
+
+```text
+68d8be5 fix(profile): bundle storage and webserver host rows so dsh --profile oc boots directly
+042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach
+beca54d merge: integrate oc-bridge and oc-tui
+0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy
+81920ee feat(tui): opencode binary resolution, download, spawn and signal handling
+```
+
+后续 release 提交：`chore(release): documentation and npm tarball end-to-end verification`（本快照提交时一并写入）。
+
+### 验证结果
+
+- `pnpm install` / `pnpm build` / `pnpm typecheck` / `pnpm test` / `pnpm pack:dry` 全部通过，`pack:dry` 无 warning/error。
+- 本地路径安装 e2e（`dsh plugin --profile oc add .`）：三个脚本全部 `PASSED`。
+- npm tarball 安装 e2e（`DSH_OC_E2E_ADD_SPEC=<tgz>`）：三个脚本全部 `PASSED`，profile 中安装的是 tarball。
+- tarball 内容包含 `lib/index.js`、`lib/bridge/**`、`lib/tui/**`、`cordis.patch.yml`、`opencode-version.json`、`opencode-assets.json`、`package.json`、`README.md`。

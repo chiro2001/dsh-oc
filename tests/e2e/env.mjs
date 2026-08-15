@@ -4,7 +4,7 @@
 //   node tests/e2e/env.mjs new-run [--label NAME] [--runid ID] \
 //     [--permission danger-full-access|ask] [--sequence a,b] \
 //     [--repeat-last 0|1] [--success-text TEXT] \
-//     [--tool-name NAME] [--tool-arguments JSON]
+//     [--tool-name NAME] [--tool-arguments JSON] [--add-spec PATH_OR_PKG]
 //   node tests/e2e/env.mjs info <runid>
 //   node tests/e2e/env.mjs stop <runid>
 //
@@ -26,7 +26,7 @@ const e2eRoot = join(repoRoot, '.e2e')
 const HELP = `usage:
   new-run [--label NAME] [--runid ID] [--permission MODE] [--sequence CSV]
           [--repeat-last 0|1] [--success-text TEXT] [--tool-name NAME]
-          [--tool-arguments JSON]
+          [--tool-arguments JSON] [--add-spec PATH_OR_PKG]
   info <runid>
   stop <runid>`
 
@@ -51,7 +51,9 @@ function run(command, args, options = {}) {
 
 function assertBranch() {
   const branch = run('git', ['branch', '--show-current'], { cwd: repoRoot }).trim()
-  if (branch !== 'feat-profile-fix') fail(`branch must be feat-profile-fix, got ${branch}`)
+  if (!/^(chore-.*|main|feat-.*)$/.test(branch)) {
+    fail(`branch must be chore-*/main/feat-*, got ${branch}`)
+  }
 }
 
 async function newRun(argv) {
@@ -67,6 +69,7 @@ async function newRun(argv) {
   const toolName = option(argv, '--tool-name') ?? 'bash'
   const toolArguments = option(argv, '--tool-arguments')
     ?? '{"command":"echo dsh-oc-e2e-tool","description":"e2e tool call","sandbox_permissions":"danger-full-access","justification":"e2e approval flow"}'
+  const addSpec = option(argv, '--add-spec') ?? process.env.DSH_OC_E2E_ADD_SPEC ?? repoRoot
 
   const runDir = join(e2eRoot, runid)
   if (existsSync(runDir)) fail(`run already exists: ${runid}`)
@@ -78,7 +81,7 @@ async function newRun(argv) {
   const dshEnv = { ...process.env, DSH_HOME: dshHome }
   run('git', ['init', '-q'], { cwd: workdir })
 
-  run('dsh', ['plugin', '--profile', 'oc', 'add', repoRoot], { env: dshEnv })
+  run('dsh', ['plugin', '--profile', 'oc', 'add', addSpec], { env: dshEnv })
   run('dsh', ['plugin', '--profile', 'oc', 'add', '@deepseek-ai/dsh-llm-mock-server@0.1.0-rc.6'], { env: dshEnv })
 
   const profileDir = join(dshHome, 'profiles', 'oc')
@@ -188,6 +191,7 @@ async function newRun(argv) {
     sequence,
     repeatLast,
     successText,
+    addSpec,
   }
   writeFileSync(join(runDir, 'run.json'), `${JSON.stringify(facts, null, 2)}\n`)
   process.stdout.write(`${JSON.stringify(facts)}\n`)

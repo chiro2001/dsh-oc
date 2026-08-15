@@ -283,10 +283,10 @@ gh api repos/anomalyco/opencode/releases/tags/v1.18.18 \
 4. **session diff**：无 produced-files 投影时返回 `[]`，不伪造 diff。
 5. **opencode v1/v2 双协议**：任何升级必须重新跑第 2 节探针并更新本文件。
 
-## 9. feat-e2e 实测实现状态（2026-08-15）
+## 9. e2e 实测实现状态（2026-08-15）
 
-下列状态来自本 worktree 的真实 e2e（mock LLM + dsh 0.1.0-rc.6 + opencode
-1.18.18，TUI 与 bridge 均实际跑通）：
+下列状态来自 `chore-release` 分支 profile-fix 之后的真实 e2e（mock LLM +
+dsh 0.1.0-rc.6 + opencode 1.18.18，TUI 与 bridge 均实际跑通）：
 
 | 路由/能力 | 状态 | 备注 |
 |---|---|---|
@@ -302,3 +302,4 @@ gh api repos/anomalyco/opencode/releases/tags/v1.18.18 \
 | `DSH_PERMISSION_MODE=ask` | 不支持 | dsh 只接受 `read-only`/`workspace-write`/`danger-full-access`；approval=ask 用 `workspace-write` |
 | oc profile 宿主行 | 已并入 bundle patch | `storage`/`storage-json`/`storage-domain`/`webserver` 已由 `cordis.patch.yml` 挂载；`dsh --profile oc` 直接启动（无需宿主 overlay） |
 | `--print-logs` | 透传 | oc-tui 已把 `--print-logs` 传给 `opencode attach`（opencode 顶层全局选项，设置 `OPENCODE_PRINT_LOGS=1`） |
+| tarball 安装 e2e | PASSED | `DSH_OC_E2E_ADD_SPEC=<tgz>` 下 `e2e-api.sh` / `e2e-tui-boot.sh` / `e2e-tui-turn.sh` 全部通过；profile 安装的是 npm tarball，不再使用本地路径 |
