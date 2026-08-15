@@ -247,6 +247,9 @@ describe('bridge router: session routes', () => {
     const v2 = await request(server, 'GET', '/api/session?directory=/work')
     expect((v2.body as { data: Array<{ id: string }> }).data.map((entry) => entry.id)).toEqual(['s1'])
 
+    const status = await request(server, 'GET', '/session/status?directory=/other')
+    expect(status.body).toEqual({ s2: { type: 'busy' } })
+
     const all = await request(server, 'GET', '/session')
     expect((all.body as Array<{ id: string }>).map((entry) => entry.id)).toEqual(['s1', 's2'])
   })

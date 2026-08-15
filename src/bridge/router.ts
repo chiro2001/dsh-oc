@@ -1292,7 +1292,7 @@ export function createBridgeRouter(
   register('GET', '/session/status', 'json', async (_req, ctx) => {
     const list = await rpc(ctx, 'session.list', {})
     const status: Record<string, SessionStatus> = {}
-    for (const item of list.items) {
+    for (const item of filterSessionsByDirectory(list.items, _req.query.get('directory') ?? undefined)) {
       status[String(item.sessionId)] = item.running ? { type: 'busy' } : { type: 'idle' }
     }
     return json(200, status)
