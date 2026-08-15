@@ -164,6 +164,7 @@ GET /api/integration?location[directory]=...
 | 路由 | 分类 | dsh 数据源 / stub 形状 |
 |---|---|---|
 | `GET /api/location` | MAP | `{ directory: cwd }` |
+| `GET /api/health` | MAP | `{ healthy: true }`（客户端探活） |
 | `GET /api/agent` | STUB/LATER | `[]` |
 | `GET /api/integration` | STUB | `[]` |
 | `GET /api/model` | MAP | `apiProxy.llm.models` |

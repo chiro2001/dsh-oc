@@ -130,6 +130,7 @@ describe('bridge router: startup GET routes', () => {
     expect((await request(server, 'GET', '/experimental/capabilities')).body).toEqual({
       backgroundSubagents: true,
     })
+    expect((await request(server, 'GET', '/api/health')).body).toEqual({ healthy: true })
     expect((await request(server, 'POST', '/experimental/session/s1/background')).body).toBe(true)
     expect((await request(server, 'GET', '/vcs')).body).toEqual({ branch: '' })
     expect((await request(server, 'GET', '/experimental/workspace')).body).toEqual([])
