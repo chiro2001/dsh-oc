@@ -158,6 +158,29 @@ if [[ -z "$COMPACT_HINT" ]]; then
 fi
 echo "  /compact outcome visible: $COMPACT_HINT"
 
+echo "== /help slash command =="
+tmux send-keys -t "$E2E_TUI_SESSION" "/help" Enter
+tmux send-keys -t "$E2E_TUI_SESSION" Enter
+
+HELP_HINT=""
+deadline=$((SECONDS + 45))
+while (( SECONDS < deadline )); do
+  e2e_tui_capture "$E2E_RUN_DIR/tui-help-in-tui.txt"
+  for pattern in "核心能力" "docs/FEATURES.md" "dsh-oc"; do
+    if grep -qa "$pattern" "$E2E_RUN_DIR/tui-help-in-tui.txt"; then
+      HELP_HINT="$pattern"
+      break 2
+    fi
+  done
+  sleep 1
+done
+if [[ -z "$HELP_HINT" ]]; then
+  echo "e2e: /help result not visible in TUI pane" >&2
+  tail -60 "$E2E_RUN_DIR/tui-help-in-tui.txt" >&2 || true
+  exit 1
+fi
+echo "  /help result visible: $HELP_HINT"
+
 echo "== exit through prompt submit =="
 e2e_tui_exit
 e2e_tui_capture "$E2E_RUN_DIR/tui-command-after.txt"
