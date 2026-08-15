@@ -25,6 +25,7 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 - [docs/PROTOCOL.md](docs/PROTOCOL.md)：OpenCode TUI 协议探针结果、路由兼容矩阵、SSE 映射。
 - [docs/FEATURES.md](docs/FEATURES.md)：当前功能支持矩阵（自动追踪）。
 - [docs/ROADMAP.md](docs/ROADMAP.md)：下一阶段需求与验收标准。
+- [docs/CHANGELOG.md](docs/CHANGELOG.md)：版本变更记录。
 - [docs/FEATURES.md](docs/FEATURES.md)：功能支持状态矩阵（含自动追踪部分）。
 
 ## 开发完成状态（2026-08-15）
@@ -36,6 +37,14 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
   GitHub Actions CI（build/typecheck/test/probe）。
 - 详细状态与验收方式见 [docs/ROADMAP.md](docs/ROADMAP.md) 与
   [docs/FEATURES.md](docs/FEATURES.md)。
+
+## 近期更新（2026-08-16）
+
+- 会话列表真实标题补读（小规模全量、大列表后台补温）。
+- Esc 打断/取消（全量双按、mini 单按），`/preset` 新会话继承 preset。
+- 退出 splash 下方输出 dsh 恢复说明。
+- 路由注册按域拆分（`src/bridge/routes/`），协议探针自动扫描。
+- push 自动跑 API e2e 子集；完整变更见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
 
 ## 安装使用
 
