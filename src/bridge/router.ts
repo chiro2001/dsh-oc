@@ -380,6 +380,47 @@ async function skillList(
   }
 }
 
+/** dsh skills exposed as opencode v1 slash commands. */
+async function skillCommandsV1(
+  ctx: BridgeRouteContext,
+  directory: string | undefined,
+): Promise<V1Command[]> {
+  return (await skillList(ctx, directory)).map((skill) => ({
+    name: skill.name,
+    description: skill.description,
+    template: skill.name,
+  }))
+}
+
+/** dsh skills exposed as opencode v2 slash commands. */
+async function skillCommandsV2(
+  ctx: BridgeRouteContext,
+  directory: string | undefined,
+): Promise<CommandV2Info[]> {
+  return (await skillList(ctx, directory)).map((skill) => ({
+    name: skill.name,
+    template: skill.name,
+    description: skill.description,
+  }))
+}
+
+/** Skill catalog for one specific session (used by the command route). */
+async function skillListForSession(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+): Promise<Array<{ name: string; description: string }>> {
+  try {
+    const result = await rpc(ctx, 'skill.list', { sessionId: sid(sessionId) })
+    return result.skills.map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+    }))
+  } catch (error) {
+    ctx.log(`[bridge] skill.list failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+    return []
+  }
+}
+
 function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
   if (view.summary) {
     return convertSessionSummary(view.summary, {
@@ -1386,7 +1427,12 @@ export function createBridgeRouter(
   // and the second Enter executes through `POST /session/:id/command`. The
   // prompt routes below additionally capture `/preset` typed with a trailing
   // space (or after Esc), so every path ends with a visible SSE result.
-  register('GET', '/command', 'json', async () => json(200, [PRESET_COMMAND_V1, GOAL_COMMAND_V1, HELP_COMMAND_V1]))
+  register('GET', '/command', 'json', async (req, ctx) => json(200, [
+    PRESET_COMMAND_V1,
+    GOAL_COMMAND_V1,
+    HELP_COMMAND_V1,
+    ...(await skillCommandsV1(ctx, req.query.get('directory') ?? undefined)),
+  ]))
   register('GET', '/skill', 'json', async (req, ctx) => json(200, await skillList(ctx, req.query.get('directory') ?? undefined)))
   for (const bare of ['/reference', '/integration']) {
     register('GET', bare, 'json', async () => json(200, []))
@@ -1402,7 +1448,12 @@ export function createBridgeRouter(
 
   register('GET', '/api/command', 'json', async (_req, ctx) => json(200, {
     location: locationInfo(ctx),
-    data: [PRESET_COMMAND_V2, GOAL_COMMAND_V2, HELP_COMMAND_V2],
+    data: [
+      PRESET_COMMAND_V2,
+      GOAL_COMMAND_V2,
+      HELP_COMMAND_V2,
+      ...(await skillCommandsV2(ctx, _req.query.get('directory') ?? undefined)),
+    ],
   }))
   register('GET', '/api/skill', 'json', async (req, ctx) => json(200, {
     location: locationInfo(ctx),
@@ -1558,6 +1609,17 @@ export function createBridgeRouter(
     if (name === 'help') {
       const outcome = runHelpCommand(ctx, id, argumentsRaw)
       return json(200, pendingAssistantPlaceholder(id, cwd, outcome.text))
+    }
+    const skills = await skillListForSession(ctx, id)
+    if (skills.some((skill) => skill.name === name)) {
+      const promptText = argumentsRaw.trim() === '' ? `/${name}` : `/${name} ${argumentsRaw.trim()}`
+      await rpc(ctx, 'session.prompt', {
+        sessionId: sid(id),
+        mode: 'queue',
+        content: [{ type: 'text', text: promptText }],
+      })
+      ctx.state.invalidateSession(id)
+      return json(200, pendingAssistantPlaceholder(id, cwd))
     }
     throw badRequest(`unsupported command "${command}"`)
   })

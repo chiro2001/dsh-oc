@@ -411,6 +411,46 @@ describe('bridge router: session routes', () => {
       location: { directory: '/work' },
       data: [{ name: 'code-review', description: 'Review code before merge' }],
     })
+
+    const commands = await request(server, 'GET', '/command')
+    expect((commands.body as Array<{ name: string }>).map((entry) => entry.name)).toContain('code-review')
+    const v2Commands = await request(server, 'GET', '/api/command')
+    expect((v2Commands.body as { data: Array<{ name: string }> }).data.map((entry) => entry.name))
+      .toContain('code-review')
+  })
+
+  it('runs a skill command through the prompt path', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        prompt: async (request) => {
+          calls.push({ method: 'session.prompt', payload: request.payload })
+          return okRpc({ accepted: true })
+        },
+      },
+      skills: {
+        list: async () => okRpc({
+          skills: [{ name: 'code-review', description: 'Review code', modelInvocable: true }],
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/command', {
+      command: 'code-review',
+      arguments: 'strict',
+    })
+    expect(result.status).toBe(200)
+    expect(calls[0]).toMatchObject({
+      method: 'session.prompt',
+      payload: {
+        sessionId: 's1',
+        mode: 'queue',
+        content: [{ type: 'text', text: '/code-review strict' }],
+      },
+    })
   })
 
   it('returns an empty skill catalog without sessions', async () => {
