@@ -105,4 +105,8 @@ export function registerBootRoutes(register: RouteRegistrar): void {
     })),
   }))
 
+  // dsh sessions are always server-side and the `subagent` tool already runs
+  // in the background, so "detach into background" is a no-op success.
+  register('POST', '/experimental/session/:sessionID/background', 'json', async () => R.json(200, true))
+
 }

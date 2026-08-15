@@ -149,7 +149,8 @@ GET /api/integration?location[directory]=...
 | `GET /formatter` | STUB | `[]` |
 | `GET /experimental/resource` | STUB | `[]` |
 | `GET /experimental/console` | STUB | `{ consoleManagedProviders: [], switchableOrgCount: 0 }` |
-| `GET /experimental/capabilities` | STUB | `{ backgroundSubagents: false }` |
+| `GET /experimental/capabilities` | MAP | `{ backgroundSubagents: true }`（dsh 后台子代理真实可用） |
+| `POST /experimental/session/{id}/background` | MAP | no-op 成功 `true`（dsh 会话服务端常驻） |
 | `GET /vcs` | STUB | `{ branch: '', status: [] }` 或空形状 |
 | `GET /experimental/workspace` | STUB | `[]` |
 | `GET /experimental/workspace/status` | STUB | 空状态 |

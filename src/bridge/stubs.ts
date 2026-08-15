@@ -14,7 +14,7 @@ export const stubRoutes: Route[] = [
     switchableOrgCount: 0,
   }),
   jsonRoute('GET', '/experimental/capabilities', {
-    backgroundSubagents: false,
+    backgroundSubagents: true,
   }),
   jsonRoute('GET', '/vcs', { branch: '' }),
   jsonRoute('GET', '/experimental/workspace', []),

@@ -442,7 +442,9 @@ metadata     = dsh meta（JSON-safe）
 `GET /lsp`、`/mcp`、`/formatter`、`/experimental/resource`、`/experimental/console`、`/experimental/capabilities`、`/vcs`、`/experimental/workspace*`：
 
 - 返回 **合法空数组/空对象**，不返回 HTML 或裸 500。
-- `experimental.capabilities` 必须返回 `{ backgroundSubagents: false }`。
+- `experimental.capabilities` 返回 `{ backgroundSubagents: true }`；dsh 会话
+  由服务端常驻、`subagent` 工具默认后台运行，`POST /experimental/session/{id}/background`
+  为 no-op 成功（返回 `true`）。
 - `vcs` 返回 `{ branch: '', status: [] }` 等最小形状。
 - 所有 stub 用官方 opencode server 的同路由真实响应作为 fixture，校验 schema。
 

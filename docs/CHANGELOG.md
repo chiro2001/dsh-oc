@@ -8,6 +8,10 @@
 
 ### 新增
 
+- 后台子代理能力开启：`GET /experimental/capabilities` 返回
+  `{ backgroundSubagents: true }`，并新增
+  `POST /experimental/session/{id}/background` no-op 成功路由（dsh 会话
+  服务端常驻，`subagent` 工具默认后台运行）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温

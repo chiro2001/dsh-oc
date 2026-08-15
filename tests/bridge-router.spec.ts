@@ -128,8 +128,9 @@ describe('bridge router: startup GET routes', () => {
       switchableOrgCount: 0,
     })
     expect((await request(server, 'GET', '/experimental/capabilities')).body).toEqual({
-      backgroundSubagents: false,
+      backgroundSubagents: true,
     })
+    expect((await request(server, 'POST', '/experimental/session/s1/background')).body).toBe(true)
     expect((await request(server, 'GET', '/vcs')).body).toEqual({ branch: '' })
     expect((await request(server, 'GET', '/experimental/workspace')).body).toEqual([])
     expect((await request(server, 'GET', '/experimental/workspace/status')).body).toEqual([])
