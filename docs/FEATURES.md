@@ -6,7 +6,7 @@
 
 ## 下一阶段
 
-> 下一阶段需求见 [ROADMAP.md](ROADMAP.md)：流式 tool progress、性能测试、协议升级探针、README//help 能力矩阵。
+> 下一阶段需求见 [ROADMAP.md](ROADMAP.md)：自动更新关闭、流式 tool progress、goal、性能测试、协议升级探针、README//help 能力矩阵。
 
 ## 1. 模型
 
@@ -29,8 +29,6 @@
 | Abort / cancel | ✅ | `POST /session/:id/abort` | `e2e-api.sh` | `f30b156` |
 | Fork（`parentID`） | ✅ | `POST /session/:id/fork`、`POST /api/session/:id/fork`，messageID→atSeq | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | Todo 投影 | ✅ | `GET /session/:id/todo`、`src/bridge/convert/todo.ts` | `tests/convert/todo.spec.ts`、`tests/bridge-router.spec.ts` | `f30b156` |
-| Goal 投影与侧边栏状态 | ✅ | `goal/change` + `goal` 投影 → 合并 `todo.updated`；`GET /session/:id/todo` goal 优先 | `tests/convert/goal.spec.ts`、`tests/bridge-events.spec.ts`、`tests/bridge-router.spec.ts`、`scripts/e2e-tui-goal.sh` | 本提交 |
-| Goal 历史摘要 | ✅ | `goal/change` → v1/v2 history 中 assistant 文本 note（`Goal created/updated/...`） | `tests/convert/goal.spec.ts`、`scripts/e2e-api-goal.sh` | 本提交 |
 | Diff / produced-files / Modified Files | ✅ | `GET /session/:id/diff`、`GET /api/session/:id/diff`、`session.diff` + Snapshot/Patch part | `tests/bridge-router.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | SSE 会话/消息事件 | ✅ | `GET /global/event`、`src/bridge/events.ts` | `tests/bridge-events.spec.ts`、`e2e-api.sh`、`e2e-tui-stream.sh` | `f30b156` |
 
@@ -65,8 +63,7 @@
 
 | 功能 | 状态 | 路由/实现 | 验证方式 | 最后更新 |
 |---|---|---|---|---|
-| 命令列表 | ✅ | `GET /command`、`GET /api/command` 注册 `/preset`、`/goal` | `e2e-api.sh`、`scripts/e2e-api-goal.sh`、`tests/bridge-router.spec.ts` | 本提交 |
-| `/goal` 创建/查看/暂停/恢复/清除 | ✅ | `POST /session/:id/command` + prompt 路由捕获，经 dsh command registry 执行 | `scripts/e2e-api-goal.sh`、`tests/bridge-router.spec.ts` | 本提交 |
+| 命令列表 | ✅ | `GET /command`、`GET /api/command` 注册 `/preset` | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
 | `/compact` / summarize | ✅ | `POST /session/:id/summarize`、`POST /session/:id/compact`、`POST /api/session/:id/compact` | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
 | Skills / references / integrations | ❌ | `GET /skill`、`GET /api/skill`、`GET /reference`、`GET /integration` 等返回 `[]` | `e2e-api.sh` | `f30b156` |
 
@@ -100,20 +97,20 @@
 |---|---|---|---|---|
 | 单元/转换/桥/分发测试 | ✅ | `tests/**/*.spec.ts` | `pnpm test` | `f30b156` |
 | API e2e 路由矩阵 + 权限流 | ✅ | `scripts/e2e-api.sh` | `bash scripts/e2e-api.sh` | `f30b156` |
-| Goal API e2e | ✅ | `scripts/e2e-api-goal.sh` | `bash scripts/e2e-api-goal.sh` | 本提交 |
 | TUI boot / turn / stream e2e | ✅ | `scripts/e2e-tui-boot.sh`、`scripts/e2e-tui-turn.sh`、`scripts/e2e-tui-stream.sh` | 对应脚本输出 `PASSED` | `f30b156` |
-| Goal 侧边栏 TUI e2e | ✅ | `scripts/e2e-tui-goal.sh` | `bash scripts/e2e-tui-goal.sh` | 本提交 |
 | TUI 时间戳 e2e | ✅ | `scripts/e2e-tui-timestamps.sh` | `bash scripts/e2e-tui-timestamps.sh` | 本提交 |
 | 离线启动 / 版本锁定 e2e | ✅ | `scripts/e2e-tui-offline.sh`、`scripts/e2e-tui-version-lock.sh` | 对应脚本输出 `PASSED` | 本提交 |
 | Help e2e | ✅ | `scripts/e2e-tui-help.sh` | `bash scripts/e2e-tui-help.sh` | 本提交 |
 | 品牌 logo e2e | ✅ | `scripts/e2e-tui-brand.sh` | `bash scripts/e2e-tui-brand.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
 | 功能矩阵自动追踪 | ✅ | `scripts/update-feature-matrix.mjs` | `pnpm run features:update` | 本提交 |
+| 会话性能测试（生成器 + 指标 + 报告） | ✅ | `scripts/perf.mjs` + `scripts/perf-session-gen.mjs`（dsh Session API 合成日志、zstd 分帧写入） | `pnpm run perf`、`tests/perf.spec.ts` | 本提交 |
+| perf 生成器单测（编码/round-trip/子代理场景） | ✅ | `tests/perf.spec.ts` | `pnpm test` | 本提交 |
 
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`3c3984c`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`ba9d1e1`（2026-08-15）。
 
 ### 路由注册表
 
@@ -194,10 +191,10 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 24 | 75b45a9 fix(bridge): push live subagent child sessions into tui session tree |
+| `tests/bridge-events.spec.ts` | 24 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 41 | 82591b3 merge: integrate command ux and fork/diff fixes |
-| `tests/convert/goal.spec.ts` | 5 | — |
+| `tests/bridge-router.spec.ts` | 41 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -205,6 +202,7 @@
 | `tests/convert/session.spec.ts` | 7 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/tool.spec.ts` | 14 | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
+| `tests/perf.spec.ts` | 5 | 3d8a88d feat(perf): session history generator and bridge performance harness |
 | `tests/protocol-probe.spec.ts` | 2 | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
 | `tests/scaffold.spec.ts` | 7 | 4ddba09 feat(profile): mount dsh agent presets so /preset can switch minimal etc |
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
@@ -218,8 +216,8 @@
 | 文件 | 最后更新 |
 |---|---|
 | `src/bridge/convert/common.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/convert/goal.ts` | — |
-| `src/bridge/convert/message.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
+| `src/bridge/convert/goal.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `src/bridge/convert/message.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `src/bridge/convert/model.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -227,11 +225,11 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | 75b45a9 fix(bridge): push live subagent child sessions into tui session tree |
+| `src/bridge/events.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
-| `src/bridge/router.ts` | 75b45a9 fix(bridge): push live subagent child sessions into tui session tree |
+| `src/bridge/router.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `src/bridge/rpc.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
@@ -243,12 +241,12 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
-| `scripts/e2e-api-goal.sh` | — |
+| `scripts/e2e-api-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-api.sh` | cb9c22b test(e2e): verify fork chain advances from fork #1 to fork #2 |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `scripts/e2e-tui-goal.sh` | — |
+| `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
@@ -257,10 +255,13 @@
 | `scripts/e2e-tui-turn.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/generate-tui-branding-art.mjs` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
+| `scripts/perf-session-gen.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
+| `scripts/perf.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
 | `scripts/probe-opencode.mjs` | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

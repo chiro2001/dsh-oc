@@ -10,7 +10,7 @@
 | N1 | 关闭 opencode 子进程自动更新/热更新 | P0 | `feat-no-autoupdate` | ✅ 已完成（2026-08-15） |
 | N2 | 流式 toolcall / progress | P0 | `feat-stream-tool` | 待开始 |
 | N3 | Goal 功能完整支持 | P0 | `feat-goal` | ✅ 已完成（2026-08-15） |
-| N4 | 会话性能测试（临时 DB + 生成历史） | P1 | `feat-perf` | 待开始 |
+| N4 | 会话性能测试（临时 DB + 生成历史） | P1 | `feat-perf` | ✅ 已完成（2026-08-15） |
 | N5 | 协议自测 UT / 升级探针 | P1 | `feat-protocol-ut` | ✅ 已完成（2026-08-15） |
 | N6 | README 与 `/help` 展示能力矩阵 | P1 | `feat-capability-help` | ✅ 已完成（2026-08-15） |
 
@@ -122,6 +122,10 @@ Goal 是 dsh 高频功能，opencode TUI 没有原生 goal UI；dsh-oc 需要把
 
 ## N4. 会话性能测试
 
+> 状态：已完成（2026-08-15）。实现见 `scripts/perf.mjs`、`scripts/perf-session-gen.mjs`，
+> 单测见 `tests/perf.spec.ts`，示例报告见 `docs/perf/report-example.json`。
+> 运行：`pnpm run perf -- --sessions 1000 --messages-per-session 6 --tools --todos --children 10`。
+
 ### 背景
 需要模拟大量 dsh session 历史，验证列表/搜索/SSE/history 的体验性能。
 
@@ -148,6 +152,14 @@ Goal 是 dsh 高频功能，opencode TUI 没有原生 goal UI；dsh-oc 需要把
 - `pnpm run perf` 可重复运行。
 - CI 可选跑 smoke 规模（例如 1000 sessions）。
 - 若有 >500ms 的明显退化，记录问题并修复。
+
+### 实测基线（本机，30 会话 × 4 消息，2026-08-15）
+- boot（bridge URL 就绪）：约 0.8s
+- `GET /session` p50 ≈ 14ms / p95 ≈ 28ms（含冷启动首请求）
+- `GET /session/:id/message?limit=50` p50 ≈ 15ms / p95 ≈ 40ms
+- SSE 首事件（触发后）：< 1ms
+- dsh 进程 RSS：约 250 MB
+- 更多数字见 `docs/perf/report-example.json`；大规模场景（1000/5000/10000）请在本机完整运行。
 
 ---
 

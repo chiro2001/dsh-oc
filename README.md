@@ -60,12 +60,29 @@ pnpm build
 pnpm typecheck
 pnpm test
 pnpm run features:update   # 刷新 docs/FEATURES.md 的自动追踪部分
+pnpm run perf              # 会话性能测试（生成合成历史 → 启动真实 bridge → 输出 JSON 报告）
 dsh plugin --profile oc add .
 dsh --profile oc
 ```
 
 > `lib/` 已纳入版本库：GitHub 直装依赖已构建产物。修改 `src/` 后请运行
 > `pnpm build` 并连同 `lib/` 一起提交，否则 `chiro2001/dsh-oc` 安装的版本不会更新。
+
+## 性能测试
+
+`pnpm run perf` 会生成合成 dsh 会话历史（复用 `@deepseek-ai/dsh-session` 的校验路径），
+启动真实 `dsh --profile oc` bridge，并测量会话列表、消息分页、SSE 首事件延迟与进程内存，
+输出 p50/p95/max 的 JSON 报告：
+
+```bash
+pnpm run perf -- --sessions 1000 --messages-per-session 6 --tools --todos --children 10
+node scripts/perf.mjs --sessions 200 --no-boot   # 只生成不启动
+node scripts/perf.mjs --sessions 5000 --keep     # 保留临时 DSH_HOME 供排查
+```
+
+常用参数：`--sessions N`、`--messages-per-session M`（别名 `--turns K`）、`--tools`、
+`--todos`、`--children C`、`--repeats R`、`--seed N`、`--report PATH`。
+报告默认写入 `.perf/report-*.json`（`.perf/` 已忽略），示例见 `docs/perf/report-example.json`。
 
 ## 参数透传
 

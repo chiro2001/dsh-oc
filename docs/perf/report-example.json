@@ -1,0 +1,82 @@
+{
+  "generated": {
+    "sessions": 30,
+    "bytes": 200940,
+    "sessionIds": [
+      "session-ef38b652-ee1c-42f9-157f-df54d3c8",
+      "session-18cece3c-7548-4069-6363-d4d6c5e4",
+      "session-7a3188f1-fea2-46af-6eba-1c680c38",
+      "session-9d741281-afbd-41fa-6107-b1e04216",
+      "session-ca560fdb-f54c-49cf-69bc-cd6a0a5d",
+      "session-b453d6b6-58bb-45e3-b67e-b2133333",
+      "session-7dadfb4d-20f3-4a43-1ae3-1546b67b",
+      "session-f0f1f86d-a949-48ed-7c22-0d93be4a",
+      "session-b6c0dd1d-53b7-421f-a78e-9503b97f",
+      "session-f680d02f-14cb-41ea-17c6-c73143e2",
+      "session-1679a542-a442-4669-8d6c-1b3e5148",
+      "session-8072a23c-2112-4ab8-f0ee-8c0c80ab",
+      "session-a3ca1c4b-3ee0-49ba-0fdb-e765b5fd",
+      "session-e69ce1c3-ec5a-4745-02d6-b98390cb",
+      "session-d1254647-1b5e-42ef-9992-0e53de4a",
+      "session-2c649082-cbfa-4313-71a1-5f6982c1",
+      "session-e7985aae-926e-4e6d-e127-f6e487ab",
+      "session-4fbf348f-5b50-4295-3c08-7bd7c22b",
+      "session-aa92ef0b-d38c-4139-d225-6678f80c",
+      "session-987b7b88-50b1-4c92-3309-b7285d72",
+      "session-957ea449-8c1f-4f8a-cc1c-9721a58b",
+      "session-c6f2e238-89ef-43b1-4dde-664fab27",
+      "session-012cc725-3e99-4447-c86a-7bbce771",
+      "session-b52c66d4-ce39-4546-a1e3-baba4f7c",
+      "session-e278a498-7b7e-4496-a156-929f80db",
+      "session-83a65984-4c5b-46dd-3424-189907d6",
+      "session-3588cae7-656b-4a5e-fb1b-0f1e6613",
+      "session-21d5dffe-812f-4598-5209-a4fc38ee",
+      "session-3ab130e6-f219-42c9-e6ee-a318569e",
+      "session-dce698d3-41a8-427c-4a77-f66ddf0c"
+    ],
+    "bytesMiB": 0.19
+  },
+  "measurements": {
+    "listV1": {
+      "n": 3,
+      "p50": 13.989172000000053,
+      "p95": 28.724393999999847,
+      "max": 28.724393999999847,
+      "min": 13.195420999999897,
+      "status": 200
+    },
+    "listV2": {
+      "n": 3,
+      "p50": 14.048460999999861,
+      "p95": 15.029172000000017,
+      "max": 15.029172000000017,
+      "min": 13.888764000000265,
+      "status": 200
+    },
+    "messageV1": {
+      "n": 5,
+      "p50": 15.616385999999693,
+      "p95": 39.71967199999972,
+      "max": 39.71967199999972,
+      "min": 14.333864000000176,
+      "status": 200
+    },
+    "messageV2": {
+      "n": 5,
+      "p50": 14.8937990000004,
+      "p95": 16.6358180000002,
+      "max": 16.6358180000002,
+      "min": 12.738448999999946,
+      "status": 200
+    },
+    "sseFirstEvent": {
+      "firstEventMs": 0.08995699999968565,
+      "connectMs": 28.813270999999986,
+      "bytes": 1165
+    }
+  },
+  "memoryRssKb": 251636,
+  "boot": {
+    "ms": 802.482681
+  }
+}
