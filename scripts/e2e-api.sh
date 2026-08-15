@@ -309,6 +309,9 @@ else
   exit 1
 fi
 
+curl -s -X POST "$BRIDGE/session/$SESSION_V1/init" | jq -e '. == true' >/dev/null
+echo "  POST /session/$SESSION_V1/init -> true"
+
 TODO_LEN="$(curl -s "$BRIDGE/session/$SESSION_V1/todo" | jq -e 'type == "array"' >/dev/null && echo array)"
 echo "  todo: $TODO_LEN"
 DIFF_LEN="$(curl -s "$BRIDGE/session/$SESSION_V1/diff" | jq -e 'type == "array"' >/dev/null && echo array)"

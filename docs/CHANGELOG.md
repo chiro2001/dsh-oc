@@ -16,6 +16,7 @@
   列表，配合后台子代理能力供 TUI 子代理树查询。
 - `GET /experimental/session`：GlobalSession 列表（支持 search/目录过滤/limit
   子集），补齐 experimental 会话列表面。
+- `POST /session/{id}/init`：no-op 成功 `true`（dsh 会话创建即初始化）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
   补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
   恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温

@@ -46,6 +46,10 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
 
   register('POST', '/session', 'json', (req, ctx) => R.createSession(req, ctx, false))
 
+  // dsh sessions are created server-side and already initialized; the TUI's
+  // init call is a no-op success.
+  register('POST', '/session/:id/init', 'json', async () => R.json(200, true))
+
   register('POST', '/session/:id/fork', 'json', (req, ctx) => R.forkSession(req, ctx, false))
 
   register('POST', '/session/:id/summarize', 'json', async (req, ctx) => {

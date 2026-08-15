@@ -136,6 +136,7 @@ GET /api/integration?location[directory]=...
 | `GET /session/{id}/message` | MAP | `apiProxy.sessions.history` |
 | `POST /session/{id}/prompt` | MAP | `apiProxy.sessions.prompt` |
 | `POST /session/{id}/abort` | MAP | `apiProxy.sessions.cancel` |
+| `POST /session/{id}/init` | MAP | no-op 成功 `true`（dsh 会话创建即初始化） |
 | `GET /session/{id}/todo` | MAP | dsh `todos` projection + `goal` 投影/事件（goal 为首条） |
 | `GET /session/{id}/diff` | MAP/LATER | produced-files 投影或 `[]` |
 | `GET /permission` | MAP | pending approval map |
