@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { createBridgeRouter, type BridgeRouter } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
@@ -14,6 +18,23 @@ import {
 import type { ClientResponse } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 const servers: BridgeServerHandle[] = []
+const tempDirs: string[] = []
+
+function gitFixture(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-oc-git-'))
+  execFileSync('git', ['init', '-q'], { cwd: dir })
+  execFileSync('git', ['config', 'user.email', 'e2e@dsh-oc.test'], { cwd: dir })
+  execFileSync('git', ['config', 'user.name', 'dsh-oc e2e'], { cwd: dir })
+  for (const [path, content] of Object.entries(files)) {
+    const full = join(dir, path)
+    mkdirSync(join(full, '..'), { recursive: true })
+    writeFileSync(full, content)
+  }
+  execFileSync('git', ['add', '-A'], { cwd: dir })
+  execFileSync('git', ['commit', '-qm', 'initial'], { cwd: dir })
+  tempDirs.push(dir)
+  return dir
+}
 
 async function boot(api: BridgeApi, cwd = '/work'): Promise<{ server: BridgeServerHandle; router: BridgeRouter }> {
   const router = createBridgeRouter(api, { cwd })
@@ -24,6 +45,7 @@ async function boot(api: BridgeApi, cwd = '/work'): Promise<{ server: BridgeServ
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()))
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
 async function request(
@@ -281,6 +303,19 @@ describe('bridge router: session routes', () => {
   it('creates sessions (v1), forks from parentID, and creates v2 sessions', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []
+    let forkCreated = false
+    const child = {
+      sessionId: 'fork-session' as never,
+      updatedAt: 3000,
+      running: false,
+      blank: false,
+      parentSessionId: 's1' as never,
+      cwd: '/work',
+      projections: {
+        asOfSeq: 0,
+        values: { title: 'Session One (fork #1)' } as never,
+      },
+    }
     const api: BridgeApi = {
       ...base,
       sessions: {
@@ -291,9 +326,14 @@ describe('bridge router: session routes', () => {
         },
         fork: async (request) => {
           calls.push({ method: 'session.fork', payload: request.payload })
+          forkCreated = true
           return okRpc({ sessionId: 'fork-session' as never })
         },
-        list: async () => okRpc({ items: [item] }),
+        rename: async (request) => {
+          calls.push({ method: 'session.rename', payload: request.payload })
+          return okRpc({ title: request.payload.title, seq: 3 })
+        },
+        list: async () => okRpc({ items: forkCreated ? [child] : [item] }),
         history: async () => okRpc({ events: [], hasMore: false }),
       },
     }
@@ -302,19 +342,38 @@ describe('bridge router: session routes', () => {
     expect(created.status).toBe(200)
     expect((created.body as { id: string }).id).toBe('new-session')
     expect(calls[0]).toMatchObject({ method: 'session.create', payload: { cwd: '/work' } })
-    const forked = await request(server, 'POST', '/session', { parentID: 's1' })
-    expect(forked.status).toBe(200)
-    expect(calls[1]).toMatchObject({ method: 'session.fork', payload: { sessionId: 's1' } })
+    const forkedBody = await request(server, 'POST', '/session', { parentID: 's1' })
+    expect(forkedBody.status).toBe(200)
+    expect(forkedBody.body).toMatchObject({
+      id: 'fork-session',
+      title: 'Session One (fork #1)',
+    })
+    expect((forkedBody.body as { parentID?: string }).parentID).toBeUndefined()
+    expect(calls[1]).toMatchObject({ method: 'session.rename', payload: { sessionId: 'new-session', title: 'New' } })
+    expect(calls[2]).toMatchObject({ method: 'session.fork', payload: { sessionId: 's1' } })
+    expect(calls[3]).toMatchObject({
+      method: 'session.rename',
+      payload: { sessionId: 'fork-session', title: 'Session One (fork #1)' },
+    })
     const v2 = await request(server, 'POST', '/api/session', { id: 'x1', location: { directory: '/tmp' } })
     expect(v2.status).toBe(200)
     expect(v2.body).toMatchObject({ data: { id: 'new-session' } })
-    expect(calls[2]).toMatchObject({ method: 'session.create', payload: { cwd: '/tmp', sessionId: 'x1' } })
+    expect(calls[4]).toMatchObject({ method: 'session.create', payload: { cwd: '/tmp', sessionId: 'x1' } })
   })
 
   it('forks through the opencode route and maps messageID to the dsh atSeq', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []
-    const child = {
+    const children: Array<{
+      sessionId: never
+      updatedAt: number
+      running: boolean
+      blank: boolean
+      parentSessionId: never
+      cwd: string
+      projections: { asOfSeq: number; values: never }
+    }> = []
+    const childBase = {
       sessionId: 'fork-session' as never,
       updatedAt: 3000,
       running: false,
@@ -328,9 +387,20 @@ describe('bridge router: session routes', () => {
         ...base.sessions,
         fork: async (request) => {
           calls.push({ method: 'session.fork', payload: request.payload })
+          children.push({
+            ...childBase,
+            projections: {
+              asOfSeq: 0,
+              values: { title: `Session One (fork #${children.length + 1})` } as never,
+            },
+          })
           return okRpc({ sessionId: 'fork-session' as never })
         },
-        list: async () => okRpc({ items: [child] }),
+        rename: async (request) => {
+          calls.push({ method: 'session.rename', payload: request.payload })
+          return okRpc({ title: request.payload.title, seq: 3 })
+        },
+        list: async () => okRpc({ items: [item, ...children] }),
         history: async () => okRpc({
           events: [{ event: makeUserEvent('hello', 'msg-user-1', 1000) }],
           hasMore: false,
@@ -341,22 +411,38 @@ describe('bridge router: session routes', () => {
     const noMessage = await request(server, 'POST', '/session/s1/fork')
     expect(noMessage.status).toBe(200)
     expect((noMessage.body as { id: string; parentID?: string }).id).toBe('fork-session')
-    expect((noMessage.body as { parentID?: string }).parentID).toBe('s1')
+    expect((noMessage.body as { parentID?: string }).parentID).toBeUndefined()
+    expect(noMessage.body).toMatchObject({ title: 'Session One (fork #1)' })
     expect(calls[0]).toMatchObject({ method: 'session.fork', payload: { sessionId: 's1' } })
+    expect(calls[1]).toMatchObject({
+      method: 'session.rename',
+      payload: { sessionId: 'fork-session', title: 'Session One (fork #1)' },
+    })
 
     const withMessage = await request(server, 'POST', '/session/s1/fork', {
       messageID: 'msg-user-1',
     })
     expect(withMessage.status).toBe(200)
-    expect(calls[1]).toMatchObject({
+    expect(calls[2]).toMatchObject({
       method: 'session.fork',
       payload: { sessionId: 's1', atSeq: 2 },
+    })
+    expect(calls[3]).toMatchObject({
+      method: 'session.rename',
+      payload: { sessionId: 'fork-session', title: 'Session One (fork #2)' },
     })
 
     const v2 = await request(server, 'POST', '/api/session/s1/fork', {})
     expect(v2.status).toBe(200)
-    expect(v2.body).toMatchObject({ data: { id: 'fork-session', parentID: 's1' } })
-    expect(calls[2]).toMatchObject({ method: 'session.fork', payload: { sessionId: 's1' } })
+    expect(v2.body).toMatchObject({
+      data: { id: 'fork-session' },
+    })
+    expect((v2.body as { data: { parentID?: string } }).data.parentID).toBeUndefined()
+    expect(calls[4]).toMatchObject({ method: 'session.fork', payload: { sessionId: 's1' } })
+    expect(calls[5]).toMatchObject({
+      method: 'session.rename',
+      payload: { sessionId: 'fork-session', title: 'Session One (fork #3)' },
+    })
   })
 
   it('runs /compact through the dsh command registry for summarize and compact routes', async () => {
@@ -497,6 +583,7 @@ describe('bridge router: session routes', () => {
   })
 
   it('serves todo and diff from history/projections', async () => {
+    const work = gitFixture({ 'src/a.ts': 'const a = 1' })
     const base = fakeApi()
     const api = {
       ...base,
@@ -516,7 +603,7 @@ describe('bridge router: session routes', () => {
         }),
       },
     }
-    const { server } = await boot(api)
+    const { server } = await boot(api, work)
     const todo = await request(server, 'GET', '/session/s1/todo')
     expect(todo.status).toBe(200)
     expect(todo.body).toMatchObject([{ content: 'a', status: 'in_progress', priority: 'medium' }])
@@ -535,6 +622,8 @@ describe('bridge router: session routes', () => {
   })
 
   it('derives diff from tool result views when no produced-files projection exists', async () => {
+    const work = gitFixture({ 'src/a.ts': 'const a = 1' })
+    const trackedPath = join(work, 'src', 'a.ts')
     const base = fakeApi()
     const callEvent = sessionEvent('tool/call', {
       turn: 1,
@@ -543,7 +632,7 @@ describe('bridge router: session routes', () => {
       name: 'str_replace_editor',
       arguments: JSON.stringify({
         command: 'str_replace',
-        path: '/work/src/a.ts',
+        path: trackedPath,
         old_str: 'const a = 1',
         new_str: 'const a = 2',
       }),
@@ -566,9 +655,9 @@ describe('bridge router: session routes', () => {
       for: 'call',
       view: {
         card: 'diff',
-        title: 'str_replace /work/src/a.ts',
+        title: `str_replace ${trackedPath}`,
         diffs: [{
-          path: '/work/src/a.ts',
+          path: trackedPath,
           oldText: 'const a = 1',
           newText: 'const a = 2',
         }],
@@ -578,9 +667,9 @@ describe('bridge router: session routes', () => {
       for: 'result',
       view: {
         card: 'diff',
-        title: 'str_replace /work/src/a.ts',
+        title: `str_replace ${trackedPath}`,
         diffs: [{
-          path: '/work/src/a.ts',
+          path: trackedPath,
           oldText: 'const a = 1',
           newText: 'const a = 2',
         }],
@@ -605,18 +694,18 @@ describe('bridge router: session routes', () => {
         }),
       },
     }
-    const { server } = await boot(api)
+    const { server } = await boot(api, work)
     const diff = await request(server, 'GET', '/session/s1/diff')
     expect(diff.status).toBe(200)
     expect(diff.body).toMatchObject([{
-      file: '/work/src/a.ts',
+      file: trackedPath,
       additions: 1,
       deletions: 1,
     }])
     const v2Diff = await request(server, 'GET', '/api/session/s1/diff')
     expect(v2Diff.status).toBe(200)
     expect(v2Diff.body).toMatchObject([{
-      file: '/work/src/a.ts',
+      file: trackedPath,
       status: 'modified',
       additions: 1,
       deletions: 1,
