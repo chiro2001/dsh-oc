@@ -93,6 +93,23 @@ async function timeRequest(url, method = 'GET', body) {
   return { ms: performance.now() - start, status: response.status, bytes: Buffer.byteLength(text) }
 }
 
+/** Fetch the v1 session list and count entries with a real (non-folder) title. */
+async function titleCoverage(bridgeUrl) {
+  const start = performance.now()
+  const response = await fetch(`${bridgeUrl}/session`)
+  const list = await response.json()
+  const ms = performance.now() - start
+  const total = Array.isArray(list) ? list.length : 0
+  const titled = Array.isArray(list)
+    ? list.filter((session) => {
+        const directory = typeof session.directory === 'string' ? session.directory : ''
+        const base = directory.split('/').filter(Boolean).pop() ?? ''
+        return typeof session.title === 'string' && session.title.length > 0 && session.title !== base
+      }).length
+    : 0
+  return { ms, total, titled }
+}
+
 async function measureSseFirstEvent(bridgeUrl, sessionId) {
   const controller = new AbortController()
   const start = performance.now()
@@ -289,6 +306,22 @@ async function main() {
     report.measurements.messageV2.status = messageV2.at(-1)?.status
     if (!quiet) {
       process.stderr.write(`perf: GET /session/:id/message p50=${report.measurements.messageV1.p50.toFixed(1)}ms p95=${report.measurements.messageV1.p95.toFixed(1)}ms\n`)
+    }
+
+    // Real-title coverage of the session list (dsh rows carry no titles; the
+    // bridge warms them from history projections, small homes synchronously
+    // and large homes in the background).
+    const warmWaitMs = Number(argValue(argv, '--warm-wait-ms', '3000'))
+    const initialCoverage = await titleCoverage(bridgeUrl)
+    await new Promise((resolve) => setTimeout(resolve, warmWaitMs))
+    const warmedCoverage = await titleCoverage(bridgeUrl)
+    report.measurements.titleCoverage = {
+      initial: initialCoverage,
+      afterWarm: warmedCoverage,
+      warmWaitMs,
+    }
+    if (!quiet) {
+      process.stderr.write(`perf: title coverage initial=${initialCoverage.titled}/${initialCoverage.total} afterWarm=${warmedCoverage.titled}/${warmedCoverage.total}\n`)
     }
 
     // SSE first-event latency.
