@@ -67,6 +67,42 @@ bash scripts/check-all.sh --e2e --scale 5000
 `pnpm build` 立即生效（link 方式）。从 GitHub 分支安装验证：
 `dsh plugin --profile oc add 'github:chiro2001/dsh-oc#<branch>'`。
 
+## 安装、更新与本地开发
+
+使用者只关心安装命令时见 README；Agent/开发者用以下方式验证与更新：
+
+GitHub 源安装/更新（与 README 同款命令，重复执行即更新到该分支最新）：
+
+```bash
+dsh plugin --profile oc add chiro2001/dsh-oc                       # #main
+dsh plugin --profile oc add 'github:chiro2001/dsh-oc#develop'      # 指定分支
+dsh --profile oc --help                                            # 验证版本
+```
+
+- npm 包名 `@chiro2001/dsh-oc` 未发布 registry；安装/更新一律走 GitHub 源。
+- 本地开发：`dsh plugin --profile oc add .` 以 `link:` 方式链接仓库，改
+  `src/` 后 `pnpm build` 立即生效；但 `lib/` 必须随提交推送，GitHub 直装才
+  会包含最新构建产物。
+
+## opencode 二进制与网络策略
+
+- 直接使用官方 opencode 二进制，版本锁定 `opencode-version.json`（当前
+  `1.18.18`）；启动时 `resolveOpenCodeBinary` + `verifyOpenCodeVersion` 双重
+  校验，显式 `DSH_OC_OPENCODE_BIN` 版本不匹配会直接报错，不回退到 PATH 上
+  的其它版本。
+- 解析优先级：`DSH_OC_OPENCODE_BIN` → `$DSH_HOME/opencode/bin/<version>`
+  → PATH 上版本匹配的 `opencode` → 官方 npm 平台包（惰性安装，npm integrity
+  校验）→ profile 内 `opencode-ai` 包 → GitHub Release 惰性下载。
+  `opencode-assets.json` 覆盖各平台/架构变体，每个 asset 独立 sha256 与 npm
+  tarball integrity；下载支持代理（`HTTPS_PROXY`/`HTTP_PROXY`）与
+  `DSH_OC_OPENCODE_MIRROR` 镜像前缀。
+- 网络策略：子进程强制 `OPENCODE_DISABLE_AUTOUPDATE=1` /
+  `OPENCODE_DISABLE_MODELS_FETCH=1` / `OPENCODE_DISABLE_LSP_DOWNLOAD=1`，并在
+  隔离配置写 `autoupdate: false`，关闭后台外网行为。
+- 缓存错误时清除 `$DSH_HOME/opencode/bin` 或设置匹配版本的
+  `DSH_OC_OPENCODE_BIN`；`DSH_OC_TUI_TIMESTAMPS=1` 可让 TUI 默认显示时间戳
+  （`ctrl+shift+t` / `/timestamps` 运行时切换）。
+
 ## 自测门槛（提交/合并前必须全绿）
 
 1. `pnpm typecheck && pnpm test`
@@ -146,7 +182,9 @@ asciinema 官方建议用 `agg` 生成 GIF 以 `<img>` 嵌入，cast 源文件�
 2. 在 tmux / PTY 中录制，`-i 2` 会把播放时的空闲段压缩到最多 2 秒：
    `asciinema rec --cols 110 --rows 30 -i 2 -t 'dsh-oc demo' -q docs/demo/dsh-oc-demo.cast`
    然后启动 `dsh --profile oc`，用真实模型完成一个有意义的短任务（例如
-   「运行 `pnpm test` 并汇报结果」），最后 Ctrl+C 退出并结束录制。
+   「运行 `pnpm test` 并汇报结果」），最后 Ctrl+C 退出并结束录制。保留真实
+   启动段（shell 提示符 → 输入命令 → logo），不要裁剪开头；空闲由 `-i` /
+   `--idle-time-limit` 压缩。
 3. 生成 GIF（README 用）：
    `agg --font-family 'Hack,Noto Sans Mono CJK SC' --idle-time-limit 1 --speed 1.2 --fps-cap 15 --font-size 14 docs/demo/dsh-oc-demo.cast docs/demo/dsh-oc-demo.gif`
    - `Hack` 是等宽字体，`Noto Sans Mono CJK SC` 兜底中文；不要用 SVG 方案，
