@@ -115,7 +115,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`b608027`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`0de1c30`（2026-08-15）。
 
 ### 路由注册表
 
@@ -196,7 +196,7 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 27 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `tests/bridge-events.spec.ts` | 27 | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `tests/bridge-router.spec.ts` | 41 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
@@ -228,13 +228,13 @@
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/session.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/tool.ts` | 45630d9 feat(bridge): tool file changes and dsh edit-mode presentation |
+| `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `src/bridge/events.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
-| `src/bridge/router.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `src/bridge/router.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/rpc.ts` | a40801a Merge branch 'feat-subagent-fork' into feat-integrate-round2 |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | 87406ba feat(bridge): subagent child sessions, fork and compact |
@@ -247,7 +247,7 @@
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/e2e-api-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `scripts/e2e-api.sh` | cb9c22b test(e2e): verify fork chain advances from fork #1 to fork #2 |
+| `scripts/e2e-api.sh` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `scripts/e2e-tui-boot.sh` | 042b5d3 test(e2e): api route matrix, sse turn, dsh profile boot and real opencode tui attach |
 | `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/e2e-tui-command.sh` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
@@ -266,6 +266,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 
