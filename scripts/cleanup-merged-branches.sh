@@ -11,13 +11,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TARGET="${1:-main}"
+TARGET="main"
 APPLY=0
 REMOTE=0
 for arg in "$@"; do
   case "$arg" in
     --apply) APPLY=1 ;;
     --remote) REMOTE=1 ;;
+    *) TARGET="$arg" ;;
   esac
 done
 
