@@ -115,6 +115,7 @@
 | `--dir` attach e2e | ✅ | `scripts/e2e-tui-dir.sh` | `bash scripts/e2e-tui-dir.sh` | 本提交 |
 | `--fork --session` attach e2e | ✅ | `scripts/e2e-tui-fork.sh` | `bash scripts/e2e-tui-fork.sh` | 本提交 |
 | `--mini` attach e2e | ✅ | `scripts/e2e-tui-mini.sh` | `bash scripts/e2e-tui-mini.sh` | 本提交 |
+| `--print-logs` 透传 e2e | ✅ | `scripts/e2e-tui-print-logs.sh`（fake 二进制 argv 断言） | `bash scripts/e2e-tui-print-logs.sh` | 本提交 |
 | 协议探针（路由清单 + 二进制/SDK 版本校验） | ✅ | `scripts/probe-opencode.mjs`、`tests/fixtures/opencode/routes.json` | `pnpm run probe`、`tests/protocol-probe.spec.ts` | 本提交 |
 | 流式工具事件 API e2e | ✅ | `scripts/e2e-api.sh` 审批流断言 started/delta/called/success | `bash scripts/e2e-api.sh` | 本提交 |
 | 功能矩阵自动追踪 | ✅ | `scripts/update-feature-matrix.mjs` | `pnpm run features:update` | 本提交 |
@@ -124,7 +125,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`36fc043`（2026-08-15）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`167a7b3`（2026-08-15）。
 
 ### 路由注册表
 
@@ -207,7 +208,7 @@
 |---|---|---|
 | `tests/bridge-events.spec.ts` | 29 | e256572 feat(bridge): session-scoped always permission memory |
 | `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 52 | 36fc043 feat(bridge): honor order=asc on the v2 session list |
+| `tests/bridge-router.spec.ts` | 52 | 167a7b3 feat(bridge): paginate the v2 session list with an opaque cursor |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 19 | 87406ba feat(bridge): subagent child sessions, fork and compact |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -243,7 +244,7 @@
 | `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
 | `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/index.ts` | 18741fd feat(tui): make --dir switch the bridge working directory |
-| `src/bridge/router.ts` | 36fc043 feat(bridge): honor order=asc on the v2 session list |
+| `src/bridge/router.ts` | 167a7b3 feat(bridge): paginate the v2 session list with an opaque cursor |
 | `src/bridge/rpc.ts` | ecb00f1 feat(bridge): v2 session search with limit and directory filters |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
 | `src/bridge/state.ts` | e256572 feat(bridge): session-scoped always permission memory |
@@ -267,6 +268,7 @@
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `scripts/e2e-tui-mini.sh` | 90c2260 test(e2e): cover attach --mini boot rendering |
 | `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
+| `scripts/e2e-tui-print-logs.sh` | — |
 | `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
 | `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/e2e-tui-tools.sh` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
