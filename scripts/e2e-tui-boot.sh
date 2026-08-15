@@ -21,13 +21,10 @@ e2e_new_run "tui-boot" "danger-full-access" "success" "1"
 
 echo "== boot dsh + real opencode attach =="
 e2e_tui_start ""
+# e2e_tui_wait_attach already asserts the dsh child is `opencode attach`, not
+# `opencode serve`; a global ps check would false-positive on any pre-existing
+# user-run opencode server on the machine.
 e2e_tui_wait_attach
-
-if ps -eo args= | grep -q 'opencode serve'; then
-  echo "e2e: opencode serve must not run" >&2
-  exit 1
-fi
-echo "  no opencode serve process"
 
 TUI_HINT=""
 deadline=$((SECONDS + 45))
