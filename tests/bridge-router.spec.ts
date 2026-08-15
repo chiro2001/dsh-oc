@@ -743,6 +743,66 @@ describe('bridge router: session routes', () => {
     })
   })
 
+  it('paginates v2 messages with an opaque before cursor', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const base = fakeApi()
+    const events = [
+      {
+        event: sessionEvent('user/message', {
+          id: 'm1' as never,
+          content: [{ type: 'text', text: 'a' }],
+          source: { kind: 'user' },
+        }, 10, 100),
+      },
+      {
+        event: sessionEvent('assistant/message', {
+          turn: 1,
+          step: 1,
+          message: {
+            id: 'm2' as never,
+            role: 'assistant',
+            content: [{ type: 'text', text: 'b' }],
+            source: { kind: 'model', provider: 'x', model: 'y' },
+          },
+        }, 11, 200),
+      },
+    ]
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async (request) => {
+          calls.push({ method: 'session.history', payload: request.payload })
+          return okRpc({ events, hasMore: true })
+        },
+      },
+    }
+    const { server } = await boot(api)
+
+    const first = await request(server, 'GET', '/api/session/s1/message?limit=2')
+    expect(first.status).toBe(200)
+    const cursor = (first.body as { cursor: { previous?: string } }).cursor.previous
+    expect(cursor).toBeTypeOf('string')
+    expect(calls[0]).toMatchObject({
+      method: 'session.history',
+      payload: { sessionId: 's1', maxMessages: 2 },
+    })
+
+    const second = await request(
+      server,
+      'GET',
+      `/api/session/s1/message?limit=2&cursor=${encodeURIComponent(cursor ?? '')}`,
+    )
+    expect(second.status).toBe(200)
+    expect(calls[1]).toMatchObject({
+      method: 'session.history',
+      payload: { sessionId: 's1', maxMessages: 2, beforeSeq: 10 },
+    })
+
+    const invalid = await request(server, 'GET', '/api/session/s1/message?cursor=not-a-cursor')
+    expect(invalid.status).toBe(400)
+  })
+
   it('serves todo and diff from history/projections', async () => {
     const work = gitFixture({ 'src/a.ts': 'const a = 1' })
     const base = fakeApi()

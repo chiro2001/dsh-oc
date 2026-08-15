@@ -240,6 +240,39 @@ async function sessionView(ctx: BridgeRouteContext, id: string): Promise<Session
   }
 }
 
+/** Encode an opaque v2 message cursor pointing before a surface event seq. */
+function encodeMessageCursor(beforeSeq: number): string {
+  return Buffer.from(JSON.stringify({ v: 1, beforeSeq }), 'utf8').toString('base64url')
+}
+
+/** Decode an opaque v2 message cursor produced by {@link encodeMessageCursor}. */
+function decodeMessageCursor(raw: string): number {
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      v?: unknown
+      beforeSeq?: unknown
+    }
+    if (parsed.v === 1 && typeof parsed.beforeSeq === 'number' && Number.isFinite(parsed.beforeSeq)) {
+      return parsed.beforeSeq
+    }
+  } catch {
+    // fall through to the invalid-cursor error
+  }
+  throw badRequest('invalid message cursor')
+}
+
+/** Oldest surface-message seq in a history page (pagination anchor). */
+function oldestSurfaceSeq(events: readonly HistoryEntry[]): number | undefined {
+  let oldest: number | undefined
+  for (const entry of events) {
+    const type = entry.event.type as string
+    if (type === 'user/message' || type === 'assistant/message' || type === 'tool/result') {
+      if (oldest === undefined || entry.event.seq < oldest) oldest = entry.event.seq
+    }
+  }
+  return oldest
+}
+
 function toV1Session(view: SessionView, id: string, ctx: BridgeRouteContext): V2Session {
   if (view.summary) {
     return convertSessionSummary(view.summary, {
@@ -1540,12 +1573,16 @@ export function createBridgeRouter(
     const id = req.params.sessionID as string
     const limitRaw = req.query.get('limit')
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
+    const cursorRaw = req.query.get('cursor')
+    const beforeSeq = cursorRaw === null ? undefined : decodeMessageCursor(cursorRaw)
     const history = await rpc(ctx, 'session.history', {
       sessionId: sid(id),
       ...(limit === undefined ? {} : { maxMessages: limit }),
+      ...(beforeSeq === undefined ? {} : { beforeSeq }),
     })
     const defaultModel = await defaultModelRef(ctx)
     const entries = history.events
+    const oldest = oldestSurfaceSeq(entries)
     const response: SessionMessagesResponse = {
       data: convertMessagesV2(
         entries.map((entry) => entry.event),
@@ -1557,7 +1594,9 @@ export function createBridgeRouter(
         },
         entries.map((entry) => entry.view),
       ),
-      cursor: {},
+      cursor: {
+        ...(history.hasMore && oldest !== undefined ? { previous: encodeMessageCursor(oldest) } : {}),
+      },
     }
     return json(200, response)
   })
