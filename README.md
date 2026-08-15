@@ -159,6 +159,8 @@ bash scripts/e2e-tui-mini.sh        # attach --mini 最小界面启动渲染
 bash scripts/e2e-tui-print-logs.sh  # --print-logs 透传给 opencode 子进程
 bash scripts/e2e-tui-skill.sh      # 技能斜杠命令（DSH_OC_E2E_FAKE_SKILLS 注入）
 pnpm run probe                     # 协议路由清单 + 二进制/SDK 版本校验
+bash scripts/check-all.sh          # 一键自测：typecheck+单测+探针+性能冒烟
+bash scripts/check-all.sh --e2e    # 再加全量 TUI/API e2e
 ```
 
 tarball 验证模式（用 npm tarball 而不是本地路径安装）：
