@@ -35,6 +35,9 @@
 - `scripts/perf.mjs` 新增 `measurements.titleCoverage`：量化列表真实标题覆盖率。
 - `e2e-tui-abort.sh`：mini 分支改为等 SSE 出现真实流式增量后再按 Esc，断言确实
   打断进行中的流（长 mock 开启 `repeatLast`，修复此前第二次请求被 500 拒绝的假通过）。
+- README 新增核心功能演示：asciinema 录制真实 TUI，上传 asciinema.org 在线
+  播放器（cast 源文件存 `docs/demo/`），覆盖品牌 logo、会话标题、流式回复、
+  Esc 打断、工具卡片、退出提示。
 
 ### 修复
 

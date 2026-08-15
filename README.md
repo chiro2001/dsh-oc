@@ -19,6 +19,15 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
                   └─ DSH Agent/Session/Tools/LLM/Approval/Questions
 ```
 
+## 演示
+
+[![dsh-oc 核心功能演示](https://asciinema.org/a/0xNRz3JsHBGe8MDc.svg)](https://asciinema.org/a/0xNRz3JsHBGe8MDc)
+
+演示内容：DSH OC 品牌启动画面 → 会话列表真实标题 → 打开历史会话 →
+慢速流式回复 → Esc 打断 → 工具调用卡片 → 退出提示说明。
+点击图片在 asciinema 在线播放器播放；也可下载
+[dsh-oc-demo.cast](docs/demo/dsh-oc-demo.cast) 后用 `asciinema play` 原速重放。
+
 ## 文档
 
 - [docs/PLAN.md](docs/PLAN.md)：总体实现规划、阶段、验收标准。

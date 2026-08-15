@@ -130,3 +130,19 @@ e2e 脚本只允许在 `main` / `develop` / `chore-*` / `feat-*` 分支运行（
 - [docs/ROADMAP.md](docs/ROADMAP.md)：下一阶段需求。
 - [docs/CHANGELOG.md](docs/CHANGELOG.md)：版本变更。
 - [docs/perf/results-2026-08-15.md](docs/perf/results-2026-08-15.md)：性能数据。
+
+## 演示录制与发布（README 演示）
+
+依赖：`asciinema`（`pip install asciinema`）。
+
+1. 准备隔离 DSH_HOME（`node tests/e2e/env.mjs new-run ...`）并自建 mock：
+   用 `tests/e2e/mock-llm.mjs` 的 `slow_success` / `reasoning_success` /
+   `tool_call_success` / `partial_disconnect` 行为组合序列；先通过 bridge API
+   种两个带真实标题的会话。
+2. 在 tmux 中 `asciinema rec --cols 110 --rows 30 docs/demo/dsh-oc-demo.cast`，
+   启动 `dsh --profile oc`，按脚本驱动按键（会话列表、prompt、Esc 打断、退出）。
+3. 上传：`asciinema upload docs/demo/dsh-oc-demo.cast`，把返回的
+   `https://asciinema.org/a/<id>` 填进 README 的演示链接与
+   `https://asciinema.org/a/<id>.svg` 缩略图。
+4. 注意：匿名上传的录像 7 天后会被删除；要长期保留，需在 asciinema.org
+   认领（注册并关联 CLI，或按上传输出里的提示操作）。
