@@ -48,6 +48,8 @@ describe('convert/message (v1)', () => {
       expect(entry.info.time.completed).toBe(1200)
     }
     expect(entry?.parts.map((part) => part.type)).toEqual(['reasoning', 'text', 'tool'])
+    expect(entry?.parts[0]).toMatchObject({ type: 'reasoning', time: { start: 1200, end: 1200 } })
+    expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1200, end: 1200 } })
     const tool = entry?.parts[2]
     expect(tool).toMatchObject({ type: 'tool', callID: 'c1', tool: 'bash' })
     if (tool?.type === 'tool') {

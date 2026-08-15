@@ -111,7 +111,7 @@ function textPart(
     messageID,
     type: 'text',
     text,
-    time: { start: time },
+    time: { start: time, end: time },
   }
 }
 
@@ -134,7 +134,7 @@ export function assistantPartsFromMessage(
         messageID,
         type: 'reasoning',
         text: block.text,
-        time: { start: time },
+        time: { start: time, end: time },
       })
     } else if (block.type === 'tool-call') {
       const call: ToolCallInfo = {
@@ -337,7 +337,7 @@ function toV2Assistant(
         type: 'reasoning',
         id: `${messageID}:${index}`,
         text: block.text,
-        time: { created: event.time },
+        time: { created: event.time, completed: event.time },
       })
     } else if (block.type === 'tool-call') {
       const call: ToolCallInfo = {
