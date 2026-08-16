@@ -79,6 +79,12 @@ if [[ "$TOOL_TEXT" != *bash* ]]; then
   exit 1
 fi
 echo "  tool session tool card: $TOOL_TEXT"
+TOOL_COUNT="$(curl -s "$SEED_URL/session/$TOOL_SESSION/message" | jq '[.. | objects | select(.type == "tool")] | length')"
+if [[ "$TOOL_COUNT" != "1" ]]; then
+  echo "e2e: expected exactly one tool part in history, got $TOOL_COUNT" >&2
+  exit 1
+fi
+echo "  tool part count: $TOOL_COUNT"
 
 echo "== restart dsh with the real TUI attached to the tool session =="
 e2e_stop_dsh "$E2E_ACTIVE_SESSION"

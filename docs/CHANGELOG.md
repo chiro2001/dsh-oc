@@ -8,6 +8,8 @@
 
 ### 新增
 
+- `e2e-tui-turn.sh` 增加工具 part 恰好一次断言：历史中 bash 工具卡片只能
+  出现 1 次（“动态工具调用两次相同显示”回归项）。
 - `e2e-tui-preset-inherit.sh`：对话前 `/preset minimal`（含选择器确认
   Enter）后创建新会话，断言新 dsh 会话继承 minimal preset（“对话前
   /preset 无法改变 preset”回归项）；已入稳定套件，本地 3/3 通过。
