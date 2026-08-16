@@ -85,18 +85,21 @@ export function messageEvents(
   sessionId: string,
   deps: TranslateDeps,
   build: () => { info: Record<string, unknown>; parts: Array<Record<string, unknown>> },
+  partsFirst = false,
 ): BridgeGlobalEvent[] {
   const directory = directoryFor(sessionId, deps)
   const project = projectIdFor(directory)
   const { info, parts } = build()
-  const events: BridgeGlobalEvent[] = [
-    makeEvent(directory, 'message.updated', { sessionID: sessionId, info }, project),
-  ]
+  const update = makeEvent(directory, 'message.updated', { sessionID: sessionId, info }, project)
+  const events: BridgeGlobalEvent[] = partsFirst
+    ? []
+    : [update]
   for (const part of parts) {
     events.push(
       makeEvent(directory, 'message.part.updated', { sessionID: sessionId, part, time: Date.now() }, project),
     )
   }
+  if (partsFirst) events.push(update)
   return events
 }
 

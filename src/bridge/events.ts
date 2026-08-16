@@ -807,6 +807,12 @@ export class MuxEventTranslator {
           this.streamState(sessionId).lastUserMessageId = surfaceId
           return []
         }
+        if (this.deps.state.isBroadcastDshId(sessionId, dshId)) {
+          // dsh re-broadcasts the durable user/message after the route echo;
+          // keep the bridge id as the parent anchor and stay silent.
+          this.streamState(sessionId).lastUserMessageId = this.deps.state.promptIdForDshId(sessionId, dshId) ?? dshId
+          return []
+        }
         if (this.deps.state.hasPresentedQueued(sessionId, dshId)) {
           // The queued card for this id is already on screen (surfaced from
           // `agent/inbox/spliced`); re-emitting the same user message would
@@ -990,7 +996,7 @@ export class MuxEventTranslator {
               messageID,
             })) as unknown as Array<Record<string, unknown>>,
           }
-        })
+        }, true)
         if (streamed) state.provisionalMessageIds.delete(stepKey)
         this.currentAssistant.set(sessionId, messageID)
         let calls = this.pendingCalls.get(sessionId)

@@ -1745,6 +1745,44 @@ describe('bridge events: projection and control frames', () => {
     expect(state.promptIdForDshId('s1', 'dsh-msg-1')).toBe('msg_tui_1')
   })
 
+  it('stays silent when dsh re-broadcasts a user message after the route echo', () => {
+    const state = new InteractionState()
+    state.registerPromptMessageId('s1', 'msg_tui_1')
+    const { translate } = translator(state)
+    const first = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'dsh-msg-1', 1500),
+      }),
+    ])
+    expect(first).toEqual([])
+
+    const replay = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'dsh-msg-1', 1600),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: 'answer' },
+        ], 'dsh-asst-1', 1700),
+      }),
+    ])
+    expect(replay.filter((event) => event.payload.type === 'message.updated' && (event.payload.properties.info as { role?: string }).role === 'user'))
+      .toEqual([])
+    const assistant = replay.find((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'assistant')
+    // The assistant still parents to the bridge user id, not the dsh id.
+    expect(assistant?.payload.properties).toMatchObject({
+      info: { parentID: 'msg_tui_1' },
+    })
+  })
+
   it('reuses the prompt placeholder assistant id for the streamed reply', () => {
     const state = new InteractionState()
     state.registerAssistantIdForUser('s1', 'msg-user-1', 'msg_assistant_1')
@@ -2023,10 +2061,10 @@ describe('bridge events: projection and control frames', () => {
         ], 'assistant-tool-1', 5000),
       }),
     ])
-    const info = assistant[0]?.payload.properties.info as { time?: { completed?: number } }
+    const info = assistant[1]?.payload.properties.info as { time?: { completed?: number } }
     expect(assistant.map((event) => event.payload.type)).toEqual([
-      'message.updated',
       'message.part.updated',
+      'message.updated',
     ])
     expect(info.time).toMatchObject({ created: 5000 })
     expect(info.time?.completed).toBeUndefined()
