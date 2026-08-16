@@ -59,10 +59,22 @@ if [[ "$E2E" == "1" ]]; then
   else
     E2E_SCRIPTS="$STABLE_E2E e2e-tui-timestamps.sh e2e-tui-mini.sh e2e-tui-skill.sh e2e-tui-continue.sh e2e-tui-dir-filter.sh e2e-tui-abort.sh"
   fi
+  E2E_TIMEOUT="${E2E_TIMEOUT:-300}"
+  run_e2e_script() {
+    local script="$1"
+    local log="$2"
+    set +e
+    timeout -k 15 "$E2E_TIMEOUT" bash "scripts/$script" > "$log" 2>&1
+    local rc=$?
+    if [[ "$rc" == "124" || "$rc" == "137" ]]; then
+      echo "e2e: $script timed out after ${E2E_TIMEOUT}s" >> "$log"
+    fi
+    return "$rc"
+  }
   for s in $E2E_SCRIPTS; do
     log="/tmp/check-all-$s.log"
     set +e
-    bash "scripts/$s" > "$log" 2>&1
+    run_e2e_script "$s" "$log"
     rc=$?
     set -e
     out="$(tail -1 "$log")"
@@ -73,7 +85,7 @@ if [[ "$E2E" == "1" ]]; then
       # the gate meaningful while still surfacing genuinely broken suites.
       echo "RETRY $s (first run rc=$rc)"
       set +e
-      bash "scripts/$s" > "$log" 2>&1
+      run_e2e_script "$s" "$log"
       rc=$?
       set -e
       out="$(tail -1 "$log")"
