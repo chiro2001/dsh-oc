@@ -1209,6 +1209,42 @@ describe('bridge router: session routes', () => {
     })
   })
 
+  it('resolves bridge message ids when forking at a user message', async () => {
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        fork: async (request) => {
+          calls.push({ method: 'session.fork', payload: request.payload })
+          return okRpc({ sessionId: 'fork-session' as never })
+        },
+        rename: async (request) => {
+          calls.push({ method: 'session.rename', payload: request.payload })
+          return okRpc({ title: request.payload.title, seq: 3 })
+        },
+        list: async () => okRpc({ items: [] }),
+        history: async () => okRpc({
+          events: [{ event: makeUserEvent('hello', 'dsh-user-1', 1000) }],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server, router } = await boot(api)
+    router.ctx.state.registerPromptMessageId('s1', 'msg_bridge_user_1')
+    expect(router.ctx.state.takePromptMessageId('s1', 'dsh-user-1')).toBe('msg_bridge_user_1')
+
+    const response = await request(server, 'POST', '/session/s1/fork', {
+      messageID: 'msg_bridge_user_1',
+    })
+    expect(response.status).toBe(200)
+    expect(calls[0]).toMatchObject({
+      method: 'session.fork',
+      payload: { sessionId: 's1', atSeq: 2 },
+    })
+  })
+
   it('runs /compact through the dsh command registry for summarize and compact routes', async () => {
     const base = fakeApi()
     const lines: string[] = []

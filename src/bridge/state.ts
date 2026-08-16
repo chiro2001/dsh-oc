@@ -281,6 +281,15 @@ export class InteractionState {
     return this.dshPromptMessageIds.get(`${sessionId}\u0000${dshId}`)
   }
 
+  /** Reverse lookup: durable dsh id for a bridge/prompt id (user messages). */
+  dshIdForPromptId(sessionId: string, promptId: string): string | undefined {
+    const prefix = `${sessionId}\u0000`
+    for (const [key, value] of this.dshPromptMessageIds) {
+      if (key.startsWith(prefix) && value === promptId) return key.slice(prefix.length)
+    }
+    return undefined
+  }
+
   /** Register the assistant id that will back a user turn's streamed reply. */
   registerAssistantIdForUser(sessionId: string, userId: string, assistantId: string): void {
     let byUser = this.assistantIdsByUser.get(sessionId)
@@ -304,6 +313,15 @@ export class InteractionState {
   /** Map a durable dsh assistant id back to its bridge id, if registered. */
   assistantIdForDshId(sessionId: string, dshId: string): string | undefined {
     return this.dshAssistantIds.get(`${sessionId}\u0000${dshId}`)
+  }
+
+  /** Reverse lookup: durable dsh id for a bridge assistant id. */
+  dshIdForAssistantId(sessionId: string, assistantId: string): string | undefined {
+    const prefix = `${sessionId}\u0000`
+    for (const [key, value] of this.dshAssistantIds) {
+      if (key.startsWith(prefix) && value === assistantId) return key.slice(prefix.length)
+    }
+    return undefined
   }
 
   /**

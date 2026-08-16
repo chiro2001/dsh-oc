@@ -1330,6 +1330,11 @@ export async function atSeqForMessage(
   sessionId: string,
   messageId: string,
 ): Promise<number> {
+  // Message lists expose bridge ids for prompts echoed by the route; resolve
+  // them back to the durable dsh id before scanning history.
+  const resolved = ctx.state.dshIdForPromptId(sessionId, messageId)
+    ?? ctx.state.dshIdForAssistantId(sessionId, messageId)
+    ?? messageId
   const history = await cachedSessionHistory(ctx, sessionId)
   for (const entry of history.events) {
     const event = entry.event
@@ -1338,9 +1343,9 @@ export async function atSeqForMessage(
       : event.type === 'assistant/message'
         ? String(event.data.message.id)
         : undefined
-    if (candidate === messageId) return event.seq
+    if (candidate === resolved) return event.seq
   }
-  throw badRequest('message not found for fork', { sessionId, messageId })
+  throw badRequest('message not found for fork', { sessionId, messageId, resolved })
 }
 
 export async function forkSession(
