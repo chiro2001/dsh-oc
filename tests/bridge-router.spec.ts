@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { createBridgeRouter, type BridgeRouter } from '../src/bridge/router.js'
 import { extractParams, matchPattern, seedProjectionState } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
@@ -576,8 +577,9 @@ describe('bridge router: session routes', () => {
         history: async (request) => {
           const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
           let window = events
-          if (payload.beforeSeq !== undefined) {
-            window = events.filter((entry) => entry.event.seq < payload.beforeSeq)
+          const beforeSeq = payload.beforeSeq
+          if (beforeSeq !== undefined) {
+            window = events.filter((entry) => entry.event.seq < beforeSeq)
           }
           const max = payload.maxMessages ?? events.length
           const tail = window.slice(-max)
@@ -624,8 +626,9 @@ describe('bridge router: session routes', () => {
         history: async (request) => {
           const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
           let window = events
-          if (payload.beforeSeq !== undefined) {
-            window = events.filter((entry) => entry.event.seq < payload.beforeSeq)
+          const beforeSeq = payload.beforeSeq
+          if (beforeSeq !== undefined) {
+            window = events.filter((entry) => entry.event.seq < beforeSeq)
           }
           const max = payload.maxMessages ?? events.length
           const tail = window.slice(-max)
