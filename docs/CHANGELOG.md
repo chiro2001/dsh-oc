@@ -8,6 +8,9 @@
 
 ### 新增
 
+- `e2e-tui-preset-inherit.sh`：对话前 `/preset minimal`（含选择器确认
+  Enter）后创建新会话，断言新 dsh 会话继承 minimal preset（“对话前
+  /preset 无法改变 preset”回归项）；已入稳定套件，本地 3/3 通过。
 - `scripts/update-local-install.sh`：一键把本地 dsh profile 更新到指定
   GitHub ref，并校验 resolved commit 与 `dsh-oc --version` 双版本输出。
 - 工件审计新增 pack 内容校验：tarball 不得含 `src/`，且
