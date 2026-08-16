@@ -4,6 +4,10 @@ set -euo pipefail
 
 export HTTPS_PROXY="${HTTPS_PROXY:-http://127.0.0.1:14514}"
 export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:14514}"
+# Bridge and opencode attach traffic targets 127.0.0.1; it must never be
+# routed through the outer proxy (CI runners have no local proxy service).
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="$NO_PROXY"
 
 E2E_REPO_ROOT="$(git rev-parse --show-toplevel)"
 case "$E2E_REPO_ROOT" in
