@@ -151,7 +151,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`67861f5`（2026-08-17）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`540e23e`（2026-08-17）。
 
 ### 路由注册表
 
@@ -174,7 +174,7 @@
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bin.spec.ts` | 3 | e157b88 feat(cli): add dsh-oc shortcut command |
+| `tests/bin.spec.ts` | 4 | 459a99f feat(bin): report dsh-oc and dsh versions for --version |
 | `tests/bridge-events.spec.ts` | 66 | b652f0b feat(bridge): buffer SSE events until first client connects |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
@@ -241,19 +241,19 @@
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `scripts/audit-local-sessions.sh` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
 | `scripts/build-replay-corpus.mjs` | 6928f8a feat(bridge): expose router entry and add minimal-server renderer attribution |
-| `scripts/check-all.sh` | f10e893 test(e2e): record official-TUI queued-followup order repro and golden |
+| `scripts/check-all.sh` | af41815 test(e2e): add /preset inheritance regression for new sessions |
 | `scripts/cleanup-e2e-runs.sh` | ec31177 chore: add e2e run directory cleanup script |
 | `scripts/cleanup-merged-branches.sh` | 2f1ab51 chore(scripts): enumerate remote merged branches for cleanup |
 | `scripts/e2e-api-attachment.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
 | `scripts/e2e-api-permission.sh` | efd27f4 test(e2e): make api-permission resilient to mock sequence drift |
 | `scripts/e2e-api.sh` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
-| `scripts/e2e-cli-bin.sh` | 7ed1c96 fix(e2e): run dsh-oc under the isolated DSH_HOME |
+| `scripts/e2e-cli-bin.sh` | e1817df test(e2e): assert dsh-oc --version dual output in cli-bin suite |
 | `scripts/e2e-golden-trace.sh` | 81effdd feat(tui): add candidate opencode upgrade lane with golden trace diff |
 | `scripts/e2e-install-rollback.sh` | e220e93 test(release): add artifact audit and immutable install/rollback drill |
 | `scripts/e2e-minimal-server-repro.sh` | a603d6a test(e2e): add raw SSE replay mode and full-trace real repro |
-| `scripts/e2e-queued-order-repro.sh` | f10e893 test(e2e): record official-TUI queued-followup order repro and golden |
-| `scripts/e2e-real-llm.sh` | 69cdd8a test(real): record real-model queued-order wire and pane evidence |
+| `scripts/e2e-queued-order-repro.sh` | b72e076 test(e2e): make queued-order QUEUED badge deterministic in CI |
+| `scripts/e2e-real-llm.sh` | 609ccd6 test(real): strengthen real-llm queue FIFO and TUI delivery assertions |
 | `scripts/e2e-real-queued-order.sh` | a603d6a test(e2e): add raw SSE replay mode and full-trace real repro |
 | `scripts/e2e-recovery-consistency.sh` | 008d2ff test(e2e): add crash and SSE-reconnect recovery fault domains |
 | `scripts/e2e-recovery-crash.sh` | d5e5d27 fix(e2e): clean orphaned opencode attach after crash kills |
@@ -276,6 +276,7 @@
 | `scripts/e2e-tui-permission-ext.sh` | 45b0726 test(e2e): make question highlight assertion theme-agnostic |
 | `scripts/e2e-tui-permission-mini.sh` | 261e324 test(e2e): add minimal permission case and 10x flake scan |
 | `scripts/e2e-tui-permission.sh` | 4c43254 test(e2e): widen tool slots in TUI permission run A |
+| `scripts/e2e-tui-preset-inherit.sh` | af41815 test(e2e): add /preset inheritance regression for new sessions |
 | `scripts/e2e-tui-print-logs.sh` | 7561559 test(e2e): assert --log-level value passthrough to opencode child |
 | `scripts/e2e-tui-queue-live.sh` | e37d7fd test(e2e): keyboard queue while a live stream is running |
 | `scripts/e2e-tui-queue.sh` | c9015cb fix(bridge): mirror dsh pending queue to the TUI and drop prompt debounce |
@@ -283,7 +284,7 @@
 | `scripts/e2e-tui-stream.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-timestamps.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-tools.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
-| `scripts/e2e-tui-turn.sh` | 63aed43 ci: restore stable push suite after proxy fix |
+| `scripts/e2e-tui-turn.sh` | 540e23e test(e2e): assert exactly one tool part in tui-turn history |
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/flake-mini-scan.sh` | d5e5d27 fix(e2e): clean orphaned opencode attach after crash kills |
 | `scripts/generate-tui-branding-art.mjs` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
@@ -295,10 +296,12 @@
 | `scripts/replay-corpus-manifest.mjs` | 9a591f2 test(corpus): add real-session coverage scan and close corpus gaps |
 | `scripts/replay-session-audit.sh` | 54c9c31 test(bridge): add reusable real-session replay audit script |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
+| `scripts/update-local-install.sh` | f34db28 chore(tools): add local install updater and harden pack content audit |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/upgrade-lane.sh` | 81effdd feat(tui): add candidate opencode upgrade lane with golden trace diff |
-| `scripts/verify-release-artifacts.sh` | ac62d57 test(minimal-server): keep raw-replay SSE open and normalize artifact d.ts diff |
+| `scripts/verify-release-artifacts.sh` | f34db28 chore(tools): add local install updater and harden pack content audit |
 <!-- FEATURES:AUTO:END -->
+
 
 
 
