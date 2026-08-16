@@ -79,6 +79,7 @@ bash scripts/e2e-queued-order-repro.sh    # 工具+排队+后续文本的官方 
 bash scripts/upgrade-lane.sh --bin <candidate>
                                           # 候选 opencode 升级 lane：黄金轨迹语义差分
 bash scripts/e2e-real-queued-order.sh     # manual：真实模型排队错序 wire/面板证据
+bash scripts/e2e-minimal-server-repro.sh  # 官方最小 server 归因：脚本化事件 → 官方 TUI 渲染顺序
  ```
 
 本地直连 dsh profile（实时验证）：`dsh plugin --profile oc add .`；改代码后

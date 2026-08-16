@@ -125,6 +125,11 @@ curl -s $B/api/permission/request           # 无 pending 时 {"data":[]}
 均复现 wire 前提：后续文本 `message.part.delta` 在排队用户事件
 （seq 107/65）之后继续到达（`wire_follow_after_queued=1`），且流式期间
 面板 45/50 帧存在回复内容渲染在排队卡片下方。综合证据支持“官方 TUI
-即时渲染顺序受排队后到达的后续文本影响”的方向，renderer/bridge 的最终
-归因仍以官方最小 server 复现为准。回合消息的完成时间已推迟到回合结束，
-QUEUED 标记在整轮完成前保持正确。
+即时渲染顺序受排队后到达的后续文本影响”的方向。官方最小 server 归因
+（`scripts/minimal-oc-server.mjs` + `scripts/e2e-minimal-server-repro.sh`）：
+无 dsh/无真实模型，仅用桥组件按脚本化事件序列喂官方 1.18.18 TUI
+（queued-mid-followup fixture：后续文本 part2 在排队用户事件之后到达），
+TUI 仍把完整后续文本渲染在排队卡片上方（顺序正确，95 帧未观察到瞬态错序）。
+该结果指向“错序依赖真实会话中未覆盖的事件交错/消息身份形态”，最终归因
+仍需在最小 server 上复现真实会话的原始事件序列。回合消息的完成时间已推迟
+到回合结束，QUEUED 标记在整轮完成前保持正确。

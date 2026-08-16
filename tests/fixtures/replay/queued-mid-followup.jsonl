@@ -1,0 +1,11 @@
+{"type":"turn/start","seq":1,"time":1001000,"data":{"turn":1}}
+{"type":"user/message","seq":3,"time":1003000,"data":{"content":[{"type":"text","text":"queued mid followup tool prompt"}],"source":{"kind":"user"},"role":"user","id":"msg-user-2"}}
+{"type":"tool-call-chunks","seq0":4,"time0":1003000,"data":{"turn":1,"step":1,"index":0,"dt":[],"id":"call-1","name":"bash","args":["{\"command\":\"echo mid\"}"]}}
+{"type":"assistant/message","seq":5,"time":1005000,"data":{"turn":1,"step":1,"message":{"id":"msg-tool-call-1","role":"assistant","content":[{"type":"tool-call","id":"call-1","name":"bash","arguments":"{\"command\":\"echo mid\"}"}],"source":{"kind":"model","provider":"deepseek-official","model":"mock-model"}},"usage":{"inputTokens":12,"outputTokens":4,"cacheReadTokens":0,"cacheWriteTokens":0}}}
+{"type":"tool/call","seq":6,"time":1006000,"data":{"turn":1,"step":1,"callId":"call-1","name":"bash","arguments":"{\"command\":\"echo mid\"}"}}
+{"type":"tool/result","seq":8,"time":1008000,"data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"call-1"},"content":[{"type":"tool-result","toolCallId":"call-1","content":[{"type":"text","text":"first output"}]}],"role":"assistant","id":"msg-tool-7"}},"sourceEventSeqs":[6]}
+{"type":"text-chunks","seq0":9,"time0":1008000,"data":{"turn":1,"step":2,"index":0,"dt":[],"texts":["follow-up part one "]}}
+{"type":"agent/inbox/spliced","seq":10,"time":1010000,"data":{"target":"session-1","start":0,"inserted":[{"content":[{"type":"text","text":"QUEUED-MID-SECOND-PROMPT"}],"source":{"kind":"user"},"role":"user","id":"msg-queued-mid"}]}}
+{"type":"text-chunks","seq0":11,"time0":1010000,"data":{"turn":1,"step":2,"index":0,"dt":[],"texts":["follow-up part two"]}}
+{"type":"assistant/message","seq":12,"time":1012000,"data":{"turn":1,"step":2,"message":{"id":"msg-followup-1","role":"assistant","content":[{"type":"text","text":"follow-up part one follow-up part two"}],"source":{"kind":"model","provider":"deepseek-official","model":"mock-model"}},"usage":{"inputTokens":12,"outputTokens":4,"cacheReadTokens":0,"cacheWriteTokens":0}}}
+{"type":"turn/end","seq":13,"time":1013000,"data":{"turn":1,"reason":{"kind":"stop"}}}

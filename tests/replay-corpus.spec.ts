@@ -241,7 +241,7 @@ describe('replay corpus (experiment 1c)', () => {
       }
       if (fixture.features.includes('queue')) {
         // The queued user must be surfaced live at the splice point.
-        expect(queuedUsers.has('msg-queued-1')).toBe(true)
+        expect(queuedUsers.size).toBeGreaterThan(0)
       }
       if (fixture.features.includes('session-title')) {
         expect(sawSessionUpdated).toBe(true)

@@ -250,6 +250,23 @@ const fixtures = [
     user('still running'),
     assistantChunk('text-delta', 'partial answer', 0),
   ], false),
+  fixture('queued-mid-followup', ['queue', 'followup-text'], () => [
+    startTurn(),
+    user('queued mid followup tool prompt'),
+    toolChunkRow(['{"command":"echo mid"}'], 0, 'call-1'),
+    assistantMessage([
+      { type: 'tool-call', id: 'call-1', name: 'bash', arguments: '{"command":"echo mid"}' },
+    ], 'msg-tool-call-1', 1),
+    toolCall('call-1', 'bash', '{"command":"echo mid"}'),
+    toolResult('call-1', 'first output'),
+    chunkRow('text-chunks', ['follow-up part one '], 0, {}, t(), 2),
+    inboxSpliced('QUEUED-MID-SECOND-PROMPT', 'msg-queued-mid'),
+    chunkRow('text-chunks', ['follow-up part two'], 0, {}, t(), 2),
+    assistantMessage([
+      { type: 'text', text: 'follow-up part one follow-up part two' },
+    ], 'msg-followup-1', 2),
+    endTurn(),
+  ], false),
 ]
 
 const manifest = {

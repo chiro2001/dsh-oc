@@ -1,7 +1,7 @@
 {
   "generator": "scripts/build-replay-corpus.mjs",
   "version": 1,
-  "generatedAt": "2026-08-16T18:06:15.006Z",
+  "generatedAt": "2026-08-16T19:55:17.240Z",
   "note": "Synthetic structure-preserving fixtures; no real session content.",
   "fixtures": [
     {
@@ -101,6 +101,16 @@
       ],
       "equivalence": false,
       "bytes": 393
+    },
+    {
+      "file": "queued-mid-followup.jsonl",
+      "eventCount": 11,
+      "features": [
+        "queue",
+        "followup-text"
+      ],
+      "equivalence": false,
+      "bytes": 2186
     }
   ]
 }

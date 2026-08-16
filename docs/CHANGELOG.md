@@ -8,6 +8,12 @@
 
 ### 新增
 
+- 官方最小 server 归因 harness：`scripts/minimal-oc-server.mjs` 用桥组件 +
+  脚本化事件序列（无 dsh、无真实模型）提供完整 OpenCode 兼容面，
+  `scripts/e2e-minimal-server-repro.sh` 驱动官方 1.18.18 TUI attach 并
+  逐帧分析排队/后续文本顺序；首次运行官方 TUI 渲染顺序正确（后续文本在
+  排队卡片上方）。桥新增 `src/bridge/router-entry.ts` 构建入口导出
+  `createBridgeRouter`/`startBridgeServer` 供 harness 使用。
 - 真实模型排队错序复现 `scripts/e2e-real-queued-order.sh`（manual，真实
   DeepSeek API）：工具完成后立即键盘排队第二条 prompt，记录 bridge SSE
   时序证据（后续文本 delta 是否在排队用户事件后到达）与流式面板帧；
