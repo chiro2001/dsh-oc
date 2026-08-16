@@ -1858,6 +1858,54 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     })
   })
 
+  it('re-applies a lost variant before the next prompt', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    let currentVariant: string | undefined = 'high'
+    const api = fakeApi({
+      sessions: {
+        ...fakeApi().sessions,
+        models: async () => okRpc({
+          current: {
+            provider: 'deepseek-official',
+            model: 'mock-model',
+            ...(currentVariant === undefined ? {} : { reasoningEffort: currentVariant }),
+          },
+          routable: true,
+          groups: [],
+          failures: [],
+        }),
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request.payload })
+          currentVariant = (request.payload as { reasoningEffort?: string }).reasoningEffort
+          return okRpc({
+            selected: { provider: 'deepseek-official', model: 'mock-model', reasoningEffort: currentVariant },
+          })
+        },
+      },
+    })
+    const { server } = await boot(api)
+    await request(server, 'POST', '/api/session/s1/model', {
+      model: { providerID: 'deepseek', modelID: 'mock-model', variant: 'high' },
+    })
+    expect(calls).toHaveLength(1)
+
+    // dsh loses the reasoning effort (model re-selection / preset switch).
+    currentVariant = undefined
+    await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: 'probe' }],
+    })
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).toMatchObject({
+      method: 'session.selectModel',
+      payload: {
+        sessionId: 's1',
+        provider: 'deepseek-official',
+        model: 'mock-model',
+        reasoningEffort: 'high',
+      },
+    })
+  })
+
   it('passes agentPreset into session.create and selects the create model', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []

@@ -131,7 +131,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
     await R.applyAgentFromBody(ctx, id, req.body)
-    await R.applyModelSelection(ctx, id, req.body)
+    if (!(await R.applyModelSelection(ctx, id, req.body))) {
+      await R.reconcileModelSelection(ctx, id)
+    }
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
@@ -150,7 +152,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
     await R.applyAgentFromBody(ctx, id, req.body)
-    await R.applyModelSelection(ctx, id, req.body)
+    if (!(await R.applyModelSelection(ctx, id, req.body))) {
+      await R.reconcileModelSelection(ctx, id)
+    }
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
@@ -169,7 +173,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       return R.json(204)
     }
     await R.applyAgentFromBody(ctx, id, body)
-    await R.applyModelSelection(ctx, id, body)
+    if (!(await R.applyModelSelection(ctx, id, body))) {
+      await R.reconcileModelSelection(ctx, id)
+    }
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)

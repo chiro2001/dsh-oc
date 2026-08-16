@@ -1172,15 +1172,57 @@ export async function applyModelSelection(
   ctx: BridgeRouteContext,
   sessionId: string,
   body: unknown,
-): Promise<void> {
+): Promise<boolean> {
   const input = modelInputFromBody(body)
-  if (input === undefined) return
+  if (input === undefined) return false
   await rpc(ctx, 'session.selectModel', {
     sessionId: sid(sessionId),
     provider: dshProviderId(input.providerID),
     model: input.modelID,
     ...(input.variant === undefined ? {} : { reasoningEffort: input.variant }),
   })
+  ctx.state.setSessionModelSelection(sessionId, input)
+  return true
+}
+
+/**
+ * Self-heal an explicit variant selection: dsh can lose the reasoning effort
+ * after some operations (model re-selection, preset switches). Before the next
+ * prompt we compare the cached explicit selection with `session.models` and
+ * re-apply it when the variant went missing.
+ */
+export async function reconcileModelSelection(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+): Promise<void> {
+  const cached = ctx.state.sessionModelSelectionFor(sessionId)
+  if (cached === undefined || cached.variant === undefined) return
+  let current
+  try {
+    current = await rpc(ctx, 'session.models', { sessionId: sid(sessionId) })
+  } catch (error) {
+    ctx.log(`[bridge] model selection check failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+    return
+  }
+  const currentVariant = current.current.reasoningEffort
+  if (
+    current.current.provider === dshProviderId(cached.providerID)
+    && current.current.model === cached.modelID
+    && currentVariant === cached.variant
+  ) {
+    return
+  }
+  try {
+    await rpc(ctx, 'session.selectModel', {
+      sessionId: sid(sessionId),
+      provider: dshProviderId(cached.providerID),
+      model: cached.modelID,
+      reasoningEffort: cached.variant,
+    })
+    ctx.log(`[bridge] restored variant ${cached.variant} for session ${sessionId}`)
+  } catch (error) {
+    ctx.log(`[bridge] variant restore failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 /** Apply the agent carried in a prompt body (Tab/agent picker selection). */

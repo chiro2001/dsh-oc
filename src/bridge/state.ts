@@ -30,6 +30,12 @@ export class InteractionState {
   readonly sessionDirectories = new Map<string, string>()
   readonly sessionParents = new Map<string, string>()
   readonly savedPermissions = new Map<string, SavedPermission>()
+  /** Last explicit model selection (with variant) per session, for self-heal. */
+  readonly sessionModelSelections = new Map<string, {
+    providerID: string
+    modelID: string
+    variant?: string
+  }>()
   /** Real durable titles learned from history projections / title events. */
   readonly sessionTitles = new Map<string, string>()
   sessionListCache?: { items: SessionSummary[]; at: number }
@@ -156,6 +162,21 @@ export class InteractionState {
       }
     }
     return false
+  }
+
+  setSessionModelSelection(
+    sessionId: string,
+    selection: { providerID: string; modelID: string; variant?: string },
+  ): void {
+    if (selection.variant === undefined) {
+      this.sessionModelSelections.delete(sessionId)
+    } else {
+      this.sessionModelSelections.set(sessionId, selection)
+    }
+  }
+
+  sessionModelSelectionFor(sessionId: string): { providerID: string; modelID: string; variant?: string } | undefined {
+    return this.sessionModelSelections.get(sessionId)
   }
 
   setSessionTitle(sessionId: string, title: unknown): void {
