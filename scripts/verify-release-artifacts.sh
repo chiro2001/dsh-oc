@@ -26,6 +26,14 @@ ln -s "$REPO_ROOT/node_modules" "$TMP/build/node_modules"
 
 echo "-- clean rebuild --"
 (cd "$TMP/build" && pnpm build >/dev/null)
+# tsdown emits `//#region <path>` comments in .d.ts files; the temp build
+# resolves node_modules through an absolute symlink while the committed lib
+# uses repo-relative paths. Normalize the region prefix before diffing.
+for side in pristine build; do
+  while IFS= read -r -d '' file; do
+    sed -i -E 's|(//#region )[^ ]*node_modules/|\1node_modules/|' "$file"
+  done < <(find "$TMP/$side/lib" -name '*.d.ts' -print0)
+done
 if ! diff -r "$TMP/pristine/lib" "$TMP/build/lib" > "$TMP/lib.diff" 2>&1; then
   echo "FAIL: committed lib/ differs from a clean rebuild of HEAD src" >&2
   sed -n '1,80p' "$TMP/lib.diff" >&2

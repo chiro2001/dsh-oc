@@ -111,7 +111,13 @@ const api = {
   llm: { models: async () => ok({ groups: [], failures: [] }) },
   events: {
     mux: async function* () {
-      if (rawEvents !== undefined) return
+      if (rawEvents !== undefined) {
+        // Keep the SSE connection open forever: the bridge tears the
+        // connection down when the mux stream ends, but raw replay feeds
+        // events externally through the hub.
+        await new Promise(() => {})
+        return
+      }
       // The TUI validates the attached session from its first session.updated.
       yield {
         rpcId: 'rpc-session',
