@@ -60,6 +60,42 @@ seq，`after` 非负整数否则 400）。
 - 支持矩阵：至少 Linux x64 + macOS arm64 发布冒烟；Windows/ARM 按“声明即
   测”原则收缩。
 
+## 顶级模型审阅后新增（2026-08-17，round-0002）
+
+round-0002 结论：rc.2 当前为条件性 NO-GO；现有恢复一致性测试是 warm/cold
+history 投影对比，不是 live SSE 对比，父链断言恒为空。接受项与处置见
+`expert-advice/round-0002/decision.md`。调整后的执行顺序：
+
+- 实验 1a（本轮）：修正恢复 oracle —— 等待权威 idle 代替固定 sleep；
+  v1+v2 双面签名（v1 父链/引用非空，v2 逐消息 part + tool
+  name/status/content），不再全局扁平比较。
+- 实验 1b：三故障域矩阵 —— `client-sse-reconnect`、`mux-resubscribe`、
+  `process-crash-recovery` 各 2–3 个最高风险 cut point；先冻结恢复契约
+  （durable exactly-once；崩溃前缀不丢/不伪造完成/回 idle/可续聊；纯内存
+  表面列为 transient）。
+- 实验 1c：脱敏真实 corpus（feature manifest + allowlist 脱敏 + 人工
+  golden，不以“10+ 会话”为合格标准）+ 1.18.18 黄金轨迹 + 官方最小复现
+  （错序归因证据或中性措辞二选一）。
+- 实验 2：`v0.1.0-rc.2` 以 full SHA 为真相源：干净 rebuild 后 `lib/` 零
+  差异、远端 SHA 冷装、前版升级/旧会话恢复/回滚、至少 Linux x64 +
+  macOS arm64 smoke；通过后再打受保护 tag。
+- 实验 3：flake 分层统计（最小高风险 case 各 10 次，零失败后扩到 30–60
+  次；release-lane 预算 30–45 分钟；语义首败不 retry）。
+- `--continue` 完整消息图变体不再优先：保留 `e2e-tui-continue.sh` 选择
+  契约，后续可补低成本 `-c` 选择契约。
+
+### 恢复契约（草案，实验 1b 的断言基线）
+
+- 已完成 durable turn：角色、顺序、文本/reasoning、tool
+  input/output/error、part 归属和引用关系 exactly-once。
+- 进程崩溃时的 in-flight turn：恢复已持久化前缀；不伪造成功；重启后得到
+  明确 aborted/idle 终态；下一条 prompt 可被接受。
+- title/goal/todo 等持久 projection：冷启动后恢复。
+- queued message / pending permission/question：dsh 有权威 snapshot 则
+  重发，否则明确取消，不留下不可操作的 TUI 卡片。
+- `Allow always`、bridge 合成 command/error 文本等纯内存/临时表面：允许
+  不恢复，但文档必须明确列为 transient。
+
 ---
 
 ## N1. 关闭 opencode 子进程自动更新与热更新

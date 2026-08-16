@@ -123,6 +123,11 @@
 - 已知日志型会话事件（`step/start`、`request/header|context`、
   `session/title-llm-request`、`permission/preset`、`sandbox/mode`、
   `approval/policy`、`command/run|done`）显式静默，真正未知类型仍打日志。
+- 顶级模型 round-0002 审阅（gpt-5.6-sol / max）：确认 rc.2 为条件性
+  NO-GO，恢复一致性主证据需从 warm/cold history 投影升级为 v1+v2 双面
+  oracle；`--continue` 消息图变体延后，优先三故障域（SSE 断线、mux 重订阅、
+  进程崩溃）与 full SHA 不可变安装/升级/回滚演练；错序归因措辞降为中性
+  已知限制，待官方 1.18.18 最小复现。
 
 ### 修复
 
@@ -138,8 +143,9 @@
   不再渲染成 `[object Object]`。
 - v1/v2 历史按桥接 id 合并同回合的工具调用与后续文本为单条消息，与实时
   SSE 一致（此前历史返回两条同 id 消息，TUI 合并后会把工具卡/文本重复
-  渲染）；“工具+排队”即时视图错序经实验 1 裁决为上游 TUI 渲染行为，
-  `--session` 重新进入顺序正确。
+  渲染）；“工具+排队”即时视图错序为官方 TUI 1.18.18 中观察到的显示限制
+  （bridge 持久数据正确，`--session` 重新进入顺序正确；具体归因待官方
+  最小复现实验闭合）。
 - `turn/end` 跳过已定稿消息的 pending 完成时同时删除记录，避免残留到下一
   回合补发重复的 `message.updated`。
 - `/api/session/active` 只在会话实际 `running` 时返回该会话，空闲/不存在时返回
