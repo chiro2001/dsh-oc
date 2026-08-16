@@ -93,7 +93,7 @@ echo "  agent switched: $FIRST -> $SESSION_AGENT"
 echo "== sidebar keeps the switched agent and the reply renders once =="
 LABEL_SEEN=""
 REPLY_COUNT=""
-for _ in 1 2 3 4 5; do
+for _ in 1 2 3 4 5 6 7 8 9 10; do
   e2e_tui_capture "$E2E_RUN_DIR/tui-agent-tab-final.txt"
   if [[ -z "$LABEL_SEEN" ]] && grep -qai "$SESSION_AGENT ·" "$E2E_RUN_DIR/tui-agent-tab-final.txt"; then
     LABEL_SEEN="1"
@@ -102,6 +102,10 @@ for _ in 1 2 3 4 5; do
   if [[ "$count" == "1" ]]; then
     REPLY_COUNT="$count"
     break
+  fi
+  if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+    echo "e2e: dsh exited before the sidebar check: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+    exit 1
   fi
   sleep 1
 done
