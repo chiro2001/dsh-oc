@@ -270,13 +270,20 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
   register('GET', '/api/session/:sessionID/history', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const limitRaw = req.query.get('limit')
-    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
+    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
     const afterRaw = req.query.get('after')
     const after = afterRaw === null ? undefined : Number(afterRaw)
     if (after !== undefined && (!Number.isInteger(after) || after < 0)) {
       throw badRequest('after must be a non-negative integer')
     }
-    const history = await R.cachedSessionHistory(ctx, id)
+    // dsh session.history supports `beforeSeq` (older events) but not a
+    // forward cursor, so `after` is the exclusive upper event seq: fetch the
+    // page BEFORE the cursor, in chronological order. Page 1 (no after)
+    // returns the newest `limit` messages.
+    const history = await R.cachedSessionHistory(ctx, id, {
+      maxMessages: limit,
+      ...(after === undefined ? {} : { beforeSeq: after }),
+    })
     const defaultModel = await R.defaultModelRef(ctx)
     const entries = history.events
     const anchorSeqs: number[] = []
@@ -292,14 +299,13 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       anchorSeqs,
     )
     const withSeq = data.map((message, index) => ({ message, seq: anchorSeqs[index] ?? 0 }))
-    const filtered = after === undefined ? withSeq : withSeq.filter((entry) => entry.seq > after)
-    const page = filtered.slice(0, limit ?? filtered.length)
-    const next = page.length === 0
+    const oldest = withSeq.reduce((min, entry) => Math.min(min, entry.seq), Number.MAX_SAFE_INTEGER)
+    const next = !history.hasMore || withSeq.length === 0
       ? null
-      : page.reduce((max, entry) => Math.max(max, entry.seq), -1)
+      : oldest
     return R.json(200, {
-      data: remapV2Messages(ctx, id, page.map((entry) => entry.message)),
-      hasMore: filtered.length > page.length,
+      data: remapV2Messages(ctx, id, withSeq.map((entry) => entry.message)),
+      hasMore: history.hasMore,
       next,
     })
   })

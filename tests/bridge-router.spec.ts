@@ -424,17 +424,46 @@ describe('bridge router: session routes', () => {
 
   it('serves v2 session history with an after cursor and limit', async () => {
     const base = fakeApi()
+    const events = [
+      { event: sessionEvent('user/message', {
+        id: 'm1' as never,
+        content: [{ type: 'text', text: 'hello' }],
+        source: { kind: 'user' },
+      }, 2, 1000) },
+      { event: sessionEvent('assistant/message', {
+        turn: 1,
+        step: 1,
+        message: {
+          id: 'm2' as never,
+          role: 'assistant',
+          content: [{ type: 'text', text: 'answer' }],
+          source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-chat' },
+        },
+      }, 3, 1100) },
+      { event: sessionEvent('user/message', {
+        id: 'm3' as never,
+        content: [{ type: 'text', text: 'bye' }],
+        source: { kind: 'user' },
+      }, 4, 1200) },
+    ]
     const api: BridgeApi = {
       ...base,
       sessions: {
         ...base.sessions,
-        history: async () => okRpc({
-          events: [
-            { event: makeUserEvent('hello', 'm1', 1000) },
-            { event: makeAssistantEvent([{ type: 'text', text: 'answer' }], 'm2', 1100) },
-          ],
-          hasMore: false,
-        }),
+        history: async (request) => {
+          const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
+          let window = events
+          const beforeSeq = payload.beforeSeq
+          if (beforeSeq !== undefined) {
+            window = events.filter((entry) => entry.event.seq < beforeSeq)
+          }
+          const max = payload.maxMessages ?? events.length
+          const tail = window.slice(-max)
+          return okRpc({
+            events: tail,
+            hasMore: window.length > tail.length,
+          })
+        },
       },
     }
     const { server } = await boot(api)
@@ -443,24 +472,25 @@ describe('bridge router: session routes', () => {
     expect(all.status).toBe(200)
     const allBody = all.body as { data?: unknown[]; hasMore?: boolean; next?: number }
     expect(allBody).toMatchObject({ hasMore: false })
-    expect(allBody.data).toHaveLength(2)
-    expect(allBody.next).toBe(3)
-
-    const tail = await request(server, 'GET', '/api/session/s1/history?after=2')
-    expect(tail.status).toBe(200)
-    const tailBody = tail.body as { data?: Array<{ type?: string; text?: string }> }
-    expect(tailBody.data).toHaveLength(1)
-    expect(tailBody.data?.[0]).toMatchObject({
-      type: 'assistant',
-      content: [{ type: 'text', text: 'answer' }],
-    })
+    expect(allBody.data).toHaveLength(3)
+    expect(allBody.next).toBeNull()
 
     const page = await request(server, 'GET', '/api/session/s1/history?limit=1')
     expect(page.status).toBe(200)
     const pageBody = page.body as { data?: unknown[]; hasMore?: boolean; next?: number }
     expect(pageBody.data).toHaveLength(1)
     expect(pageBody.hasMore).toBe(true)
-    expect(pageBody.next).toBe(2)
+    expect(pageBody.next).toBe(4)
+
+    const older = await request(server, 'GET', '/api/session/s1/history?after=3')
+    expect(older.status).toBe(200)
+    const olderBody = older.body as { data?: unknown[]; hasMore?: boolean }
+    expect(olderBody.data).toHaveLength(1)
+    expect(olderBody.hasMore).toBe(false)
+
+    const empty = await request(server, 'GET', '/api/session/s1/history?after=2')
+    expect(empty.status).toBe(200)
+    expect((empty.body as { data?: unknown[] }).data).toHaveLength(0)
 
     const bad = await request(server, 'GET', '/api/session/s1/history?after=-1')
     expect(bad.status).toBe(400)

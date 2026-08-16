@@ -308,6 +308,38 @@ async function main() {
       process.stderr.write(`perf: GET /session/:id/message p50=${report.measurements.messageV1.p50.toFixed(1)}ms p95=${report.measurements.messageV1.p95.toFixed(1)}ms\n`)
     }
 
+    // V2 history endpoint: cold + hot reads and a full pagination pass using
+    // the `after` cursor (bounds the per-page cost of large single sessions).
+    const historyId = generated.sessionIds[0]
+    const historyV2 = []
+    for (let i = 0; i < repeats; i++) {
+      historyV2.push(await timeRequest(`${bridgeUrl}/api/session/${historyId}/history?limit=100`))
+    }
+    report.measurements.historyV2 = summarize(historyV2.map((x) => x.ms))
+    report.measurements.historyV2.status = historyV2.at(-1)?.status
+    const paginated = { pages: 0, messages: 0, ms: 0 }
+    let after = undefined
+    for (let page = 0; page < 200; page++) {
+      const query = after === undefined ? 'limit=100' : `limit=100&after=${after}`
+      const start = performance.now()
+      const response = await fetch(`${bridgeUrl}/api/session/${historyId}/history?${query}`)
+      const body = await response.json()
+      paginated.ms += performance.now() - start
+      const pageMessages = Array.isArray(body?.data) ? body.data.length : 0
+      paginated.pages += 1
+      paginated.messages += pageMessages
+      if (!body?.hasMore || body?.next === null || body?.next === undefined) break
+      after = body.next
+    }
+    report.measurements.historyPaginated = paginated
+    if (!quiet) {
+      process.stderr.write(
+        `perf: GET /api/session/:id/history p50=${report.measurements.historyV2.p50.toFixed(1)}ms `
+        + `p95=${report.measurements.historyV2.p95.toFixed(1)}ms `
+        + `paginated=${paginated.pages}p/${paginated.messages}m/${paginated.ms.toFixed(0)}ms\n`,
+      )
+    }
+
     // Real-title coverage of the session list (dsh rows carry no titles; the
     // bridge warms them from history projections, small homes synchronously
     // and large homes in the background).

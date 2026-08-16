@@ -21,8 +21,10 @@
 返回 `{ data: SessionMessage[], hasMore }`，复用 v2 消息转换并带消息锚点
 seq，`after` 非负整数否则 400）。
 
-> 2026-08-16 深夜：响应增加 `next`（本页最大锚点 seq），供独立客户端连续
-> 分页；当前实现仍为全量折叠后过滤（O(N)），单大会话性能基准见下实验 1。
+> 2026-08-16 深夜：响应增加 `next`（本页最旧锚点 seq）供独立客户端连续
+> 分页；`after` 为**独占上界**（dsh 原生 `beforeSeq`，向后翻页），不再
+> 全量折叠后过滤。20k 消息单会话全量分页 ~1.2s、单页延迟有界，基准见
+> `docs/perf/results-2026-08-15.md`。
 
 仍为 LATER 的 SDK 路由：`/api/pty/*`（dsh 无 PTY RPC）、`/api/integration/*`
 与 `/api/credential/*`（dsh 凭据面未暴露）、`/global/upgrade`（自动更新
