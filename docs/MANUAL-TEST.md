@@ -120,5 +120,11 @@ curl -s $B/api/permission/request           # 无 pending 时 {"data":[]}
 `scripts/e2e-queued-order-repro.sh` 复现记录：慢速工具+后续文本流中从键盘
 排队第二条 prompt，逐帧抓拍流式期间面板顺序并冻结归一化 SSE 基线
 （`tests/fixtures/golden/queued-followup-1.18.18.sse.jsonl`）；mock 驱动
-场景连续运行未观察到瞬态错序（61 帧/轮），真实模型时序下的复现仍为后续。
-回合消息的完成时间已推迟到回合结束，QUEUED 标记在整轮完成前保持正确。
+场景连续运行未观察到瞬态错序（61 帧/轮）。真实模型版
+`scripts/e2e-real-queued-order.sh`（manual，真实 DeepSeek API）连续两次
+均复现 wire 前提：后续文本 `message.part.delta` 在排队用户事件
+（seq 107/65）之后继续到达（`wire_follow_after_queued=1`），且流式期间
+面板 45/50 帧存在回复内容渲染在排队卡片下方。综合证据支持“官方 TUI
+即时渲染顺序受排队后到达的后续文本影响”的方向，renderer/bridge 的最终
+归因仍以官方最小 server 复现为准。回合消息的完成时间已推迟到回合结束，
+QUEUED 标记在整轮完成前保持正确。

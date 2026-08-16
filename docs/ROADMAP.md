@@ -96,8 +96,10 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   `scripts/e2e-queued-order-repro.sh`：慢流工具+后续文本 + 键盘排队第二条
   prompt，逐帧抓拍瞬态顺序并冻结第二份黄金基线
   `tests/fixtures/golden/queued-followup-1.18.18.sse.jsonl`（116 事件）；
-  mock 场景连续运行未复现瞬态错序，真实模型时序/官方最小 server 的归因
-  复现仍为后续。
+  mock 场景连续运行未复现瞬态错序；真实模型版
+  `scripts/e2e-real-queued-order.sh`（manual）连续两次复现 wire 前提
+  （后续文本 delta 在排队用户事件后继续到达），面板帧 45/50 存在回复内容
+  渲染在排队卡片下方；官方最小 server 的最终归因仍为后续。
 - 实验 2（2026-08-17 已落地工具与首轮演练）：`v0.1.0-rc.2` 以 full SHA
   为真相源 —— `scripts/verify-release-artifacts.sh` 已加入 check-all 门禁：
   HEAD 源码 clean rebuild 后 committed `lib/` 零差异、npm pack 无机器绝对

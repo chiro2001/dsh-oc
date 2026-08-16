@@ -8,6 +8,12 @@
 
 ### 新增
 
+- 真实模型排队错序复现 `scripts/e2e-real-queued-order.sh`（manual，真实
+  DeepSeek API）：工具完成后立即键盘排队第二条 prompt，记录 bridge SSE
+  时序证据（后续文本 delta 是否在排队用户事件后到达）与流式面板帧；
+  连续两次运行 `wire_follow_after_queued=1`，面板 45/50 帧回复内容渲染在
+  排队卡片下方。同时修正 e2e-real-llm/e2e-real-queued-order 的
+  `DSH_OC_REAL_KEEP_RUN=1` 清理逻辑（此前反向，keep 时反而删除）。
 - 候选 opencode 升级 lane `scripts/upgrade-lane.sh`：对候选二进制跑黄金
   场景并把归一化 SSE 轨迹与 1.18.18 基线语义差分（`--bin`/`--out`），
   同版本验证零差异；版本检查旁路 `DSH_OC_BYPASS_VERSION_CHECK=1` 仅作用于

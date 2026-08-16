@@ -44,7 +44,7 @@ cleanup() {
     e2e_stop_dsh "$E2E_ACTIVE_SESSION" || true
   fi
   if [[ -n "$E2E_RUNID" ]]; then
-    if [[ "$code" == "0" || "${DSH_OC_REAL_KEEP_RUN:-0}" == "1" ]]; then
+    if [[ "$code" == "0" && "${DSH_OC_REAL_KEEP_RUN:-0}" != "1" ]]; then
       rm -rf "$E2E_RUN_DIR"
     else
       echo "e2e-real-llm: run kept at $E2E_RUN_DIR" >&2
