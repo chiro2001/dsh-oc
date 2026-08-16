@@ -35,6 +35,8 @@ wait_tui_ready() {
   return 1
 }
 
+export DSH_OC_E2E_CHUNK_DELAY_MS=40
+export DSH_OC_E2E_CHUNK_SIZE=4
 e2e_new_run "tui-agent-tab" "danger-full-access" "success,success" "1"
 e2e_tui_start ""
 e2e_tui_wait_attach

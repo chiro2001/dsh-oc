@@ -16,6 +16,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+export DSH_OC_E2E_CHUNK_DELAY_MS=40
+export DSH_OC_E2E_CHUNK_SIZE=4
 e2e_new_run "tui-mini" "danger-full-access" "success" "1"
 
 echo "== boot real opencode attach with --mini =="
