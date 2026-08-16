@@ -98,11 +98,15 @@ jobs:
         if: failure()
         run: bash scripts/cleanup-e2e-runs.sh --keep 5 --apply
 
+      - name: Pack e2e runs for upload
+        if: failure()
+        run: tar -C .e2e --exclude='*/node_modules' --exclude='*/.git' -czf /tmp/e2e-runs.tgz .
+
       - name: Upload e2e runs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-runs
-          path: .e2e
-          include-hidden-files: true
+          path: /tmp/e2e-runs.tgz
           retention-days: 3
+        timeout-minutes: 5
