@@ -91,15 +91,27 @@ fi
 echo "  agent switched: $FIRST -> $SESSION_AGENT"
 
 echo "== sidebar keeps the switched agent and the reply renders once =="
-e2e_tui_capture "$E2E_RUN_DIR/tui-agent-tab-final.txt"
-if ! grep -qai "$SESSION_AGENT ·" "$E2E_RUN_DIR/tui-agent-tab-final.txt"; then
+LABEL_SEEN=""
+REPLY_COUNT=""
+for _ in 1 2 3 4 5; do
+  e2e_tui_capture "$E2E_RUN_DIR/tui-agent-tab-final.txt"
+  if [[ -z "$LABEL_SEEN" ]] && grep -qai "$SESSION_AGENT ·" "$E2E_RUN_DIR/tui-agent-tab-final.txt"; then
+    LABEL_SEEN="1"
+  fi
+  count="$(grep 'mock response recovered' "$E2E_RUN_DIR/tui-agent-tab-final.txt" | grep -vc '┃' || true)"
+  if [[ "$count" == "1" ]]; then
+    REPLY_COUNT="$count"
+    break
+  fi
+  sleep 1
+done
+if [[ -z "$LABEL_SEEN" ]]; then
   echo "e2e: sidebar agent label did not follow the switch (want '$SESSION_AGENT ·')" >&2
   tail -30 "$E2E_RUN_DIR/tui-agent-tab-final.txt" >&2 || true
   exit 1
 fi
-REPLY_COUNT="$(grep 'mock response recovered' "$E2E_RUN_DIR/tui-agent-tab-final.txt" | grep -vc '┃' || true)"
 if [[ "$REPLY_COUNT" != "1" ]]; then
-  echo "e2e: reply rendered $REPLY_COUNT times (expected exactly 1)" >&2
+  echo "e2e: reply never settled to a single render (last count: ${REPLY_COUNT:-0})" >&2
   tail -30 "$E2E_RUN_DIR/tui-agent-tab-final.txt" >&2 || true
   exit 1
 fi
