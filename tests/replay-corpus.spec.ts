@@ -195,9 +195,6 @@ describe('replay corpus (experiment 1c)', () => {
           const info = props.info as { role?: string; id?: string; time?: { completed?: number } } | undefined
           if (info?.role === 'assistant' && info.id !== undefined && info.time?.completed !== undefined) {
             completedAssistantCount += 1
-            if (fixture.file === 'multi-tool-queued.jsonl') {
-              console.log('DBG completed', info.id)
-            }
           }
           if (info?.role === 'user' && info.id !== undefined && info.id.startsWith('msg-queued-')) {
             queuedUsers.add(info.id)
