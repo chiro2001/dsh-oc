@@ -84,12 +84,35 @@
 - `scripts/perf.mjs` 新增 `measurements.titleCoverage`：量化列表真实标题覆盖率。
 - `e2e-tui-abort.sh`：mini 分支改为等 SSE 出现真实流式增量后再按 Esc，断言确实
   打断进行中的流（长 mock 开启 `repeatLast`，修复此前第二次请求被 500 拒绝的假通过）。
+- `e2e-tui-queue.sh`：权限弹窗阻塞第一轮时发送第二条 prompt，断言 TUI 显示
+  QUEUED，批准后第二条按序处理。
+- `e2e-tui-queue-live.sh`：慢流进行中从 TUI 键盘发送第二条 prompt，断言 QUEUED
+  显示后打断并干净退出（“模型运行中无法发送新消息”回归项）。
+- `e2e-tui-agent-tab.sh`：Tab 切换 agent 后随 prompt 生效，dsh 会话 preset
+  真实切换（build → standard）。
+- `e2e-tui-abort.sh` 追加 spinner 停止断言：打断后两次捕获不得出现变化的
+  spinner 帧（“打断后 thinking 一直转圈”回归项）。
+- `scripts/e2e-real-llm.sh`：本地真实 LLM 全流程回归（headless 文本+工具、
+  FIFO 队列顺序、`/goal` 创建、variant 保留、TUI sidebar 与发送、干净退出；
+  仅本地手动运行，消耗真实 token）。
+- README 按评审精简：能力状态前置、移除 cast 录制细节（保留在 AGENTS.md）、
+  二进制说明只保留“官方二进制”，补充更新命令与 npm 包名说明。
 - README 演示改为真实模型录制的 GIF：asciinema cast（`docs/demo/`）经官方
   `agg` 渲染成 GIF 嵌入 README（GitHub 不执行 `<script>`，无法用播放器脚本），
   cast 保留供 `asciinema play` 交互回放；录制用真实 DeepSeek 模型完成真实任务，
   不用 mock。
 - 报错显示：dsh `host/agent-error` 现在除了 `session.error` 还会广播一条可见的
   assistant 文本消息（`[错误] …`），TUI 对话区能直接看到错误，不再静默或渲染异常。
+- 排队消息可见：dsh pending inbox（`session/queue` 初始化 +
+  `agent/inbox/spliced` 增量）映射为 opencode 用户消息，TUI 显示 QUEUED；
+  同时移除 300ms 相同文本防抖（掩盖“排队无反馈→用户重发”的根因）。
+- `tool-call-chunks` 历史回放：dsh 持久化主流编码（真实会话 701 vs 39 条
+  live delta）经共享 feed 管线恢复流式工具参数。
+- slash 命令队列提示：`/goal`、`/preset`、`/help` 执行时若队列还有待处理
+  用户消息，结果末尾追加“队列中还有 N 条消息待处理”。
+- 已知日志型会话事件（`step/start`、`request/header|context`、
+  `session/title-llm-request`、`permission/preset`、`sandbox/mode`、
+  `approval/policy`、`command/run|done`）显式静默，真正未知类型仍打日志。
 
 ### 修复
 
@@ -105,6 +128,9 @@
 - Tab/agent 选择随 prompt 生效：v1/v2 全部 prompt 路由现在会应用请求体里的
   `agent`；dsh 对已产生回复的会话锁定 agent preset（409），此时第一条消息后
   会在 TUI 显示一次“Agent switch locked”提示，不再静默失效。
+- 含未完成工具调用的 assistant 消息不再提前标记 `completed`，`step/end` /
+  `turn/end` 时补发，官方 TUI 的 QUEUED 判定（最后一个未完成 assistant 之后
+  的用户消息）正确生效。
 
 ## [0.1.0-rc.1] - 2026-08-15
 
