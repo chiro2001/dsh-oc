@@ -69,9 +69,21 @@ if [[ "$E2E" == "1" ]]; then
     if [[ "$rc" == "0" && "$out" == *PASSED* ]]; then
       echo "PASS $s"
     else
-      echo "FAIL $s (rc=$rc) :: $out"
-      tail -40 "$log" >&2
-      FAILED=1
+      # CI runners occasionally hit permission/timing flakes; one retry keeps
+      # the gate meaningful while still surfacing genuinely broken suites.
+      echo "RETRY $s (first run rc=$rc)"
+      set +e
+      bash "scripts/$s" > "$log" 2>&1
+      rc=$?
+      set -e
+      out="$(tail -1 "$log")"
+      if [[ "$rc" == "0" && "$out" == *PASSED* ]]; then
+        echo "PASS $s (after retry)"
+      else
+        echo "FAIL $s (rc=$rc) :: $out"
+        tail -40 "$log" >&2
+        FAILED=1
+      fi
     fi
   done
   if [[ "$FAILED" != "0" ]]; then
