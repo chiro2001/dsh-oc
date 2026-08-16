@@ -1863,6 +1863,76 @@ describe('bridge events: projection and control frames', () => {
     expect(state.assistantIdForDshId('s1', 'dsh-asst-2')).toBe('msg_assistant_2')
   })
 
+  it('does not reopen the same turn message for a later step of the same turn', () => {
+    const state = new InteractionState()
+    state.registerAssistantIdForUser('s1', 'msg-user-1', 'msg_turn_1')
+    const { translate } = translator(state)
+    const stepOne = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      // Step 1: a streamed tool-call opens the turn message.
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'tool-call-delta',
+            index: 0,
+            id: 'c1' as never,
+            name: 'bash',
+            argumentsDelta: '{}',
+          },
+        }, 3, 950),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'tool-call', id: 'c1' as never, name: 'bash', arguments: '{}' },
+        ], 'dsh-asst-1', 1000),
+      }),
+    ])
+    const stepOneUpdates = stepOne.filter((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
+    expect(stepOneUpdates).toHaveLength(2)
+
+    // Step 2: the follow-up text belongs to the same user turn/message; its
+    // chunk stream must not reopen the already-open message card.
+    const stepTwo = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('text-chunks', [' answer'], 1100, 11, 0, 1, 2),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: ' answer' },
+        ], 'dsh-asst-2', 1200),
+      }),
+    ])
+    const stepTwoUpdates = stepTwo.filter((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
+    expect(stepTwoUpdates).toHaveLength(1)
+    const textParts = [...stepOne, ...stepTwo].filter((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { type?: string }).type === 'text'
+      && (event.payload.properties.part as { messageID?: string }).messageID === 'msg_turn_1')
+    for (const event of textParts) {
+      expect((event.payload.properties.part as { messageID?: string }).messageID).toBe('msg_turn_1')
+    }
+    expect(state.assistantIdForDshId('s1', 'dsh-asst-1')).toBe('msg_turn_1')
+    expect(state.assistantIdForDshId('s1', 'dsh-asst-2')).toBe('msg_turn_1')
+  })
+
   it('skips queue surfacing for TUI-submitted prompts with a local card', () => {
     const state = new InteractionState()
     state.registerPromptMessageId('s1', 'msg_tui_2')

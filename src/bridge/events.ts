@@ -163,6 +163,8 @@ interface SessionStreamState {
   blocks: Map<string, StreamBlockState>
   /** Durable streamed block part ids keyed by `${turn}:${step}:${index}:${blockType}`. */
   blockPartIds: Map<string, string>
+  /** Message ids already opened for streaming in this session (per turn). */
+  openedMessageIds: Set<string>
   compactions: Map<string, CompactionStreamState>
   toolInputs: Map<string, ToolInputState>
 }
@@ -209,6 +211,7 @@ export class MuxEventTranslator {
         finishReasons: new Map(),
         blocks: new Map(),
         blockPartIds: new Map(),
+        openedMessageIds: new Set(),
         compactions: new Map(),
         toolInputs: new Map(),
       }
@@ -267,21 +270,25 @@ export class MuxEventTranslator {
     const stepKey = `${turn}:${step}`
     const existing = state.provisionalMessageIds.get(stepKey)
     if (existing !== undefined) return { messageID: existing, events: [] }
-    const messageID = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
-      ?? provisionalMessageId(sessionId, turn, step)
+    const bridgeId = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
+    const messageID = bridgeId ?? provisionalMessageId(sessionId, turn, step)
+    const alreadyOpen = bridgeId !== undefined && state.openedMessageIds.has(bridgeId)
     state.provisionalMessageIds.set(stepKey, messageID)
+    if (bridgeId !== undefined) state.openedMessageIds.add(bridgeId)
     return {
       messageID,
-      events: [makeEvent(directory, 'message.updated', {
-        sessionID: sessionId,
-        info: provisionalAssistantMessage(
-          sessionId,
-          this.deps,
-          messageID,
-          state.turnStartTime ?? time,
-          state.lastUserMessageId ?? `pending:${sessionId}:user`,
-        ),
-      }, project)],
+      events: alreadyOpen
+        ? []
+        : [makeEvent(directory, 'message.updated', {
+            sessionID: sessionId,
+            info: provisionalAssistantMessage(
+              sessionId,
+              this.deps,
+              messageID,
+              state.turnStartTime ?? time,
+              state.lastUserMessageId ?? `pending:${sessionId}:user`,
+            ),
+          }, project)],
     }
   }
 
@@ -1094,6 +1101,7 @@ export class MuxEventTranslator {
           )
         }
         state.provisionalMessageIds.clear()
+        state.openedMessageIds.clear()
         this.currentAssistant.delete(sessionId)
         this.pendingCalls.delete(sessionId)
         this.clearToolTimers(sessionId)
@@ -1411,21 +1419,25 @@ export class MuxEventTranslator {
       const stepKey = `${event.data.turn}:${event.data.step}`
       let provisionalId = state.provisionalMessageIds.get(stepKey)
       if (!provisionalId) {
-        provisionalId = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
-          ?? provisionalMessageId(sessionId, event.data.turn, event.data.step)
+        const bridgeId = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
+        provisionalId = bridgeId ?? provisionalMessageId(sessionId, event.data.turn, event.data.step)
+        const alreadyOpen = bridgeId !== undefined && state.openedMessageIds.has(bridgeId)
         state.provisionalMessageIds.set(stepKey, provisionalId)
-        events.push(
-          makeEvent(directory, 'message.updated', {
-            sessionID: sessionId,
-            info: provisionalAssistantMessage(
-              sessionId,
-              this.deps,
-              provisionalId,
-              state.blockStarts.get(blockStartKey) ?? state.turnStartTime ?? time0,
-              state.lastUserMessageId ?? `pending:${sessionId}:user`,
-            ),
-          }, project),
-        )
+        if (bridgeId !== undefined) state.openedMessageIds.add(bridgeId)
+        if (!alreadyOpen) {
+          events.push(
+            makeEvent(directory, 'message.updated', {
+              sessionID: sessionId,
+              info: provisionalAssistantMessage(
+                sessionId,
+                this.deps,
+                provisionalId,
+                state.blockStarts.get(blockStartKey) ?? state.turnStartTime ?? time0,
+                state.lastUserMessageId ?? `pending:${sessionId}:user`,
+              ),
+            }, project),
+          )
+        }
       }
       block = {
         blockType,
