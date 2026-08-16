@@ -737,6 +737,25 @@ export function pendingAssistantPlaceholder(
   }
 }
 
+/** Count user messages still pending in the dsh inbox queue for a session. */
+export function queuedPromptCount(ctx: BridgeRouteContext, sessionId: string): number {
+  const projection = ctx.state.inboxProjections.get(sessionId)
+  if (projection === undefined) return 0
+  return [...projection.nextTurn, ...projection.nextStep]
+    .filter((message) => message.source.kind === 'user')
+    .length
+}
+
+/**
+ * Append a queue-backlog hint to a slash command outcome so the user sees why
+ * older prompts keep running after e.g. `/goal` completes.
+ */
+export function slashOutcomeText(ctx: BridgeRouteContext, sessionId: string, text: string): string {
+  const pending = queuedPromptCount(ctx, sessionId)
+  if (pending === 0) return text
+  return `${text}\n\n[dsh-oc] 队列中还有 ${pending} 条消息待处理，将按原顺序继续执行`
+}
+
 /** The dsh-oc bridge exposes one primary agent so the TUI prompt stays usable. */
 export const DEFAULT_AGENT_NAME = 'build'
 
@@ -1102,10 +1121,15 @@ export async function runSlashCommand(
   sessionId: string,
   slash: SlashPromptCapture,
 ): Promise<PresetCommandOutcome | RegistryCommandOutcome> {
-  if (slash.name === 'preset') return runPresetCommand(ctx, sessionId, slash.argument)
-  if (slash.name === 'goal') return runGoalCommand(ctx, sessionId, slash.argument)
-  if (slash.name === 'help') return runHelpCommand(ctx, sessionId, slash.argument)
-  throw badRequest(`unsupported command /${slash.name}`)
+  let outcome: PresetCommandOutcome | RegistryCommandOutcome
+  if (slash.name === 'preset') outcome = await runPresetCommand(ctx, sessionId, slash.argument)
+  else if (slash.name === 'goal') outcome = await runGoalCommand(ctx, sessionId, slash.argument)
+  else if (slash.name === 'help') outcome = runHelpCommand(ctx, sessionId, slash.argument)
+  else throw badRequest(`unsupported command /${slash.name}`)
+  if (outcome.kind === 'success') {
+    outcome = { ...outcome, text: slashOutcomeText(ctx, sessionId, outcome.text) }
+  }
+  return outcome
 }
 
 export async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {

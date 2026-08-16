@@ -197,16 +197,16 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (name === 'preset') {
       const outcome = await R.runPresetCommand(ctx, id, argumentsRaw.trim())
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text)))
     }
     if (name === 'goal') {
       const outcome = await R.runGoalCommand(ctx, id, argumentsRaw)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text)))
     }
     if (name === 'help') {
       const outcome = R.runHelpCommand(ctx, id, argumentsRaw)
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text)))
     }
     const skills = await R.skillListForSession(ctx, id)
     if (skills.some((skill) => skill.name === name)) {

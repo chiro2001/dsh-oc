@@ -16,15 +16,6 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
                   └─ DSH Agent/Session/Tools/LLM/Approval/Questions
 ```
 
-## 演示
-
-<img src="docs/demo/dsh-oc-demo.gif" alt="dsh-oc 核心功能演示（真实 DeepSeek 模型）" width="900">
-
-真实录制：`dsh --profile oc` → 品牌启动画面 → 真实模型运行 `pnpm test` →
-全部单测通过 → 退出提示。cast 源文件在
-[docs/demo/dsh-oc-demo.cast](docs/demo/dsh-oc-demo.cast)，可
-`asciinema play` 回放。
-
 ## 能力状态
 
 > 完整矩阵见 [docs/FEATURES.md](docs/FEATURES.md)，路由细节见
@@ -44,8 +35,13 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 | `Allow always` 权限 | ✅（会话内内存记忆，重启清空） |
 | MCP / LSP / formatter / skills / integration 等外围路由 | ❌（schema-valid stub） |
 
-opencode 子进程直接使用官方二进制（锁定 `1.18.18`），并关闭自动更新、远程模型
-目录与 LSP 下载等后台外网行为；细节见 AGENTS.md。
+opencode 子进程直接使用官方二进制（锁定 `1.18.18`）。
+
+## 演示
+
+<img src="docs/demo/dsh-oc-demo.gif" alt="dsh-oc 核心功能演示（真实 DeepSeek 模型）" width="900">
+
+真实录制：品牌启动画面 → 真实模型运行 `pnpm test` → 全部单测通过 → 退出提示。
 
 ## 安装使用
 
@@ -53,6 +49,15 @@ opencode 子进程直接使用官方二进制（锁定 `1.18.18`），并关闭�
 dsh plugin --profile oc add chiro2001/dsh-oc
 dsh --profile oc
 ```
+
+更新到该源最新版本（重复执行安装命令即可）：
+
+```bash
+dsh plugin --profile oc add chiro2001/dsh-oc
+```
+
+固定分支/版本用 pnpm git spec，例如 `github:chiro2001/dsh-oc#develop`。
+npm 包名为 `@chiro2001/dsh-oc`（未发布 registry，走 GitHub 源安装）。
 
 安装后可用简写命令 `dsh-oc`（等价于 `dsh --profile oc`，参数原样透传）。
 它由 npm `bin` 提供：把 profile 的 bin 目录加入 PATH 即可直接使用，例如：
@@ -63,10 +68,8 @@ dsh-oc                        # 等价 dsh --profile oc
 dsh-oc --mini                 # 等价 dsh --profile oc --mini
 ```
 
-> `chiro2001/dsh-oc` 解析为 GitHub 源 `git+https://github.com/chiro2001/dsh-oc.git`
-> 的 `main` 分支；如需固定版本/分支，可用 `github:chiro2001/dsh-oc#develop` 等
-> pnpm git spec。pnpm 提示缺少 `@deepseek-ai/cordis` 等 peer 属于预期警告，
-> 由 dsh-base/宿主在运行时提供，可忽略。
+pnpm 提示缺少 `@deepseek-ai/cordis` 等 peer 属于预期警告，由 dsh-base/宿主在
+运行时提供，可忽略。
 
 ## 参数透传
 
@@ -98,8 +101,6 @@ opencode 的配置、数据、状态与缓存全部隔离在 `$DSH_HOME/opencode
 - Esc 打断：`--mini` 单按、全量 TUI 连按两次；dsh-oc 会转为 `session.cancel`。
 - 附件：支持文本与图片，PDF 等二进制暂不支持。
 - 外围路由（MCP/LSP/formatter/skills/integration）：schema-valid stub，不伪造结果。
-- SSE 文本流可能携带成对重复的 delta（dsh 双编码 + mux 重放）；TUI 以全量
-  `message.updated` 渲染，实测不受影响。
 - 模型与权限：由 dsh 后端管理。
 
 ## 自测

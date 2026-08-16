@@ -2745,6 +2745,25 @@ describe('bridge router: /goal command and goal todo merge', () => {
     expect(lines).toEqual(['/goal', '/goal ship goal support'])
   })
 
+  it('appends a queue backlog hint to slash outcomes', async () => {
+    const lines: string[] = []
+    const { server, router } = await boot(commandApi(lines))
+    router.ctx.state.applyInboxSplice('s1', 'next-turn', 0, 0, [{
+      id: 'queued-x',
+      content: [{ type: 'text', text: 'older queued prompt' }],
+      source: { kind: 'user' },
+    }], 1000)
+
+    const created = await request(server, 'POST', '/session/s1/command', {
+      command: 'goal',
+      arguments: 'ship queue hint',
+    })
+    expect(created.status).toBe(200)
+    expect((created.body as { parts: Array<{ text: string }> }).parts[0]?.text).toBe(
+      'Goal created: ship queue hint\n\n[dsh-oc] 队列中还有 1 条消息待处理，将按原顺序继续执行',
+    )
+  })
+
   it('completes the current goal through the goals API', async () => {
     const calls: Array<{ method: string; payload: unknown }> = []
     const base = fakeApi()
