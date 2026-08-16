@@ -100,6 +100,8 @@ curl -s $B/api/permission/request           # 无 pending 时 {"data":[]}
 - 排队输入：模型忙碌时提交新消息，立即出现 QUEUED 卡片，第一条完成后
   该消息自动开始处理；不出现同一消息两张卡片。
 - 退出：官方 splash（logo + session id）与 dsh-oc 的说明行都正常显示。
+- 普通文本回复（含 reasoning）与用户消息均只渲染一次；工具调用执行中
+  只显示一张工具卡，完成后显示输出与回合耗时。
 
 复现步骤：`scripts/e2e-tui-queue.sh`、`scripts/e2e-tui-abort.sh`、
 `scripts/e2e-tui-permission.sh` 覆盖上述大部分场景；真实模型回归见
