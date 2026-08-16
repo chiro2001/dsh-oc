@@ -63,16 +63,23 @@ pnpm run perf              # 会话性能压测（--sessions N --scale ...）
 pnpm run features:update   # 刷新 docs/FEATURES.md 自动追踪
 bash scripts/check-all.sh --e2e          # 一键全量门槛
 bash scripts/check-all.sh --e2e --scale 5000
+bash scripts/verify-release-artifacts.sh # 发布工件审计（check-all 内置：lib 零差异、pack 无绝对路径、产物哈希）
+bash scripts/e2e-install-rollback.sh     # manual：远端 full SHA 冷装 + TUI smoke + 回滚演练
 bash scripts/cleanup-e2e-runs.sh --keep 20 --apply   # 清理 .e2e 旧 run（默认 dry-run）
 bash scripts/replay-session-audit.sh <session.jsonl[.zstd]>
                                           # 真实会话回放审计：桥翻译无未处理事件/错误
 bash scripts/audit-local-sessions.sh [sessions-dir]
                                           # 批量审计 $DSH_HOME/sessions 全部会话（含消息 id/role 冲突检查）
+bash scripts/e2e-recovery-crash.sh        # 故障域：SIGKILL 中途崩溃后 --session 重启恢复
+bash scripts/e2e-recovery-sse-reconnect.sh # 故障域：观察者 SSE 断流重连后 exactly-once
 ```
 
 本地直连 dsh profile（实时验证）：`dsh plugin --profile oc add .`；改代码后
 `pnpm build` 立即生效（link 方式）。从 GitHub 分支安装验证：
-`dsh plugin --profile oc add 'github:chiro2001/dsh-oc#<branch>'`。
+`dsh plugin --profile oc add 'github:chiro2001/dsh-oc#<branch>'`。`#develop`
+是可变 ref，pnpm 可能复用旧解析 SHA；重复执行 add 会刷新锁文件，用
+`rg 'codeload.github.com/chiro2001/dsh-oc/tar.gz' pnpm-lock.yaml` 核对实际
+解析到的 commit。
 
 ## 安装、更新与本地开发
 
@@ -87,7 +94,9 @@ dsh --profile oc --help                                            # 验证版�
 ```
 
 - `bin/dsh-oc.mjs` 提供 `dsh-oc` 简写（`dsh --profile oc` 参数透传、退出码
-  透传）；安装后位于 profile 的 `node_modules/.bin`，README 提供 PATH 指引。
+  透传）；安装后位于 profile 的 `node_modules/.bin`，README 提供 PATH 指引；
+  本机可直接 `ln -sf ~/.dsh/profiles/oc/node_modules/.bin/dsh-oc
+  ~/.local/bin/dsh-oc` 让简写常驻 PATH。
 - npm 包名 `@chiro2001/dsh-oc` 未发布 registry；安装/更新一律走 GitHub 源。
 - 本地开发：`dsh plugin --profile oc add .` 以 `link:` 方式链接仓库，改
   `src/` 后 `pnpm build` 立即生效；但 `lib/` 必须随提交推送，GitHub 直装才
@@ -117,6 +126,12 @@ dsh --profile oc --help                                            # 验证版�
 - **真实模型回归定位为 smoke**：`scripts/e2e-real-llm.sh` 覆盖真实文本、
   工具、goal、variant 与 TUI attach，但随机模型输出不承担桥接正确性的
   唯一 oracle；确定性回放语料（脱敏真实 session）是更优先的回归手段。
+- **恢复故障域按路径分别验证**：`client-sse-reconnect` /
+  `mux-resubscribe` / `process-crash-recovery` 不是同一条重连路径。共享
+  oracle 在 `tests/e2e/recovery-lib.sh`（v1/v2 签名、权威 idle、前缀/全图
+  比较）；改动 bridge SSE/历史转换时至少跑
+  `e2e-recovery-consistency.sh` + `e2e-recovery-crash.sh` +
+  `e2e-recovery-sse-reconnect.sh`。
 
 ## 自测门槛（提交/合并前必须全绿）
 
@@ -124,8 +139,11 @@ dsh --profile oc --help                                            # 验证版�
 2. `pnpm run probe`（62/62）
 3. 涉及协议/桥接/TUI 的改动：至少跑相关 `scripts/e2e-*.sh`；完整回归用
    `bash scripts/check-all.sh --e2e`
-4. `pnpm run features:update`（涉及能力清单时）并提交结果
-5. `lib/` 构建产物随提交；检查机器相关绝对路径：
+4. 发布工件审计：`check-all` 内置 `verify-release-artifacts.sh`（HEAD 干净
+   重建后 committed `lib/` 零差异、npm pack 无机器绝对路径、记录产物哈希）；
+   单独跑 `bash scripts/verify-release-artifacts.sh`
+5. `pnpm run features:update`（涉及能力清单时）并提交结果
+6. `lib/` 构建产物随提交；检查机器相关绝对路径：
    `rg -n --hidden -g '!node_modules' -g '!.git' 'chiro' . | rg -v 'chiro2001|/home/chiro/'`
 
 e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /

@@ -178,3 +178,42 @@ recovery_assert_prefix() {
   fi
   return 0
 }
+
+# Crash-recovery prefix: the restart graph may be an exact message prefix of
+# the last observed projection, or equal-length with the final text part
+# truncated (the last durable chunk boundary can fall inside a part; the
+# crash contract only requires the persisted prefix, not the in-memory tail).
+recovery_assert_crash_prefix() {
+  local label="$1"
+  local restart="$2"
+  local observed="$3"
+  if ! jq -e -n \
+    --slurpfile r "$restart" \
+    --slurpfile o "$observed" '
+      ($r[0] | length) <= ($o[0] | length)
+      and (
+        ($r[0] == $o[0][0:($r[0] | length)])
+        or (
+          ($r[0] | length) == ($o[0] | length)
+          and ($r[0][0:(($r[0] | length) - 1)] == $o[0][0:(($r[0] | length) - 1)])
+          and (($r[0][-1].parts | length) == ($o[0][-1].parts | length))
+          and ([range(0; ($r[0][-1].parts | length)) as $i |
+            ($r[0][-1].parts[$i].type == $o[0][-1].parts[$i].type)
+            and (if ($r[0][-1].parts[$i].type == "text") then
+                   ($o[0][-1].parts[$i].text | startswith($r[0][-1].parts[$i].text))
+                 else
+                   ($r[0][-1].parts[$i] == $o[0][-1].parts[$i])
+                 end)
+          ] | all)
+        )
+      )
+    ' >/dev/null; then
+    echo "recovery: $label is not a crash-consistent prefix of the observed graph" >&2
+    echo "--- restart ---" >&2
+    cat "$restart" >&2
+    echo "--- observed ---" >&2
+    cat "$observed" >&2
+    return 1
+  fi
+  return 0
+}

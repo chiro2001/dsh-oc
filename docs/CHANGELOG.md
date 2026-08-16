@@ -8,6 +8,12 @@
 
 ### 新增
 
+- 预算化 flake 扫描 `scripts/flake-mini-scan.sh`：对最小高风险 e2e 脚本
+  重复 N 次（默认 10），记录首败与耗时，语义失败立即停止且不重试；恢复
+  三故障域首轮各 10 次全绿（结果见 docs/perf）。
+- 恢复 oracle 增加崩溃语义：`recovery_assert_crash_prefix` 允许重启图是
+  观察图的完整消息前缀，或等长时最后文本 part 是观察文本的前缀（SIGKILL
+  落在最后 chunk 落盘边界内属正常崩溃一致性，不是数据丢失）。
 - 发布工件审计 `scripts/verify-release-artifacts.sh`（已入 `check-all` 门禁）：
   从 HEAD 源码干净重建并断言 committed `lib/` 零差异；npm pack 扫描机器
   绝对路径；输出 package version、tarball sha256 与 package-tree hash。

@@ -89,8 +89,8 @@ e2e_tui_wait_attach
 recovery_wait_tui_ready
 recovery_signature_v2 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/restart-v2.json"
 recovery_signature_v1 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/restart-v1.json"
-recovery_assert_prefix "v2 restart" "$E2E_RUN_DIR/restart-v2.json" "$E2E_RUN_DIR/pre-crash-v2.json"
-recovery_assert_prefix "v1 restart" "$E2E_RUN_DIR/restart-v1.json" "$E2E_RUN_DIR/pre-crash-v1.json"
+recovery_assert_crash_prefix "v2 restart" "$E2E_RUN_DIR/restart-v2.json" "$E2E_RUN_DIR/pre-crash-v2.json"
+recovery_assert_crash_prefix "v1 restart" "$E2E_RUN_DIR/restart-v1.json" "$E2E_RUN_DIR/pre-crash-v1.json"
 echo "  restart graph is a prefix of the last observed projection"
 
 # The session must reach idle. dsh may restore the in-flight turn as running;

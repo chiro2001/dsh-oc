@@ -91,6 +91,11 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   待 rc.2 版本 bump 后重跑并打受保护 tag。
 - 实验 3：flake 分层统计（最小高风险 case 各 10 次，零失败后扩到 30–60
   次；release-lane 预算 30–45 分钟；语义首败不 retry）。
+- 实验 3 首轮（2026-08-17）：`scripts/flake-mini-scan.sh` 已落地；恢复三
+  故障域各 10 次全绿（consistency 29–30s、crash 21–24s、sse 15–16s，见
+  `docs/perf/results-flake-recovery-2026-08-17.md`）。扫描首跑发现 crash
+  oracle 过严（把崩溃边界内未落盘 chunk 的合法恢复判失败），已改为
+  “持久前缀 or 尾部文本前缀”语义。
 - `--continue` 完整消息图变体不再优先：保留 `e2e-tui-continue.sh` 选择
   契约，后续可补低成本 `-c` 选择契约。
 
