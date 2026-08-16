@@ -22,16 +22,32 @@ function remapV2Messages(
       ? ctx.state.assistantIdForDshId(sessionId, message.id)
       : undefined
     const surfaceId = promptId ?? assistantId
-    if (surfaceId === undefined) return message
+    const sessionAgent = ctx.state.sessionAgentFor(sessionId)
+    if (surfaceId === undefined && sessionAgent === undefined) return message
     if (!('content' in message) || !Array.isArray(message.content)) {
-      return { ...message, id: surfaceId }
+      return {
+        ...message,
+        ...(surfaceId === undefined ? {} : { id: surfaceId }),
+        ...(sessionAgent !== undefined && message.type === 'assistant'
+          ? { agent: sessionAgent }
+          : {}),
+      }
     }
     const content = message.content.map((part) => ({
       ...part,
-      id: String(part.id).replaceAll(message.id, surfaceId),
-      messageID: surfaceId,
+      ...(surfaceId === undefined ? {} : {
+        id: String(part.id).replaceAll(message.id, surfaceId),
+        messageID: surfaceId,
+      }),
     }))
-    return { ...message, id: surfaceId, content } as SessionMessagesResponse['data'][number]
+    return {
+      ...message,
+      ...(surfaceId === undefined ? {} : { id: surfaceId }),
+      ...(sessionAgent !== undefined && message.type === 'assistant'
+        ? { agent: sessionAgent }
+        : {}),
+      content,
+    } as SessionMessagesResponse['data'][number]
   })
 }
 
@@ -153,8 +169,8 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     ctx.state.registerPromptMessageId(id, promptUserID)
     const assistantID = `msg_${randomUUID()}`
     ctx.state.registerAssistantIdForUser(id, promptUserID, assistantID)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, req.body)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }

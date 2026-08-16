@@ -212,6 +212,10 @@ export function recordSessionSummaries(
   for (const item of items) {
     const id = String(item.sessionId)
     ctx.state.sessionDirectories.set(id, directories.get(id) ?? ctx.cwd)
+    const agent = (item as { agent?: unknown }).agent
+    if (typeof agent === 'string' && agent.length > 0) {
+      ctx.state.setSessionAgent(id, agent)
+    }
     if (item.origin === 'subagent' && item.parentSessionId !== undefined) {
       ctx.state.sessionParents.set(id, String(item.parentSessionId))
     }
@@ -559,6 +563,9 @@ export function toV1Session(view: SessionView, id: string, ctx: BridgeRouteConte
   return minimalSession(id, {
     cwd: view.cwd ?? ctx.cwd,
     createdAt: view.createdAt,
+    ...(ctx.state.sessionAgentFor(id) === undefined
+      ? {}
+      : { agent: ctx.state.sessionAgentFor(id) }),
     ...(ctx.state.sessionParents.get(id) === undefined
       ? {}
       : { parentID: ctx.state.sessionParents.get(id) }),
@@ -576,6 +583,9 @@ export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteConte
   return minimalSessionV2(id, {
     cwd: view.cwd ?? ctx.cwd,
     createdAt: view.createdAt,
+    ...(ctx.state.sessionAgentFor(id) === undefined
+      ? {}
+      : { agent: ctx.state.sessionAgentFor(id) }),
     ...(ctx.state.sessionParents.get(id) === undefined
       ? {}
       : { parentID: ctx.state.sessionParents.get(id) }),
@@ -967,6 +977,7 @@ export function broadcastSessionAgent(
   sessionId: string,
   agent: string,
 ): void {
+  ctx.state.setSessionAgent(sessionId, agent)
   const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
   const project = projectIdFor(directory)
   ctx.hub.broadcast([
@@ -1000,7 +1011,7 @@ export async function broadcastPromptUserMessage(
         sessionID: sessionId,
         role: 'user',
         time: { created },
-        agent: DEFAULT_AGENT,
+        agent: ctx.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
         model,
       },
     }, project),

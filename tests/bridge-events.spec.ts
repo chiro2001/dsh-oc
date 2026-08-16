@@ -515,10 +515,11 @@ describe('bridge events: session event mapping', () => {
       && (event.payload.properties.info as { time: { completed?: number } }).time.completed === 2000)
     expect(finalIndex).toBeGreaterThanOrEqual(0)
 
-    const finalInfo = events[finalIndex]?.payload.properties.info as { id?: string; time: { created: number; completed: number }; parentID?: string; finish?: string }
+    const finalInfo = events[finalIndex]?.payload.properties.info as { id?: string; time: { created: number; completed: number }; parentID?: string; finish?: string; agent?: string }
     expect(finalInfo.id).toBe('msg_pending:s1:1:1')
     expect(finalInfo.parentID).toBe('msg-user-1')
     expect(finalInfo.finish).toBe('stop')
+    expect(finalInfo.agent).toBe('build')
     expect(finalInfo.time.created).toBe(1100)
     expect(finalInfo.time.completed).toBe(2000)
     expect(finalInfo.time.created).toBeLessThan(finalInfo.time.completed)
@@ -1379,6 +1380,20 @@ describe('bridge events: session event mapping', () => {
     expect((events[1]?.payload.properties.info as { title: string }).title).toBe('Titled')
   })
 
+  it('keeps the real session agent across title/projection updates', () => {
+    const state = new InteractionState()
+    state.setSessionAgent('s1', 'standard')
+    const { translate } = translator(state)
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('session/title', { title: 'Titled' }, 2, 200),
+      }),
+    ])
+    expect((events[0]?.payload.properties.info as { agent?: string }).agent).toBe('standard')
+  })
+
   it('marks run input activity on user messages but not bare session creation', () => {
     const created = new InteractionState()
     const createdTranslate = translator(created).translate
@@ -1874,6 +1889,45 @@ describe('bridge events: projection and control frames', () => {
       messageID: 'msg_assistant_2',
     })
     expect(state.assistantIdForDshId('s1', 'dsh-asst-2')).toBe('msg_assistant_2')
+  })
+
+  it('keeps the real user anchor when dsh injects a plugin context message', () => {
+    const state = new InteractionState()
+    state.registerAssistantIdForUser('s1', 'msg-user-1', 'msg_turn_1')
+    const { translate } = translator(state)
+    translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('user/message', {
+          id: 'ctx-1' as never,
+          content: [{ type: 'text', text: 'Current runtime context' }],
+          source: { kind: 'plugin', plugin: 'fs' },
+        }, 4, 950),
+      }),
+    ])
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: 'answer' },
+        ], 'dsh-asst-ctx', 1000),
+      }),
+    ])
+    const assistant = events.find((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'assistant')
+    // The plugin context must not hijack the parent anchor: the reply still
+    // reuses the bridge id registered for the real user prompt.
+    expect(assistant?.payload.properties).toMatchObject({
+      info: { id: 'msg_turn_1', parentID: 'msg-user-1' },
+    })
   })
 
   it('does not reopen the same turn message for a later step of the same turn', () => {

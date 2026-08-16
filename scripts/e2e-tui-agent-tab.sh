@@ -90,6 +90,21 @@ if [[ -z "$SESSION_AGENT" || "$SESSION_AGENT" == "$FIRST" ]]; then
 fi
 echo "  agent switched: $FIRST -> $SESSION_AGENT"
 
+echo "== sidebar keeps the switched agent and the reply renders once =="
+e2e_tui_capture "$E2E_RUN_DIR/tui-agent-tab-final.txt"
+if ! grep -qai "$SESSION_AGENT ·" "$E2E_RUN_DIR/tui-agent-tab-final.txt"; then
+  echo "e2e: sidebar agent label did not follow the switch (want '$SESSION_AGENT ·')" >&2
+  tail -30 "$E2E_RUN_DIR/tui-agent-tab-final.txt" >&2 || true
+  exit 1
+fi
+REPLY_COUNT="$(grep 'mock response recovered' "$E2E_RUN_DIR/tui-agent-tab-final.txt" | grep -vc '┃' || true)"
+if [[ "$REPLY_COUNT" != "1" ]]; then
+  echo "e2e: reply rendered $REPLY_COUNT times (expected exactly 1)" >&2
+  tail -30 "$E2E_RUN_DIR/tui-agent-tab-final.txt" >&2 || true
+  exit 1
+fi
+echo "  sidebar shows '$SESSION_AGENT ·'; reply rendered once"
+
 echo "== exit through prompt submit =="
 e2e_tui_exit
 e2e_tui_after_checks

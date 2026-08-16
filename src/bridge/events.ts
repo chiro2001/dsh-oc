@@ -759,7 +759,13 @@ export class MuxEventTranslator {
           'session.updated',
           {
             sessionID: sessionId,
-            info: minimalSession(sessionId, { cwd: directory, title }),
+            info: minimalSession(sessionId, {
+              cwd: directory,
+              title,
+              ...(this.deps.state.sessionAgentFor(sessionId) === undefined
+                ? {}
+                : { agent: this.deps.state.sessionAgentFor(sessionId) }),
+            }),
           },
           project,
         ),
@@ -810,19 +816,23 @@ export class MuxEventTranslator {
       case 'user/message': {
         this.deps.state.markInput()
         const dshId = String(event.data.id)
+        const sourceKind = (event.data.source as { kind?: string } | undefined)?.kind
+        const isUserPrompt = sourceKind === 'user'
         const surfaceId = this.deps.state.takePromptMessageId(sessionId, dshId)
         if (surfaceId !== dshId) {
           // The prompt route already echoed this user message (with the
           // bridge-generated id) so the TUI could render its queued card
           // immediately; re-emitting it here would duplicate the card.
           this.deps.state.markBroadcastDshId(sessionId, dshId)
-          this.streamState(sessionId).lastUserMessageId = surfaceId
+          if (isUserPrompt) this.streamState(sessionId).lastUserMessageId = surfaceId
           return []
         }
         if (this.deps.state.isBroadcastDshId(sessionId, dshId)) {
           // dsh re-broadcasts the durable user/message after the route echo;
           // keep the bridge id as the parent anchor and stay silent.
-          this.streamState(sessionId).lastUserMessageId = this.deps.state.promptIdForDshId(sessionId, dshId) ?? dshId
+          if (isUserPrompt) {
+            this.streamState(sessionId).lastUserMessageId = this.deps.state.promptIdForDshId(sessionId, dshId) ?? dshId
+          }
           return []
         }
         if (this.deps.state.hasPresentedQueued(sessionId, dshId)) {
@@ -831,13 +841,16 @@ export class MuxEventTranslator {
           // render a second card. Keep the durable id in the stream state so
           // the assistant message still parents to it.
           this.deps.state.clearPresentedQueued(sessionId, dshId)
-          this.streamState(sessionId).lastUserMessageId = dshId
+          if (isUserPrompt) this.streamState(sessionId).lastUserMessageId = dshId
           return []
         }
         const events = messageEvents(sessionId, this.deps, () => {
           const entry = userMessageFromEvent(event, messageOptions(sessionId, this.deps))
           return {
-            info: entry.info as unknown as Record<string, unknown>,
+            info: {
+              ...(entry.info as unknown as Record<string, unknown>),
+              agent: this.deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
+            },
             parts: entry.parts as unknown as Array<Record<string, unknown>>,
           }
         })
@@ -874,7 +887,7 @@ export class MuxEventTranslator {
             ),
           )
         }
-        this.streamState(sessionId).lastUserMessageId = dshId
+        if (isUserPrompt) this.streamState(sessionId).lastUserMessageId = dshId
         return events
       }
       case 'compaction/start' as SessionEvent['type']:
@@ -988,7 +1001,11 @@ export class MuxEventTranslator {
               return state.blockPartIds.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`)
             },
           )
-          const info = { ...entry.info, id: messageID } as unknown as Record<string, unknown>
+          const info = {
+            ...entry.info,
+            id: messageID,
+            agent: this.deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
+          } as unknown as Record<string, unknown>
           if (event.data.message.content.some((block) => block.type === 'tool-call')) {
             // The message is not complete until its tool calls finish; leaving
             // `time.completed` unset keeps later user prompts marked QUEUED.
@@ -1287,6 +1304,9 @@ export class MuxEventTranslator {
                 cwd: childDirectory,
                 title: header.title ?? '',
                 createdAt: header.createdAt ?? Date.now(),
+                ...(this.deps.state.sessionAgentFor(sessionId) === undefined
+                  ? {}
+                  : { agent: this.deps.state.sessionAgentFor(sessionId) }),
                 ...(parentID === undefined ? {} : { parentID }),
               }),
             }, projectIdFor(childDirectory)),
@@ -1301,6 +1321,9 @@ export class MuxEventTranslator {
               info: minimalSession(sessionId, {
                 cwd: directory,
                 createdAt: data?.time ?? flat.createdAt,
+                ...(this.deps.state.sessionAgentFor(sessionId) === undefined
+                  ? {}
+                  : { agent: this.deps.state.sessionAgentFor(sessionId) }),
                 ...(parentID === undefined ? {} : { parentID }),
               }),
             }, project),
@@ -1319,6 +1342,9 @@ export class MuxEventTranslator {
                 cwd: directory,
                 title,
                 createdAt: data.time,
+                ...(this.deps.state.sessionAgentFor(sessionId) === undefined
+                  ? {}
+                  : { agent: this.deps.state.sessionAgentFor(sessionId) }),
                 ...(parentID === undefined ? {} : { parentID }),
               }),
             }, project),
@@ -1346,6 +1372,7 @@ export class MuxEventTranslator {
       if (this.deps.state.peekPromptMessageId(sessionId) !== undefined) continue
       if (this.deps.state.isBroadcastDshId(sessionId, String(message.id))) continue
       const model = this.deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+      const agent = this.deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
       events.push(
         makeEvent(directory, 'message.updated', {
           sessionID: sessionId,
@@ -1354,7 +1381,7 @@ export class MuxEventTranslator {
             sessionID: sessionId,
             role: 'user',
             time: { created: message.enqueuedAt },
-            agent: DEFAULT_AGENT,
+            agent,
             model,
           },
         }, project),

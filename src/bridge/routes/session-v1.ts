@@ -23,13 +23,22 @@ function remapV1Messages(
       ? ctx.state.assistantIdForDshId(sessionId, dshId)
       : undefined
     const surfaceId = promptId ?? assistantId
-    if (surfaceId === undefined) return entry
+    const sessionAgent = ctx.state.sessionAgentFor(sessionId)
+    const info = {
+      ...entry.info,
+      ...(surfaceId === undefined ? {} : { id: surfaceId }),
+      ...(sessionAgent !== undefined && entry.info.role === 'assistant'
+        ? { agent: sessionAgent }
+        : {}),
+    }
     return {
-      info: { ...entry.info, id: surfaceId },
+      info,
       parts: entry.parts.map((part) => ({
         ...part,
-        id: String(part.id).replaceAll(dshId, surfaceId),
-        messageID: surfaceId,
+        ...(surfaceId === undefined ? {} : {
+          id: String(part.id).replaceAll(dshId, surfaceId),
+          messageID: surfaceId,
+        }),
       })),
     }
   })
@@ -178,8 +187,8 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
     const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, req.body)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
@@ -205,8 +214,8 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
     const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, req.body)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
@@ -231,8 +240,8 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       return R.json(204)
     }
     const { promptUserID } = registerPromptIds(ctx, id, body)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, body)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     if (!(await R.applyModelSelection(ctx, id, body))) {
       await R.reconcileModelSelection(ctx, id)
     }

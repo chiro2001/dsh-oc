@@ -59,6 +59,8 @@ export class InteractionState {
   }>()
   /** Real durable titles learned from history projections / title events. */
   readonly sessionTitles = new Map<string, string>()
+  /** Last known agent preset per session (survives title/projection updates). */
+  private readonly sessionAgents = new Map<string, string>()
   /** Mirror of each session's dsh pending inbox (next-turn / next-step). */
   readonly inboxProjections = new Map<string, InboxProjection>()
   /** Message ids already surfaced to the TUI as queued user messages. */
@@ -405,6 +407,14 @@ export class InteractionState {
 
   sessionTitleFor(sessionId: string): string | undefined {
     return this.sessionTitles.get(sessionId)
+  }
+
+  setSessionAgent(sessionId: string, agent: string): void {
+    if (agent.length > 0) this.sessionAgents.set(sessionId, agent)
+  }
+
+  sessionAgentFor(sessionId: string): string | undefined {
+    return this.sessionAgents.get(sessionId)
   }
 
   /** Record that the user submitted new input during this run. */

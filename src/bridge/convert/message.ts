@@ -139,13 +139,14 @@ function assistantMessageInfo(
   usage?: TokenUsage,
   created?: number,
   finish?: string,
-): AssistantMessage {
+): AssistantMessage & { agent: string } {
   return {
     id: String(message.id),
     sessionID: opts.sessionId,
     role: 'assistant',
     time: { created: created ?? time, completed: time },
     parentID,
+    agent: DEFAULT_AGENT,
     modelID: message.source.model,
     providerID: externalProviderId(message.source.provider),
     mode: DEFAULT_AGENT,

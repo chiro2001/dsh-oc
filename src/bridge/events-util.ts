@@ -158,7 +158,7 @@ export function provisionalAssistantMessage(
     id,
     sessionID: sessionId,
     role: 'assistant',
-    agent: 'build',
+    agent: deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
     time: { created },
     parentID,
     modelID: model.modelID,
