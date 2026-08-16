@@ -28,6 +28,7 @@ fi
 echo "  bin present: $BIN"
 
 export PATH="$E2E_PROFILE_DIR/node_modules/.bin:$PATH"
+export DSH_HOME="$E2E_DSH_HOME"
 
 SHORT="$(dsh-oc --help 2>&1)"
 SHORT_RC=$?
@@ -43,7 +44,7 @@ if [[ "$SHORT" != *"dsh-oc"* || "$SHORT" != *"DeepSeek Harness"* ]]; then
 fi
 echo "  dsh-oc --help ok"
 
-LONG="$(DSH_HOME="$E2E_DSH_HOME" dsh --profile oc --help 2>&1)"
+LONG="$(dsh --profile oc --help 2>&1)"
 if [[ "$SHORT" != "$LONG" ]]; then
   echo "e2e: dsh-oc --help differs from dsh --profile oc --help" >&2
   diff <(printf '%s\n' "$SHORT") <(printf '%s\n' "$LONG") >&2 || true
