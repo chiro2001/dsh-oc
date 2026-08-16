@@ -17,6 +17,27 @@ export interface CachedHistory {
   projections?: SessionProjectionsBlock
 }
 
+/** One user-visible message sitting in a dsh pending inbox queue. */
+export interface QueuedInboxMessage {
+  id: string
+  /** dsh `UserMessage` content blocks (only text blocks are rendered). */
+  content: readonly unknown[]
+  source: { kind: string }
+  /** When the message entered the queue (splice event time). */
+  enqueuedAt: number
+}
+
+/** dsh inbox queue state mirrored by the bridge for opencode display. */
+export interface InboxProjection {
+  nextTurn: QueuedInboxMessage[]
+  nextStep: QueuedInboxMessage[]
+}
+
+export interface InboxSpliceOutcome {
+  added: QueuedInboxMessage[]
+  removed: QueuedInboxMessage[]
+}
+
 /**
  * In-memory correlation maps between opencode-facing request ids and the dsh
  * rpcIds/approval ids that answer them. Populated from the mux stream; the
@@ -36,10 +57,12 @@ export class InteractionState {
     modelID: string
     variant?: string
   }>()
-  /** Recent submitted prompt texts per session (short duplicate window). */
-  readonly lastPrompts = new Map<string, { text: string; at: number }>()
   /** Real durable titles learned from history projections / title events. */
   readonly sessionTitles = new Map<string, string>()
+  /** Mirror of each session's dsh pending inbox (next-turn / next-step). */
+  readonly inboxProjections = new Map<string, InboxProjection>()
+  /** Message ids already surfaced to the TUI as queued user messages. */
+  readonly presentQueuedIds = new Set<string>()
   sessionListCache?: { items: SessionSummary[]; at: number }
   /** In-flight session.list RPC shared by concurrent callers (incl. prefetch). */
   sessionListLoading?: Promise<SessionSummary[]>
@@ -181,21 +204,91 @@ export class InteractionState {
     return this.sessionModelSelections.get(sessionId)
   }
 
+  /** Per-session inbox projection, created on first touch. */
+  inboxProjectionFor(sessionId: string): InboxProjection {
+    let projection = this.inboxProjections.get(sessionId)
+    if (projection === undefined) {
+      projection = { nextTurn: [], nextStep: [] }
+      this.inboxProjections.set(sessionId, projection)
+    }
+    return projection
+  }
+
+  private queuedKey(sessionId: string, messageId: string): string {
+    return `${sessionId}\u0000${messageId}`
+  }
+
   /**
-   * Idempotency guard for prompt submits: within a short window the exact same
-   * text for one session is treated as a duplicate (the opencode TUI can
-   * retry a submit while the first one is still queued, which made dsh process
-   * the same user message twice and reply to stale turns). Records the new
-   * prompt on every call; returns true when the call is a duplicate.
+   * Apply one durable `agent/inbox/spliced` mutation to the mirrored queue.
+   * `added` contains messages that were not yet surfaced to the TUI; `removed`
+   * contains messages dropped from the queue (claim or cancellation).
    */
-  isDuplicatePrompt(sessionId: string, text: string, windowMs = 300): boolean {
-    const previous = this.lastPrompts.get(sessionId)
-    const now = Date.now()
-    const duplicate = previous !== undefined
-      && previous.text === text
-      && now - previous.at < windowMs
-    this.lastPrompts.set(sessionId, { text, at: now })
-    return duplicate
+  applyInboxSplice(
+    sessionId: string,
+    target: 'next-turn' | 'next-step',
+    start: number,
+    removedCount: number,
+    inserted: Array<{ id: string; content: readonly unknown[]; source: { kind: string } }>,
+    enqueuedAt: number,
+  ): InboxSpliceOutcome {
+    const projection = this.inboxProjectionFor(sessionId)
+    const list = target === 'next-step' ? projection.nextStep : projection.nextTurn
+    const actualStart = Math.max(0, Math.min(start, list.length))
+    const actualDelete = Math.max(0, Math.min(removedCount, list.length - actualStart))
+    const removed = list.splice(actualStart, actualDelete)
+    const added: QueuedInboxMessage[] = []
+    for (const message of inserted) {
+      const key = this.queuedKey(sessionId, String(message.id))
+      if (this.presentQueuedIds.has(key)) continue
+      this.presentQueuedIds.add(key)
+      const entry: QueuedInboxMessage = {
+        id: String(message.id),
+        content: message.content,
+        source: message.source,
+        enqueuedAt,
+      }
+      added.push(entry)
+      list.splice(actualStart + added.length - 1, 0, entry)
+    }
+    for (const message of removed) {
+      this.presentQueuedIds.delete(this.queuedKey(sessionId, message.id))
+    }
+    return { added, removed }
+  }
+
+  /**
+   * Initialize the inbox projection from the `session/queue` snapshot dsh
+   * broadcasts when an SSE mux subscription starts. Later queue snapshots are
+   * ignored: they cannot distinguish a claimed message from a cancelled one,
+   * so incremental `agent/inbox/spliced` events own the live diff.
+   * Returns only the messages that were not yet surfaced to the TUI.
+   */
+  initializeInboxProjection(
+    sessionId: string,
+    items: Array<{
+      placement: 'queued' | 'steering' | 'context'
+      message: { id: string; content: readonly unknown[]; source: { kind: string } }
+    }>,
+    enqueuedAt: number,
+  ): InboxSpliceOutcome {
+    if (this.inboxProjections.has(sessionId)) return { added: [], removed: [] }
+    const nextTurn: QueuedInboxMessage[] = []
+    const nextStep: QueuedInboxMessage[] = []
+    const added: QueuedInboxMessage[] = []
+    for (const item of items) {
+      const id = String(item.message.id)
+      const entry: QueuedInboxMessage = {
+        id,
+        content: item.message.content,
+        source: item.message.source,
+        enqueuedAt,
+      }
+      ;(item.placement === 'context' || item.placement === 'steering' ? nextStep : nextTurn).push(entry)
+      this.presentQueuedIds.add(this.queuedKey(sessionId, id))
+      added.push(entry)
+    }
+    this.inboxProjections.set(sessionId, { nextTurn, nextStep })
+    return { added, removed: [] }
   }
 
   setSessionTitle(sessionId: string, title: unknown): void {

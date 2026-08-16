@@ -369,6 +369,13 @@ function streamPart(
 export class MuxEventTranslator {
   private currentAssistant = new Map<string, string>()
   private pendingCalls = new Map<string, Map<string, ToolCallInfo>>()
+  /** Assistant messages waiting for their tool step to finish before the TUI
+   * considers them complete (drives the QUEUED badge for later user prompts). */
+  private pendingAssistantCompletions = new Map<string, {
+    messageID: string
+    stepKey: string
+    info: Record<string, unknown>
+  }>()
   private streams = new Map<string, SessionStreamState>()
   private readonly sessionGoals: Map<string, unknown>
   private readonly sessionTodos: Map<string, unknown>
@@ -847,9 +854,21 @@ export class MuxEventTranslator {
       case 'session/projection':
         return this.translateProjection(payload.sessionId, payload.key, payload.value)
       case 'session/subscribed':
-      case 'session/queue':
       case 'session/jobs':
         return []
+      case 'session/queue': {
+        const sessionId = String(payload.sessionId)
+        const directory = directoryFor(sessionId, this.deps)
+        const project = projectIdFor(directory)
+        const items = Array.isArray(payload.items)
+          ? (payload.items as Array<{
+              placement: 'queued' | 'steering' | 'context'
+              message: { id: string; content: readonly unknown[]; source: { kind: string } }
+            }>)
+          : []
+        const { added } = this.deps.state.initializeInboxProjection(sessionId, items, Date.now())
+        return this.queuedMessageEvents(sessionId, added, directory, project)
+      }
       case 'stream/error':
         this.deps.log(`[bridge/events] stream/error: ${payload.error.code} ${payload.error.message}`)
         return [makeEvent(this.deps.cwd, 'session.error', {
@@ -907,6 +926,36 @@ export class MuxEventTranslator {
     const directory = directoryFor(sessionId, this.deps)
     const project = projectIdFor(directory)
     switch (event.type) {
+      case 'agent/inbox/spliced' as SessionEvent['type']: {
+        const splice = event.data as unknown as {
+          target: 'next-turn' | 'next-step'
+          start: number
+          removedCount?: number
+          inserted: Array<{ id: string; content: readonly unknown[]; source: { kind: string } }>
+          outcome?: 'canceled'
+        }
+        const { added, removed } = this.deps.state.applyInboxSplice(
+          sessionId,
+          splice.target,
+          splice.start,
+          splice.removedCount ?? 0,
+          splice.inserted,
+          event.time,
+        )
+        const events = this.queuedMessageEvents(sessionId, added, directory, project)
+        if (splice.outcome === 'canceled') {
+          for (const message of removed) {
+            if (message.source.kind !== 'user') continue
+            events.push(
+              makeEvent(directory, 'message.removed', {
+                sessionID: sessionId,
+                messageID: message.id,
+              }, project),
+            )
+          }
+        }
+        return events
+      }
       case 'user/message': {
         this.deps.state.markInput()
         const events = messageEvents(sessionId, this.deps, () => {
@@ -1051,8 +1100,20 @@ export class MuxEventTranslator {
               return block !== undefined && block.blockType === blockType ? block.partId : undefined
             },
           )
+          const info = { ...entry.info, id: messageID } as unknown as Record<string, unknown>
+          if (event.data.message.content.some((block) => block.type === 'tool-call')) {
+            // The message is not complete until its tool calls finish; leaving
+            // `time.completed` unset keeps later user prompts marked QUEUED.
+            const time = info.time as { created?: number; completed?: number } | undefined
+            if (time !== undefined) delete time.completed
+            this.pendingAssistantCompletions.set(sessionId, {
+              messageID,
+              stepKey,
+              info,
+            })
+          }
           return {
-            info: { ...entry.info, id: messageID } as unknown as Record<string, unknown>,
+            info,
             parts: entry.parts.map((part) => ({ ...part, messageID })) as unknown as Array<Record<string, unknown>>,
           }
         })
@@ -1110,11 +1171,46 @@ export class MuxEventTranslator {
             state.blocks.delete(key)
           }
         }
+        const pending = this.pendingAssistantCompletions.get(sessionId)
+        if (pending !== undefined) {
+          events.push(
+            makeEvent(directory, 'message.updated', {
+              sessionID: sessionId,
+              info: {
+                ...pending.info,
+                time: {
+                  created: (pending.info.time as { created?: number })?.created ?? event.time,
+                  completed: event.time,
+                },
+              },
+            }, project),
+          )
+          this.pendingAssistantCompletions.delete(sessionId)
+        }
         this.currentAssistant.delete(sessionId)
         this.pendingCalls.delete(sessionId)
         this.clearToolTimers(sessionId)
         this.streams.delete(sessionId)
         return events
+      }
+      case 'step/end' as SessionEvent['type']: {
+        const stepKey = `${(event.data as { turn: number }).turn}:${(event.data as { step: number }).step}`
+        const pending = this.pendingAssistantCompletions.get(sessionId)
+        if (pending === undefined || pending.stepKey !== stepKey) return []
+        this.pendingAssistantCompletions.delete(sessionId)
+        const info = {
+          ...pending.info,
+          time: {
+            created: (pending.info.time as { created?: number })?.created ?? event.time,
+            completed: event.time,
+          },
+        }
+        return [
+          makeEvent(directory, 'message.updated', {
+            sessionID: sessionId,
+            info,
+          }, project),
+        ]
       }
       case 'todo/write':
         this.sessionTodos.set(sessionId, event.data.todos)
@@ -1292,6 +1388,51 @@ export class MuxEventTranslator {
         return []
       }
     }
+  }
+
+  /** Surface dsh pending inbox messages as opencode queued user messages. */
+  private queuedMessageEvents(
+    sessionId: string,
+    messages: readonly { id: string; content: readonly unknown[]; source: { kind: string }; enqueuedAt: number }[],
+    directory: string,
+    project: string | undefined,
+  ): BridgeGlobalEvent[] {
+    const events: BridgeGlobalEvent[] = []
+    for (const message of messages) {
+      if (message.source.kind !== 'user') continue
+      const model = this.deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+      events.push(
+        makeEvent(directory, 'message.updated', {
+          sessionID: sessionId,
+          info: {
+            id: message.id,
+            sessionID: sessionId,
+            role: 'user',
+            time: { created: message.enqueuedAt },
+            agent: DEFAULT_AGENT,
+            model,
+          },
+        }, project),
+      )
+      message.content.forEach((block, index) => {
+        const textBlock = block as { type?: string; text?: unknown }
+        if (textBlock.type !== 'text' || typeof textBlock.text !== 'string') return
+        events.push(
+          makeEvent(directory, 'message.part.updated', {
+            sessionID: sessionId,
+            part: {
+              id: `${message.id}:${index}`,
+              sessionID: sessionId,
+              messageID: message.id,
+              type: 'text',
+              text: textBlock.text,
+              time: { start: message.enqueuedAt, end: message.enqueuedAt },
+            },
+          }, project),
+        )
+      })
+    }
+    return events
   }
 
   private translateStreamChunks(

@@ -2959,8 +2959,8 @@ describe('bridge router: projection state seed', () => {
   })
 })
 
-describe('bridge router: prompt duplicate guard', () => {
-  it('dedupes identical submits in a short window and allows new text later', async () => {
+describe('bridge router: prompt queue delivery', () => {
+  it('delivers every submit to the dsh queue, including identical texts', async () => {
     const calls: string[] = []
     const api = fakeApi({
       sessions: {
@@ -2977,9 +2977,6 @@ describe('bridge router: prompt duplicate guard', () => {
       parts: [{ type: 'text', text }],
     })
     await submit('same')
-    await submit('same')
-    expect(calls).toEqual(['same'])
-    await new Promise((resolve) => setTimeout(resolve, 350))
     await submit('same')
     expect(calls).toEqual(['same', 'same'])
     await submit('different')

@@ -1477,6 +1477,203 @@ describe('bridge events: projection and control frames', () => {
     expect(logs.some((line) => line.includes('stream/error'))).toBe(true)
   })
 
+  it('surfaces pending inbox messages as queued user messages from the queue snapshot', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/queue',
+        sessionId: 's1' as never,
+        items: [{
+          id: 'queued-1' as never,
+          placement: 'queued',
+          message: {
+            id: 'queued-1' as never,
+            role: 'user',
+            content: [{ type: 'text', text: 'hello from queue' }],
+            source: { kind: 'user' },
+          },
+        }],
+      }),
+    ])
+    expect(events.map((event) => event.payload.type)).toEqual([
+      'message.updated',
+      'message.part.updated',
+    ])
+    expect(events[0]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      info: {
+        id: 'queued-1',
+        role: 'user',
+        sessionID: 's1',
+        time: { created: expect.any(Number) },
+      },
+    })
+    expect(events[1]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      part: {
+        id: 'queued-1:0',
+        messageID: 'queued-1',
+        type: 'text',
+        text: 'hello from queue',
+      },
+    })
+  })
+
+  it('does not resurface queue snapshot messages already seen', () => {
+    const { translate } = translator()
+    const queue = () => frame({
+      type: 'session/queue',
+      sessionId: 's1' as never,
+      items: [{
+        id: 'queued-1' as never,
+        placement: 'queued',
+        message: {
+          id: 'queued-1' as never,
+          role: 'user',
+          content: [{ type: 'text', text: 'hello from queue' }],
+          source: { kind: 'user' },
+        },
+      }],
+    })
+    expect(translate([queue()])).toHaveLength(2)
+    expect(translate([queue()])).toEqual([])
+  })
+
+  it('surfaces inbox splice insertions and keeps claimed messages visible', () => {
+    const { translate } = translator()
+    const inserted = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent/inbox/spliced', {
+          target: 'next-turn',
+          start: 2,
+          inserted: [{
+            id: 'queued-2',
+            role: 'user',
+            content: [{ type: 'text', text: 'second prompt' }],
+            source: { kind: 'user' },
+          }],
+        }, 10, 2000),
+      }),
+    ])
+    expect(inserted.map((event) => event.payload.type)).toEqual([
+      'message.updated',
+      'message.part.updated',
+    ])
+    expect(inserted[0]?.payload.properties).toMatchObject({
+      info: { id: 'queued-2', time: { created: 2000 } },
+    })
+
+    // claim: a removal without outcome must not hide the queued message
+    const claimed = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent/inbox/spliced', {
+          target: 'next-turn',
+          start: 0,
+          removedCount: 1,
+          inserted: [],
+        }, 11, 3000),
+      }),
+    ])
+    expect(claimed).toEqual([])
+  })
+
+  it('hides cancelled inbox messages and ignores non-user insertions', () => {
+    const { translate } = translator()
+    translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent/inbox/spliced', {
+          target: 'next-turn',
+          start: 0,
+          inserted: [{
+            id: 'queued-3',
+            role: 'user',
+            content: [{ type: 'text', text: 'cancel me' }],
+            source: { kind: 'user' },
+          }],
+        }, 20, 4000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent/inbox/spliced', {
+          target: 'next-step',
+          start: 0,
+          inserted: [{
+            id: 'injected-1',
+            role: 'user',
+            content: [{ type: 'text', text: 'file changed' }],
+            source: { kind: 'plugin', plugin: 'fs' },
+          }],
+        }, 21, 4100),
+      }),
+    ])
+    const cancelled = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent/inbox/spliced', {
+          target: 'next-turn',
+          start: 0,
+          removedCount: 1,
+          inserted: [],
+          outcome: 'canceled',
+        }, 22, 4200),
+      }),
+    ])
+    expect(cancelled).toHaveLength(1)
+    expect(cancelled[0]?.payload).toMatchObject({
+      type: 'message.removed',
+      properties: { sessionID: 's1', messageID: 'queued-3' },
+    })
+  })
+
+  it('keeps tool-call assistants incomplete until the step ends', () => {
+    const { translate } = translator()
+    const assistant = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          {
+            type: 'tool-call',
+            id: 'call-1',
+            name: 'bash',
+            arguments: '{}',
+          },
+        ], 'assistant-tool-1', 5000),
+      }),
+    ])
+    const info = assistant[0]?.payload.properties.info as { time?: { completed?: number } }
+    expect(assistant.map((event) => event.payload.type)).toEqual([
+      'message.updated',
+      'message.part.updated',
+    ])
+    expect(info.time).toMatchObject({ created: 5000 })
+    expect(info.time?.completed).toBeUndefined()
+
+    const completed = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('step/end', { turn: 1, step: 1 }, 12, 6000),
+      }),
+    ])
+    expect(completed).toHaveLength(1)
+    expect(completed[0]?.payload).toMatchObject({
+      type: 'message.updated',
+      properties: {
+        sessionID: 's1',
+        info: { id: 'assistant-tool-1', time: { created: 5000, completed: 6000 } },
+      },
+    })
+  })
+
   it('dedupes replayed approval and question frames per SSE connection', () => {
     const state = new InteractionState()
     const guard = { approvals: new Set<string>(), questions: new Set<string>() }

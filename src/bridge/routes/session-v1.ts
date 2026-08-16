@@ -134,12 +134,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    const promptText = R.textFromPromptParts(content).trim()
-    if (promptText === '' || !ctx.state.isDuplicatePrompt(id, promptText)) {
-      await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
-      ctx.state.markInput()
-      ctx.state.invalidateSession(id)
-    }
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    ctx.state.markInput()
+    ctx.state.invalidateSession(id)
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd))
   })
 
@@ -158,12 +155,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    const promptText = R.textFromPromptParts(content).trim()
-    if (promptText === '' || !ctx.state.isDuplicatePrompt(id, promptText)) {
-      await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
-      ctx.state.markInput()
-      ctx.state.invalidateSession(id)
-    }
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    ctx.state.markInput()
+    ctx.state.invalidateSession(id)
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd))
   })
 
@@ -182,12 +176,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    const promptText = R.textFromPromptParts(content).trim()
-    if (promptText === '' || !ctx.state.isDuplicatePrompt(id, promptText)) {
-      await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
-      ctx.state.markInput()
-      ctx.state.invalidateSession(id)
-    }
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    ctx.state.markInput()
+    ctx.state.invalidateSession(id)
     return R.json(204)
   })
 

@@ -120,12 +120,9 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    const promptText = R.textFromPromptParts(content).trim()
-    if (promptText === '' || !ctx.state.isDuplicatePrompt(id, promptText)) {
-      await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
-      ctx.state.markInput()
-      ctx.state.invalidateSession(id)
-    }
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    ctx.state.markInput()
+    ctx.state.invalidateSession(id)
     return R.json(200, {
       data: {
         id: `msg_${randomUUID()}`,
