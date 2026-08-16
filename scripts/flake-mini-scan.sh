@@ -33,6 +33,14 @@ SUMMARY="$OUT_DIR/summary.json"
 START_EPOCH="$(date +%s)"
 FAILED=0
 
+# Drop orphaned opencode attach processes from previous crash runs (parent
+# dsh is gone); live user sessions have a dsh parent and are left alone.
+cleanup_orphans() {
+  ps -eo ppid=,pid=,args= | awk '
+    $1 == 1 && /opencode attach http:\/\/127\.0\.0\.1:/ { print $2 }
+  ' | xargs -r kill -9 2>/dev/null || true
+}
+
 echo "flake-mini-scan: ${RUNS} runs x [${SCRIPTS}]"
 echo "flake-mini-scan: output $OUT_DIR"
 
@@ -42,6 +50,7 @@ for script in $SCRIPTS; do
   durations=()
   failures=0
   for (( n = 1; n <= RUNS; n++ )); do
+    cleanup_orphans
     log="$OUT_DIR/${script%.sh}-${n}.log"
     t0="$SECONDS"
     set +e

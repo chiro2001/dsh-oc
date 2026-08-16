@@ -75,6 +75,12 @@ if [[ -z "$DSH_PID" ]]; then
 fi
 echo "  SIGKILL dsh $DSH_PID"
 kill -9 "$DSH_PID"
+# The opencode attach child becomes an orphan; kill it too so repeated
+# crash runs do not accumulate stray TUI processes.
+ATTACH_PIDS="$(ps -eo ppid=,pid=,args= | awk -v pid="$DSH_PID" '$1 == pid && $0 ~ /opencode attach http:\/\/127\.0\.0\.1:/ { print $2 }')"
+if [[ -n "$ATTACH_PIDS" ]]; then
+  kill -9 $ATTACH_PIDS 2>/dev/null || true
+fi
 deadline=$((SECONDS + 15))
 while (( SECONDS < deadline )); do
   if ! ps -p "$DSH_PID" >/dev/null 2>&1; then break; fi
