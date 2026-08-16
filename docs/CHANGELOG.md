@@ -8,6 +8,11 @@
 
 ### 新增
 
+- `scripts/update-local-install.sh`：一键把本地 dsh profile 更新到指定
+  GitHub ref，并校验 resolved commit 与 `dsh-oc --version` 双版本输出。
+- 工件审计新增 pack 内容校验：tarball 不得含 `src/`，且
+  `bin/dsh-oc.mjs`、`lib/index.js`、`lib/bridge/router-entry.js`、
+  `opencode-version.json`、`cordis.patch.yml` 必须在包内。
 - `e2e-queued-order-repro.sh` 稳定性修复：第二条 prompt 改为在工具 part
   出现（而非完成后）即发送，保证仍处于 busy 窗口、QUEUED 徽标必然出现；
   后续文本加长到 15 段。本地 10/10 flake 扫描通过（48s/次），修复 CI

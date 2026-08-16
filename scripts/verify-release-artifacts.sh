@@ -49,6 +49,23 @@ echo "-- pack audit --"
 TARBALL="$(ls "$TMP/pack"/*.tgz | head -1)"
 tar -xzf "$TARBALL" -C "$TMP/unpack"
 
+if [[ -d "$TMP/unpack/package/src" ]]; then
+  echo "FAIL: packed tarball contains src/ (source leak)" >&2
+  exit 1
+fi
+for required in \
+  package/bin/dsh-oc.mjs \
+  package/lib/index.js \
+  package/lib/bridge/router-entry.js \
+  package/opencode-version.json \
+  package/cordis.patch.yml; do
+  if [[ ! -f "$TMP/unpack/$required" ]]; then
+    echo "FAIL: packed tarball missing $required" >&2
+    exit 1
+  fi
+done
+echo "  packed tarball contains required files and no src/"
+
 if rg -n --no-messages '/home/|/Users/|C:\\\\|/private/var/' "$TMP/unpack" \
   | rg -v 'docs/(demo|CHANGELOG|MANUAL-TEST|ROADMAP|FEATURES|PROTOCOL|PLAN|perf)' > "$TMP/paths.txt"; then
   echo "FAIL: packed artifacts contain machine absolute paths" >&2
