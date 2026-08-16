@@ -1404,7 +1404,10 @@ export class MuxEventTranslator {
         const type = event.type as string
         const data = (event as unknown as { data: { time?: number; title?: unknown; text?: unknown } }).data
         if (type === 'session') {
-          const header = data as { createdAt?: number; cwd?: string; title?: string }
+          // The durable `session` row is flat (id/createdAt/cwd live on the
+          // event, not under `data`); tolerate both shapes.
+          const flat = event as unknown as { createdAt?: number; cwd?: string; title?: string }
+          const header = (data ?? flat) as { createdAt?: number; cwd?: string; title?: string }
           const childDirectory = header.cwd ?? this.deps.state.sessionDirectories.get(sessionId) ?? directory
           const parentID = this.deps.state.sessionParents.get(sessionId)
           return [
@@ -1421,12 +1424,13 @@ export class MuxEventTranslator {
         }
         if (type === 'session/created') {
           const parentID = this.deps.state.sessionParents.get(sessionId)
+          const flat = event as unknown as { createdAt?: number }
           return [
             makeEvent(directory, 'session.updated', {
               sessionID: sessionId,
               info: minimalSession(sessionId, {
                 cwd: directory,
-                createdAt: data.time,
+                createdAt: data?.time ?? flat.createdAt,
                 ...(parentID === undefined ? {} : { parentID }),
               }),
             }, project),

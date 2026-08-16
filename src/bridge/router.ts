@@ -1822,8 +1822,14 @@ export function createBridgeRouter(
                 scheduleListRefresh()
               }
             }
-            for (const event of translator!.translate(frame)) {
-              sendToClient(event)
+            try {
+              for (const event of translator!.translate(frame)) {
+                sendToClient(event)
+              }
+            } catch (error) {
+              // One malformed/unexpected frame must not tear down the whole
+              // mux stream; log and keep consuming.
+              log(`[bridge/sse] frame translate failed: ${error instanceof Error ? error.message : String(error)}`)
             }
           }
         }

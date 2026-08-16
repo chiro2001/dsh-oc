@@ -185,6 +185,32 @@ describe('bridge events: session event mapping', () => {
     expect(logs.some((line) => line.includes('unhandled'))).toBe(false)
   })
 
+  it('handles the flat durable session row without a data envelope', () => {
+    const { translate, state } = translator()
+    state.sessionDirectories.set('s1', '/other')
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: {
+          type: 'session',
+          seq: 0,
+          time: 100,
+          id: 's1',
+          createdAt: 50,
+          cwd: '/real-cwd',
+          agentPreset: 'minimal',
+        } as unknown as SessionEvent,
+      }),
+    ])
+    expect(events).toHaveLength(1)
+    expect(events[0]?.payload.type).toBe('session.updated')
+    expect(events[0]?.payload.properties).toMatchObject({
+      sessionID: 's1',
+      info: { id: 's1', directory: '/real-cwd' },
+    })
+  })
+
   it('translates compaction checkpoints into message parts and compaction events', () => {
     const { translate } = translator()
     const events = translate([
