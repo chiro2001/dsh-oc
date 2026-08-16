@@ -177,6 +177,8 @@ e2e_tui_wait_attach() {
     sleep 1
   done
   echo "e2e: opencode attach did not appear within 60s" >&2
+  tmux capture-pane -p -t "$E2E_TUI_SESSION" >&2 2>/dev/null || true
+  cat "$E2E_RUN_DIR/dsh-exit.txt" >&2 2>/dev/null || true
   return 1
 }
 

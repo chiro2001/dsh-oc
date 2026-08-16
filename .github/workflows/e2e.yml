@@ -87,3 +87,11 @@ jobs:
       - name: Full e2e + perf scale (manual)
         if: github.event_name == 'workflow_dispatch'
         run: bash scripts/check-all.sh --e2e --scale ${{ github.event.inputs.sessions }}
+
+      - name: Upload e2e runs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-runs
+          path: .e2e
+          retention-days: 3
