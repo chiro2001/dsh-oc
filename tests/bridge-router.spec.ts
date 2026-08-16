@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { createBridgeRouter, type BridgeRouter } from '../src/bridge/router.js'
-import { extractParams, matchPattern } from '../src/bridge/router.js'
+import { extractParams, matchPattern, seedProjectionState } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import type { BridgeApi } from '../src/bridge/rpc.js'
 import {
@@ -2913,5 +2913,76 @@ describe('bridge router: /goal command and goal todo merge', () => {
     }
     const cleared = await boot(clearedApi)
     expect((await request(cleared.server, 'GET', '/session/s1/todo')).body).toEqual([])
+  })
+})
+
+describe('bridge router: projection state seed', () => {
+  it('seeds goals and todos from durable history and keeps live state', async () => {
+    const api = fakeApi({
+      sessions: {
+        ...fakeApi().sessions,
+        history: async () => okRpc({
+          events: [{
+            event: sessionEvent('todo/write', {
+              todos: [{ content: 'step one', status: 'pending' as const }],
+            }, 1, 100),
+          }],
+          hasMore: false,
+          projections: {
+            asOfSeq: 100,
+            values: {
+              goal: {
+                goal: {
+                  id: 'g-seed',
+                  objective: 'ship seeded goal',
+                  phase: 'active',
+                  maxGoalRounds: 5,
+                },
+              },
+            },
+          },
+        } as never),
+      },
+    })
+    const { router } = await boot(api)
+    const state = { todos: new Map<string, unknown>(), goals: new Map<string, unknown>() }
+    await seedProjectionState(router.ctx, state, 's1')
+    expect(state.todos.get('s1')).toEqual([{ content: 'step one', status: 'pending' }])
+    expect(state.goals.get('s1')).toMatchObject({
+      goal: { id: 'g-seed', objective: 'ship seeded goal', phase: 'active' },
+    })
+
+    // Live projection state wins over the historical seed.
+    state.goals.set('s1', { goal: { id: 'g-live', objective: 'live', phase: 'active' } })
+    await seedProjectionState(router.ctx, state, 's1')
+    expect(state.goals.get('s1')).toMatchObject({ goal: { id: 'g-live' } })
+  })
+})
+
+describe('bridge router: prompt duplicate guard', () => {
+  it('dedupes identical submits in a short window and allows new text later', async () => {
+    const calls: string[] = []
+    const api = fakeApi({
+      sessions: {
+        ...fakeApi().sessions,
+        prompt: async (request) => {
+          const payload = request.payload as { content: Array<{ type: string; text?: string }> }
+          calls.push(String(payload.content[0]?.text ?? ''))
+          return okRpc({ accepted: true })
+        },
+      },
+    })
+    const { server } = await boot(api)
+    const submit = (text: string) => request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text }],
+    })
+    await submit('same')
+    await submit('same')
+    expect(calls).toEqual(['same'])
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await submit('same')
+    expect(calls).toEqual(['same', 'same'])
+    await submit('different')
+    expect(calls).toEqual(['same', 'same', 'different'])
   })
 })

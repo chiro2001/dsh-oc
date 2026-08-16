@@ -1595,6 +1595,36 @@ export function goalFromHistory(history: {
   return undefined
 }
 
+/**
+ * Seed one SSE connection's shared goal/todo projection state from durable
+ * history. Translators accumulate projections from live mux frames only, so
+ * an attach to an existing session would otherwise miss the goal or todos and
+ * emit partial `todo.updated` lists (one side replacing the other in the TUI
+ * sidebar). History is authoritative here, and existing live state wins.
+ */
+export async function seedProjectionState(
+  ctx: BridgeRouteContext,
+  state: { todos: Map<string, unknown>; goals: Map<string, unknown> },
+  sessionId: string,
+): Promise<void> {
+  const history = await cachedSessionHistory(ctx, sessionId)
+  let todos: unknown
+  for (const entry of history.events) {
+    if (entry.event.type === 'todo/write') {
+      todos = entry.event.data.todos
+    }
+  }
+  const values = history.projections?.values as Partial<Record<string, unknown>> | undefined
+  if (todos === undefined && values?.todos !== undefined) todos = values.todos
+  const goal = goalFromHistory(history)
+  if (!state.todos.has(sessionId) && todos !== undefined) {
+    state.todos.set(sessionId, todos)
+  }
+  if (!state.goals.has(sessionId) && goal !== undefined) {
+    state.goals.set(sessionId, goal)
+  }
+}
+
 export function createBridgeRouter(
   api: BridgeApi,
   options: RouterOptions = {},
@@ -1729,7 +1759,19 @@ export function createBridgeRouter(
           log(`[bridge/sse] host loop failed: ${error instanceof Error ? error.message : String(error)}`)
         })
         const consumeStream = async (stream: AsyncIterable<RpcRequest<MuxFrame>>): Promise<void> => {
+          const seededProjection = new Set<string>()
           for await (const frame of stream) {
+            if (frame.payload.type === 'session/event' || frame.payload.type === 'session/projection') {
+              const sessionId = String(frame.payload.sessionId)
+              if (!seededProjection.has(sessionId)) {
+                seededProjection.add(sessionId)
+                try {
+                  await seedProjectionState(ctx, sharedState, sessionId)
+                } catch (error) {
+                  log(`[bridge/sse] projection seed failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+                }
+              }
+            }
             if (frame.payload.type === 'approval/requested') {
               const sessionId = String(frame.payload.sessionId)
               const toolName = frame.payload.toolName

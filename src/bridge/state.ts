@@ -36,6 +36,8 @@ export class InteractionState {
     modelID: string
     variant?: string
   }>()
+  /** Recent submitted prompt texts per session (short duplicate window). */
+  readonly lastPrompts = new Map<string, { text: string; at: number }>()
   /** Real durable titles learned from history projections / title events. */
   readonly sessionTitles = new Map<string, string>()
   sessionListCache?: { items: SessionSummary[]; at: number }
@@ -177,6 +179,23 @@ export class InteractionState {
 
   sessionModelSelectionFor(sessionId: string): { providerID: string; modelID: string; variant?: string } | undefined {
     return this.sessionModelSelections.get(sessionId)
+  }
+
+  /**
+   * Idempotency guard for prompt submits: within a short window the exact same
+   * text for one session is treated as a duplicate (the opencode TUI can
+   * retry a submit while the first one is still queued, which made dsh process
+   * the same user message twice and reply to stale turns). Records the new
+   * prompt on every call; returns true when the call is a duplicate.
+   */
+  isDuplicatePrompt(sessionId: string, text: string, windowMs = 300): boolean {
+    const previous = this.lastPrompts.get(sessionId)
+    const now = Date.now()
+    const duplicate = previous !== undefined
+      && previous.text === text
+      && now - previous.at < windowMs
+    this.lastPrompts.set(sessionId, { text, at: now })
+    return duplicate
   }
 
   setSessionTitle(sessionId: string, title: unknown): void {
