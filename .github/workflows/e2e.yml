@@ -92,4 +92,5 @@ jobs:
         with:
           name: e2e-runs
           path: .e2e
+          include-hidden-files: true
           retention-days: 3
