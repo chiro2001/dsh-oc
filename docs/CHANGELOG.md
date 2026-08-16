@@ -8,6 +8,11 @@
 
 ### 新增
 
+- `e2e-real-llm.sh` 强化断言（round-0002 指出真实回归偏弱）：queue probe
+  现在验证 FIFO 内容顺序（第二条 prompt 是最后一条 user、最后回复含“完成”），
+  不再只数 user 总数；TUI 键盘输入改为等待投递与回复 idle，并断言恰好新增
+  一条 user 且面板留档。顺带修复 TUI 阶段 bridge URL 未刷新的潜在 bug，
+  `wait_idle`/计数函数对瞬时 API 失败容错。
 - flake 合并基线：6 个最小高风险脚本各 10 次共 60 次首跑全绿（当前 HEAD），
   结果见 docs/perf/results-flake-consolidated-2026-08-17.md。
 - `e2e-cli-bin.sh` 增加 `dsh-oc --version` 断言：输出必须是

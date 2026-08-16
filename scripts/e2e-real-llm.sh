@@ -91,10 +91,11 @@ wait_ready() {
 }
 
 wait_idle() {
-  local deadline=$((SECONDS + 120))
+  local deadline=$((SECONDS + 300))
   while (( SECONDS < deadline )); do
     local st
-    st="$(curl -s "$E2E_BRIDGE_URL/session/status" | jq -r --arg s "$SID" '.[$s].type // "idle"')"
+    st="$(curl -s -m 5 "$E2E_BRIDGE_URL/session/status" \
+      | jq -r --arg s "$SID" '.[$s].type // "idle"' 2>/dev/null || echo busy)"
     if [[ "$st" == "idle" ]]; then return 0; fi
     sleep 2
   done
@@ -102,11 +103,13 @@ wait_idle() {
 }
 
 user_count() {
-  curl -s "$E2E_BRIDGE_URL/session/$SID/message" | jq '[.[] | select(.info.role == "user")] | length'
+  curl -s -m 5 "$E2E_BRIDGE_URL/session/$SID/message" \
+    | jq '[.[] | select(.info.role == "user")] | length' 2>/dev/null || echo 0
 }
 
 tool_part_count() {
-  curl -s "$E2E_BRIDGE_URL/session/$SID/message" | jq '[.. | objects | select(.type == "tool")] | length'
+  curl -s -m 5 "$E2E_BRIDGE_URL/session/$SID/message" \
+    | jq '[.. | objects | select(.type == "tool")] | length' 2>/dev/null || echo 0
 }
 
 echo "== headless phase (real LLM) =="
@@ -146,7 +149,23 @@ if [[ "$QUICK" != "1" ]]; then
     echo "e2e: queue probe expected 3 user messages, got $COUNT" >&2
     exit 1
   fi
-  echo "  queue probe ok: 3 messages consumed in order"
+  if ! curl -s "$B/session/$SID/message" | jq -e '
+      ([.[] | select(.info.role == "user") | .parts[]?
+        | select(.type == "text") | .text] | map(select(contains("继续") or contains("只回复两个字：完成")))) as $prompts |
+      any($prompts[]; contains("继续"))
+      and any($prompts[]; contains("只回复两个字：完成"))
+      and (($prompts[-1] // "") | contains("只回复两个字：完成"))
+      and ([.[] | select(.info.role == "assistant") | .parts[]?
+            | select(.type == "text") | .text] | last | contains("完成"))
+    ' >/dev/null; then
+    echo "e2e: queue probe FIFO/content assertion failed" >&2
+    curl -s "$B/session/$SID/message" | jq -r '
+      .[] | select(.info.role == "user" or .info.role == "assistant")
+      | "\(.info.role): \([.parts[]? | select(.type == "text") | .text] | join(""))"' \
+      | tail -8 >&2 || true
+    exit 1
+  fi
+  echo "  queue probe ok: 3 users consumed; second prompt answered last with 完成"
 fi
 
 echo "== goal + variant =="
@@ -190,6 +209,7 @@ E2E_ACTIVE_SESSION=""
 e2e_tui_start "--session $SID"
 e2e_tui_wait_attach
 wait_ready
+B="$E2E_BRIDGE_URL"
 
 SIDEBAR=""
 deadline=$((SECONDS + 60))
@@ -210,10 +230,44 @@ fi
 echo "  goal visible in sidebar"
 
 tmux send-keys -t "$E2E_TUI_SESSION" '继续' Enter
-sleep 8
-e2e_tui_capture "$E2E_RUN_DIR/tui-continue.txt"
-grep -qa 'mock response recovered\|完成\|继续' "$E2E_RUN_DIR/tui-continue.txt" || true
-echo "  TUI prompt submitted (user count: $(user_count))"
+BEFORE_USERS="$(user_count)"
+BEFORE_ASSISTANTS="$(curl -s -m 5 "$B/session/$SID/message" \
+  | jq '[.[] | select(.info.role == "assistant")] | length' 2>/dev/null || echo 0)"
+echo "  waiting for TUI prompt delivery (before=$BEFORE_USERS)..."
+DELIVERED=""
+deadline=$((SECONDS + 180))
+while (( SECONDS < deadline )); do
+  NOW_USERS="$(user_count)"
+  if (( NOW_USERS == BEFORE_USERS + 1 )); then
+    DELIVERED="1"
+    break
+  fi
+  sleep 2
+done
+if [[ -z "$DELIVERED" ]]; then
+  echo "e2e: TUI prompt was not delivered within 180s" >&2
+  tail -30 "$E2E_RUN_DIR/tui-ready.txt" >&2 || true
+  exit 1
+fi
+echo "  TUI prompt delivered; waiting for reply idle..."
+wait_idle
+echo "  TUI reply idle"
+NOW_ASSISTANTS="$(curl -s "$B/session/$SID/message" | jq '[.[] | select(.info.role == "assistant")] | length')"
+e2e_tui_capture "$E2E_RUN_DIR/tui-continue.txt" || true
+# Assert exactly-once delivery and that a reply followed the submitted prompt.
+if ! curl -s "$B/session/$SID/message" | jq -e --argjson before "$BEFORE_USERS" --argjson asstBefore "$BEFORE_ASSISTANTS" '
+    ([.[] | select(.info.role == "user")] | length) == ($before + 1)
+    and (([.[] | select(.info.role == "user") | .parts[]?
+          | select(.type == "text") | .text] | last) | contains("继续"))
+    and ([.[] | select(.info.role == "assistant")] | length) >= ($asstBefore + 1)
+  ' >/dev/null; then
+  echo "e2e: TUI prompt delivery or reply assertion failed" >&2
+  curl -s "$B/session/$SID/message" | jq -r '
+    .[] | select(.info.role == "user") | "user: \([.parts[]? | select(.type == "text") | .text] | join(""))"' \
+    | tail -5 >&2 || true
+  exit 1
+fi
+echo "  TUI prompt completed: users=$NOW_USERS assistants=$NOW_ASSISTANTS"
 
 e2e_tui_exit
 tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
