@@ -66,6 +66,8 @@
   派生；`--log-level` 透传给 opencode。
 - 附件：文本与图片可发送；PDF 等二进制应被拒绝（400）。
 - `/goal` 创建/查看/暂停/恢复/完成 goal，sidebar 同步展示。
+  在 TUI 直接输入 `/goal <完整目标>` 应创建完整目标（回归：曾把输入拆成
+  `/goal` + 上一条消息）；自动开启的 goal 回合可用 Esc 打断。
 - `/help` 展示能力摘要；`/preset` 列出 agent preset。
 
 ## 9. 协议端点冒烟（可选，开发者）
