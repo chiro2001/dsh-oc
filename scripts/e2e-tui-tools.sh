@@ -153,6 +153,7 @@ while (( SECONDS < deadline )); do
   fi
   if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
     echo "e2e: dsh exited while waiting for TUI file changes: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+    tmux capture-pane -p -S -200 -t "$E2E_TUI_SESSION" >&2 2>/dev/null || true
     exit 1
   fi
   sleep 1
