@@ -45,9 +45,8 @@
 - 生命周期面：`GET /global/health`（`{ healthy: true, version }`）、
   `POST /global/dispose` 与 `POST /instance/dispose`（no-op 确认，进程由 dsh 管理）。
 - 会话列表真实标题补读：dsh `session.list` 不返回 title 投影，bridge 按会话
-  补读 history tail 投影并缓存（≤40 全量同步，大列表同步 12 + 后台 120），
-  恢复的旧会话也会在退出提示中正确识别；大列表改为后台低并发补温
-  （24 个、并发 2），不阻塞列表请求。
+  补读 history tail 投影并缓存（≤40 全量同步；更大列表不阻塞，后台低并发
+  补最近 24 个、并发 2），恢复的旧会话也会在退出提示中正确识别。
 - Esc 打断/取消：`turn.wait` / `turn.idle` 事件驱动 TUI 运行态；全量 TUI
   连按两次 Esc、`--mini` 按一次 Esc 会调用 `session.cancel` 停止在途流。
 - `/preset` 新会话继承：最近选择的 agent preset 会应用到后续 `/new` 创建的

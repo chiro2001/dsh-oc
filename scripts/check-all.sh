@@ -84,13 +84,14 @@ if [[ "$E2E" == "1" ]]; then
       # CI runners occasionally hit permission/timing flakes; one retry keeps
       # the gate meaningful while still surfacing genuinely broken suites.
       echo "RETRY $s (first run rc=$rc)"
+      cp "$log" "$log.first" 2>/dev/null || true
       set +e
       run_e2e_script "$s" "$log"
       rc=$?
       set -e
       out="$(tail -1 "$log")"
       if [[ "$rc" == "0" && "$out" == *PASSED* ]]; then
-        echo "PASS $s (after retry)"
+        echo "PASS $s (after retry; first-attempt log: $log.first)"
       else
         echo "FAIL $s (rc=$rc) :: $out"
         tail -40 "$log" >&2

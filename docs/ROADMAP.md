@@ -21,6 +21,9 @@
 返回 `{ data: SessionMessage[], hasMore }`，复用 v2 消息转换并带消息锚点
 seq，`after` 非负整数否则 400）。
 
+> 2026-08-16 深夜：响应增加 `next`（本页最大锚点 seq），供独立客户端连续
+> 分页；当前实现仍为全量折叠后过滤（O(N)），单大会话性能基准见下实验 1。
+
 仍为 LATER 的 SDK 路由：`/api/pty/*`（dsh 无 PTY RPC）、`/api/integration/*`
 与 `/api/credential/*`（dsh 凭据面未暴露）、`/global/upgrade`（自动更新
 明确关闭）。
@@ -37,6 +40,23 @@ seq，`after` 非负整数否则 400）。
 | N6 | README 与 `/help` 展示能力矩阵 | P1 | `feat-capability-help` | ✅ 已完成（2026-08-15） |
 
 建议执行顺序：`N1` 单独先做（影响稳定性和外网）；`N2`/`N3` 可并行；`N4`/`N5`/`N6` 可并行或紧随其后。
+
+## 顶级模型审阅后新增（2026-08-16，round-0001）
+
+外部顶级模型审阅结论：适合受控 RC/canary 交付；下一阶段功能冻结，按
+60% 稳定性/一致性、30% 安装发布与 CI、10% 文档投入。接受项与处置见
+`expert-advice/round-0001/decision.md`。落地顺序：
+
+- 实验 1：真实事件差分回放 + 恢复一致性 + 已知错序裁决（live/重连/重启/
+  `--continue`/`--session` 规范化消息图 exactly-once；10k 事件单会话
+  history 冷读/分页基准；官方 TUI 最小复现）。同时给
+  `/api/session/{id}/history` 建立分页性能基线。
+- 实验 2：`v0.1.0-rc.2` 不可变候选的干净安装/升级/回滚演练（GitHub spec
+  冷装、`lib` 与源码一致、旧会话恢复、`dsh-oc` PATH）。
+- 实验 3：flake 统计审计（固定 commit × 50 次，按签名分类，保留首败证据；
+  之后收紧无条件整脚本重试）。
+- 支持矩阵：至少 Linux x64 + macOS arm64 发布冒烟；Windows/ARM 按“声明即
+  测”原则收缩。
 
 ---
 

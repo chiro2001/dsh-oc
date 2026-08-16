@@ -111,6 +111,12 @@ dsh --profile oc --help                                            # 验证版�
 - 缓存错误时清除 `$DSH_HOME/opencode/bin` 或设置匹配版本的
   `DSH_OC_OPENCODE_BIN`；`DSH_OC_TUI_TIMESTAMPS=1` 可让 TUI 默认显示时间戳
   （`ctrl+shift+t` / `/timestamps` 运行时切换）。
+- **opencode 按 vendor ABI 对待**：升级候选版本必须以“黄金 HTTP/SSE 轨迹 +
+  真实 TUI 回放”的语义差分为门槛，不能只看 SDK 类型与路由数量；为候选
+  新版本建独立 upgrade lane，不直接替换锁定版本。
+- **真实模型回归定位为 smoke**：`scripts/e2e-real-llm.sh` 覆盖真实文本、
+  工具、goal、variant 与 TUI attach，但随机模型输出不承担桥接正确性的
+  唯一 oracle；确定性回放语料（脱敏真实 session）是更优先的回归手段。
 
 ## 自测门槛（提交/合并前必须全绿）
 

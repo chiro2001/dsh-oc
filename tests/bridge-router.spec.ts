@@ -441,9 +441,10 @@ describe('bridge router: session routes', () => {
 
     const all = await request(server, 'GET', '/api/session/s1/history')
     expect(all.status).toBe(200)
-    const allBody = all.body as { data?: unknown[]; hasMore?: boolean }
+    const allBody = all.body as { data?: unknown[]; hasMore?: boolean; next?: number }
     expect(allBody).toMatchObject({ hasMore: false })
     expect(allBody.data).toHaveLength(2)
+    expect(allBody.next).toBe(3)
 
     const tail = await request(server, 'GET', '/api/session/s1/history?after=2')
     expect(tail.status).toBe(200)
@@ -456,9 +457,10 @@ describe('bridge router: session routes', () => {
 
     const page = await request(server, 'GET', '/api/session/s1/history?limit=1')
     expect(page.status).toBe(200)
-    const pageBody = page.body as { data?: unknown[]; hasMore?: boolean }
+    const pageBody = page.body as { data?: unknown[]; hasMore?: boolean; next?: number }
     expect(pageBody.data).toHaveLength(1)
     expect(pageBody.hasMore).toBe(true)
+    expect(pageBody.next).toBe(2)
 
     const bad = await request(server, 'GET', '/api/session/s1/history?after=-1')
     expect(bad.status).toBe(400)

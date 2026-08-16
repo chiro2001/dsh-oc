@@ -278,9 +278,13 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const withSeq = data.map((message, index) => ({ message, seq: anchorSeqs[index] ?? 0 }))
     const filtered = after === undefined ? withSeq : withSeq.filter((entry) => entry.seq > after)
     const page = filtered.slice(0, limit ?? filtered.length)
+    const next = page.length === 0
+      ? null
+      : page.reduce((max, entry) => Math.max(max, entry.seq), -1)
     return R.json(200, {
       data: remapV2Messages(ctx, id, page.map((entry) => entry.message)),
       hasMore: filtered.length > page.length,
+      next,
     })
   })
 
