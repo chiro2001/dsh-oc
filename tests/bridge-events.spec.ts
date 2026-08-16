@@ -734,10 +734,14 @@ describe('bridge events: session event mapping', () => {
       }),
     ])
     expect(started.map((event) => event.payload.type)).toEqual([
+      'message.updated',
       'session.next.tool.input.started',
       'message.part.updated',
     ])
-    expect(started[0]?.payload.properties).toMatchObject({
+    const provisionalID = (started[0]?.payload.properties as { info: { id: string } }).info.id
+    expect(provisionalID).toMatch(/^msg_pending:s1:1:1$/)
+    expect((started[2]?.payload.properties as { part: { messageID: string } }).part.messageID).toBe(provisionalID)
+    expect(started[1]?.payload.properties).toMatchObject({
       sessionID: 's1',
       callID: 'c1',
       name: 'bash',
@@ -895,18 +899,91 @@ describe('bridge events: session event mapping', () => {
     ])
     const types = events.map((event) => event.payload.type)
     expect(types).toEqual([
+      'message.updated',
       'session.next.tool.input.started',
       'session.next.tool.input.ended',
       'session.next.tool.called',
       'session.next.tool.progress',
       'message.part.updated',
     ])
+    const messageID = (events[0]?.payload.properties as { info: { id: string } }).info.id
+    expect(messageID).toMatch(/^msg_pending:s1:1:1$/)
+    expect((events.at(-1)?.payload.properties as { part: { messageID: string } }).part.messageID).toBe(messageID)
     expect(events.find((event) => event.payload.type === 'session.next.tool.progress')?.payload.properties)
       .toMatchObject({
         callID: 'c3',
         structured: { title: 'read' },
         content: [],
       })
+  })
+
+  it('keeps one message id across a streamed tool turn (no duplicate cards)', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'tool-call-delta',
+            index: 0,
+            id: 'c5' as never,
+            name: 'bash',
+            argumentsDelta: '{"command":"echo hi"}',
+          },
+        }, 2, 100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent(
+          [{ type: 'tool-call', id: 'c5' as never, name: 'bash', arguments: '{"command":"echo hi"}' }],
+          'msg-real-5',
+          130,
+        ),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/call', {
+          turn: 1,
+          step: 1,
+          callId: 'c5' as never,
+          name: 'bash',
+          arguments: '{"command":"echo hi"}',
+        }, 4, 140),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool/result', {
+          turn: 1,
+          step: 1,
+          message: {
+            id: 't5' as never,
+            role: 'user',
+            content: [{
+              type: 'tool-result',
+              toolCallId: 'c5' as never,
+              content: [{ type: 'text', text: 'hi' }],
+            }],
+            source: { kind: 'tool', callId: 'c5' as never },
+          },
+        }, 5, 150),
+      }),
+    ])
+    const partIDs = events
+      .filter((event) => event.payload.type === 'message.part.updated')
+      .map((event) => (event.payload.properties as { part: { messageID: string } }).part.messageID)
+    expect(partIDs.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(partIDs).size).toBe(1)
+    const messageIDs = events
+      .filter((event) => event.payload.type === 'message.updated')
+      .map((event) => (event.payload.properties as { info: { id: string } }).info.id)
+    expect(messageIDs).toContain(partIDs[0])
+    expect(messageIDs).not.toContain('msg-real-5')
   })
 
   it('emits snapshot/patch parts and session.diff after a file-changing tool', () => {

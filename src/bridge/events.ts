@@ -435,6 +435,41 @@ export class MuxEventTranslator {
   }
 
   /**
+   * Make sure the current step has a provisional assistant message id so tool
+   * parts stream under the same message that the final `assistant/message`
+   * will reuse (otherwise the TUI renders two cards: a streamed one under
+   * `assistant:turn:step` and the final one under the real message id).
+   */
+  private ensureProvisionalMessage(
+    sessionId: string,
+    turn: number,
+    step: number,
+    time: number,
+    directory: string,
+    project: string,
+  ): { messageID: string; events: BridgeGlobalEvent[] } {
+    const state = this.streamState(sessionId)
+    const stepKey = `${turn}:${step}`
+    const existing = state.provisionalMessageIds.get(stepKey)
+    if (existing !== undefined) return { messageID: existing, events: [] }
+    const messageID = provisionalMessageId(sessionId, turn, step)
+    state.provisionalMessageIds.set(stepKey, messageID)
+    return {
+      messageID,
+      events: [makeEvent(directory, 'message.updated', {
+        sessionID: sessionId,
+        info: provisionalAssistantMessage(
+          sessionId,
+          this.deps,
+          messageID,
+          state.turnStartTime ?? time,
+          state.lastUserMessageId ?? `pending:${sessionId}:user`,
+        ),
+      }, project)],
+    }
+  }
+
+  /**
    * Register a streamed tool input on its first `tool-call-delta` and emit the
    * v2 `input.started` event plus a v1 running ToolPart placeholder.
    */
@@ -453,7 +488,8 @@ export class MuxEventTranslator {
     if (existing !== undefined) return { state: existing, events: [] }
 
     const callId = String(chunk.id)
-    const messageID = this.assistantMessageId(sessionId, turn, step)
+    const provisional = this.ensureProvisionalMessage(sessionId, turn, step, time, directory, project)
+    const messageID = provisional.messageID
     const state: ToolInputState = {
       key,
       callId,
@@ -466,6 +502,7 @@ export class MuxEventTranslator {
     }
     this.streamState(sessionId).toolInputs.set(key, state)
     const events: BridgeGlobalEvent[] = [
+      ...provisional.events,
       makeEvent(directory, 'session.next.tool.input.started', {
         timestamp: time,
         sessionID: sessionId,
@@ -1107,14 +1144,18 @@ export class MuxEventTranslator {
           this.pendingCalls.set(sessionId, calls)
         }
         calls.set(call.callId, call)
+        const provisional = this.currentAssistant.get(sessionId) === undefined
+          ? this.ensureProvisionalMessage(sessionId, data.turn, data.step, event.time, directory, project)
+          : undefined
         const messageID = this.currentAssistant.get(sessionId)
-          ?? this.streamState(sessionId).provisionalMessageIds.get(`${data.turn}:${data.step}`)
+          ?? provisional?.messageID
           ?? `assistant:${data.turn}:${data.step}`
         const inputState = this.findToolInput(sessionId, call.callId)
         const inputEvents = inputState === undefined
           ? this.completeToolInputImmediately(sessionId, call, messageID, directory, project, event.time)
           : this.endToolInput(sessionId, inputState, directory, project, event.time)
         return [
+          ...(provisional?.events ?? []),
           ...inputEvents,
           makeEvent(directory, 'message.part.updated', {
             sessionID: sessionId,
@@ -1132,8 +1173,11 @@ export class MuxEventTranslator {
           this.deps.log(`[bridge/events] tool/result without tool/call for ${callId}`)
           return []
         }
+        const provisional = this.currentAssistant.get(sessionId) === undefined
+          ? this.ensureProvisionalMessage(sessionId, data.turn, data.step, event.time, directory, project)
+          : undefined
         const messageID = this.currentAssistant.get(sessionId)
-          ?? this.streamState(sessionId).provisionalMessageIds.get(`${data.turn}:${data.step}`)
+          ?? provisional?.messageID
           ?? `assistant:${data.turn}:${data.step}`
         const inputState = this.findToolInput(sessionId, callId)
         const inputEvents = inputState === undefined
@@ -1157,6 +1201,7 @@ export class MuxEventTranslator {
             }, { sessionID: sessionId, messageID, time: event.time })
         calls?.delete(callId)
         const events: BridgeGlobalEvent[] = [
+          ...(provisional?.events ?? []),
           makeEvent(directory, 'message.part.updated', {
             sessionID: sessionId,
             part,
