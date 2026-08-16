@@ -8,6 +8,8 @@
 
 ### 新增
 
+- 5000 会话性能基准记录（commit `609ccd6`）：列表/消息/历史/分页/标题补温/
+  RSS 数据见 docs/perf/results-5000-2026-08-17.md，与 8-15 基线量级一致。
 - `e2e-real-llm.sh` 强化断言（round-0002 指出真实回归偏弱）：queue probe
   现在验证 FIFO 内容顺序（第二条 prompt 是最后一条 user、最后回复含“完成”），
   不再只数 user 总数；TUI 键盘输入改为等待投递与回复 idle，并断言恰好新增
