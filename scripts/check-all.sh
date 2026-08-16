@@ -52,7 +52,7 @@ if [[ "$E2E" == "1" ]]; then
     e2e-tui-command.sh e2e-api-goal.sh e2e-tui-goal.sh e2e-tui-goal-command.sh e2e-tui-brand.sh \
     e2e-tui-dir.sh e2e-tui-fork.sh e2e-tui-offline.sh e2e-tui-version-lock.sh \
     e2e-tui-help.sh e2e-tui-print-logs.sh e2e-api-permission.sh \
-    e2e-tui-permission.sh e2e-tui-permission-ext.sh e2e-tui-queue.sh \
+    e2e-tui-permission.sh e2e-tui-permission-mini.sh e2e-tui-permission-ext.sh e2e-tui-queue.sh \
     e2e-tui-agent-tab.sh e2e-tui-agent-lock.sh e2e-tui-queue-live.sh e2e-recovery-consistency.sh"
   STABLE_E2E+=" e2e-recovery-crash.sh e2e-recovery-sse-reconnect.sh"
   if [[ "${CI_E2E_SUBSET:-}" == "api" ]]; then

@@ -8,6 +8,9 @@
 
 ### 新增
 
+- 最小 permission e2e `scripts/e2e-tui-permission-mini.sh`：真实 TUI 单次
+  Allow-once 循环（弹窗 → 批准 → 工具完成 → 恰好一次回复 → 无残留权限），
+  10–11s；已入 stable 套件，flake 扫描 10/10 全绿。
 - flake 扫描第二轮：`e2e-tui-queue-live.sh` 与 `e2e-tui-agent-tab.sh`
   各 10 次首跑全绿（此前 CI 偶发 flake 的两个脚本），结果见
   docs/perf/results-flake-tui-2026-08-17.md。

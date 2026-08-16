@@ -9,10 +9,12 @@
 |---|---|---|---|---|
 | e2e-tui-queue-live.sh | 10 | 10 | 0 | 19–20s |
 | e2e-tui-agent-tab.sh | 10 | 10 | 0 | 11–12s |
+| e2e-tui-permission-mini.sh | 10 | 10 | 0 | 10–11s |
 
 ## 结论
 
 - 此前 CI 偶发 flake 的两个 TUI 脚本（忙碌中排队、Tab 切 agent）在固定
   commit 下首跑 10/10 全绿，未发现语义失败。
-- permission 相关脚本较长（数分钟），按预算拆最小 case 后再补跑；当前由
-  stable 套件每次回归覆盖。
+- permission 已拆出最小 case `e2e-tui-permission-mini.sh`（单次 Allow-once
+  循环，10–11s），首跑 10/10 全绿；已入 stable 套件。完整 permission
+  矩阵仍由 `e2e-tui-permission.sh` / `-ext` 每次回归覆盖。

@@ -108,6 +108,9 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   （19–20s / 11–12s，见
   `docs/perf/results-flake-tui-2026-08-17.md`）；permission 最小 case
   拆分后补跑。
+- 实验 3 第三轮（2026-08-17）：permission 最小 case
+  `scripts/e2e-tui-permission-mini.sh`（单次 Allow-once，10–11s）首跑
+  10/10 全绿并加入 stable 套件；完整 permission 矩阵仍每次回归覆盖。
 - `--continue` 完整消息图变体不再优先：保留 `e2e-tui-continue.sh` 选择
   契约，后续可补低成本 `-c` 选择契约。
 
