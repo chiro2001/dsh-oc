@@ -9,6 +9,7 @@ import {
   agentErrorEvents,
   commandResultEvents,
   MuxEventTranslator,
+  opencodeError,
   type BridgeGlobalEvent,
 } from '../src/bridge/events.js'
 import { InteractionState } from '../src/bridge/state.js'
@@ -96,7 +97,7 @@ describe('bridge events: session event mapping', () => {
     ])
     expect(events[0]?.payload.properties).toMatchObject({
       sessionID: 's1',
-      error: { code: 'agent-error', message: 'mock authentication failed' },
+      error: { name: 'UnknownError', data: { message: 'mock authentication failed' } },
     })
     expect((events[1]?.payload.properties.info as { role?: string }).role).toBe('assistant')
     const part = events[2]?.payload.properties.part as { type?: string; text?: string }
@@ -1638,9 +1639,21 @@ describe('bridge events: projection and control frames', () => {
     expect(errored).toHaveLength(1)
     expect(errored[0]?.payload.type).toBe('session.error')
     expect(errored[0]?.payload.properties).toMatchObject({
-      error: { code: 'internal', message: 'boom' },
+      error: { name: 'UnknownError', data: { message: 'boom' } },
     })
     expect(logs.some((line) => line.includes('stream/error'))).toBe(true)
+  })
+
+  it('maps dsh error codes to the official session.error union shape', () => {
+    const aborted = opencodeError('aborted', 'turn aborted')
+    expect(aborted).toEqual({ name: 'MessageAbortedError', data: { message: 'turn aborted' } })
+    const auth = opencodeError('invalid_api_key', 'bad key')
+    expect(auth).toEqual({
+      name: 'ProviderAuthError',
+      data: { providerID: 'deepseek', message: 'bad key' },
+    })
+    const generic = opencodeError('internal', 'boom')
+    expect(generic).toEqual({ name: 'UnknownError', data: { message: 'boom' } })
   })
 
   it('surfaces pending inbox messages as queued user messages from the queue snapshot', () => {

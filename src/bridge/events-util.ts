@@ -253,6 +253,16 @@ export function commandResultEvents(
 }
 
 /** Visible agent-error message used by the host-level error path. */
+export function opencodeError(code: string, message: string): { name: string; data: Record<string, unknown> } {
+  if (code === 'message-aborted' || code === 'aborted') {
+    return { name: 'MessageAbortedError', data: { message } }
+  }
+  if (code === 'auth' || code === 'invalid_api_key' || code === 'authentication') {
+    return { name: 'ProviderAuthError', data: { providerID: 'deepseek', message } }
+  }
+  return { name: 'UnknownError', data: { message } }
+}
+
 export function agentErrorEvents(sessionId: string, message: string, cwd: string): BridgeGlobalEvent[] {
   const project = projectIdFor(cwd)
   const created = Date.now()
@@ -261,7 +271,7 @@ export function agentErrorEvents(sessionId: string, message: string, cwd: string
   return [
     makeEvent(cwd, 'session.error', {
       sessionID: sessionId,
-      error: { code: 'agent-error', message },
+      error: opencodeError('agent-error', message),
     }, project),
     makeEvent(cwd, 'message.updated', {
       sessionID: sessionId,

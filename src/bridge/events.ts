@@ -45,6 +45,7 @@ import {
   makeEvent,
   messageEvents,
   messageOptions,
+  opencodeError,
   provisionalAssistantMessage,
   streamPart,
   toolCallId,
@@ -59,6 +60,7 @@ export {
   agentErrorEvents,
   commandResultEvents,
   makeEvent,
+  opencodeError,
   toolCallId,
   toolProgressStructured,
   type BridgeGlobalEvent,
@@ -721,7 +723,7 @@ export class MuxEventTranslator {
       case 'stream/error':
         this.deps.log(`[bridge/events] stream/error: ${payload.error.code} ${payload.error.message}`)
         return [makeEvent(this.deps.cwd, 'session.error', {
-          error: { code: payload.error.code, message: payload.error.message },
+          error: opencodeError(String(payload.error.code), payload.error.message),
         }, projectIdFor(this.deps.cwd))]
       default:
         this.deps.log(`[bridge/events] unhandled mux frame ${String((payload as { type: string }).type)}`)
