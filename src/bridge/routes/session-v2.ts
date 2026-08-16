@@ -251,6 +251,39 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     return R.json(200, response)
   })
 
+  register('GET', '/api/session/:sessionID/history', 'json', async (req, ctx) => {
+    const id = req.params.sessionID as string
+    const limitRaw = req.query.get('limit')
+    const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : undefined
+    const afterRaw = req.query.get('after')
+    const after = afterRaw === null ? undefined : Number(afterRaw)
+    if (after !== undefined && (!Number.isInteger(after) || after < 0)) {
+      throw badRequest('after must be a non-negative integer')
+    }
+    const history = await R.cachedSessionHistory(ctx, id)
+    const defaultModel = await R.defaultModelRef(ctx)
+    const entries = history.events
+    const anchorSeqs: number[] = []
+    const data = convertMessagesV2(
+      entries.map((entry) => entry.event),
+      {
+        sessionId: id,
+        cwd: ctx.cwd,
+        defaultModel,
+        onSkip: (type, reason) => ctx.log(`[bridge/history-v2] ${type}: ${reason}`),
+      },
+      entries.map((entry) => entry.view),
+      anchorSeqs,
+    )
+    const withSeq = data.map((message, index) => ({ message, seq: anchorSeqs[index] ?? 0 }))
+    const filtered = after === undefined ? withSeq : withSeq.filter((entry) => entry.seq > after)
+    const page = filtered.slice(0, limit ?? filtered.length)
+    return R.json(200, {
+      data: remapV2Messages(ctx, id, page.map((entry) => entry.message)),
+      hasMore: filtered.length > page.length,
+    })
+  })
+
   register('GET', '/api/session/:sessionID/context', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })

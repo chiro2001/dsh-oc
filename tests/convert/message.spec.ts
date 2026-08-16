@@ -301,6 +301,18 @@ describe('convert/message (v1)', () => {
 })
 
 describe('convert/message (v2)', () => {
+  it('records anchor event seqs alongside v2 messages', () => {
+    const anchorSeqs: number[] = []
+    const messages = convertMessagesV2([
+      makeUserEvent('hello', 'm1', 1000),
+      makeAssistantEvent([
+        { type: 'text', text: 'answer' },
+      ], 'm2', 1100),
+    ], opts, undefined, anchorSeqs)
+    expect(messages).toHaveLength(2)
+    expect(anchorSeqs).toEqual([2, 3])
+  })
+
   it('converts user and assistant events to SessionMessage[]', () => {
     const messages = convertMessagesV2([
       makeUserEvent('hello', 'm1', 1000),

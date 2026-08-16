@@ -151,7 +151,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`cfddd26`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`2f1ab51`（2026-08-16）。
 
 ### 路由注册表
 
@@ -175,12 +175,12 @@
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
 | `tests/bin.spec.ts` | 3 | e157b88 feat(cli): add dsh-oc shortcut command |
-| `tests/bridge-events.spec.ts` | 51 | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
+| `tests/bridge-events.spec.ts` | 63 | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
-| `tests/bridge-router.spec.ts` | 93 | cf264fd docs(readme): simplify per user review; feat(bridge): queue backlog hint on slash outcomes |
+| `tests/bridge-router.spec.ts` | 95 | 9ff3859 fix(bridge): resolve bridge message ids when forking at a message |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `tests/convert/message.spec.ts` | 20 | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
+| `tests/convert/message.spec.ts` | 21 | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -193,7 +193,7 @@
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `tests/tui/index.spec.ts` | 32 | 77f5c63 docs(help): reflect real titles, Esc interrupt and preset inheritance |
+| `tests/tui/index.spec.ts` | 34 | eba383f feat(tui): print DSH OC brand before --mini launches |
 | `tests/tui/platform.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 
 ### 关键实现最后更新
@@ -202,7 +202,7 @@
 |---|---|
 | `src/bridge/convert/common.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/goal.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `src/bridge/convert/message.ts` | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
+| `src/bridge/convert/message.ts` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
 | `src/bridge/convert/model.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -210,42 +210,46 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
+| `src/bridge/events-util.ts` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
+| `src/bridge/events.ts` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
 | `src/bridge/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/git.ts` | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
 | `src/bridge/http.ts` | 5f6aad0 feat(bridge): serve workspace files over /api/fs with wildcard routing |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | 93f3536 fix(bridge): handle flat durable session row and isolate frame translation |
+| `src/bridge/router.ts` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
 | `src/bridge/routes.ts` | 5f6aad0 feat(bridge): serve workspace files over /api/fs with wildcard routing |
 | `src/bridge/routes/boot.ts` | c958de3 feat(bridge): add global health and lifecycle dispose endpoints |
 | `src/bridge/routes/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/routes/permission.ts` | fd1e4b5 feat(bridge): add SDK v2 permission reply alias route |
-| `src/bridge/routes/session-v1.ts` | cf264fd docs(readme): simplify per user review; feat(bridge): queue backlog hint on slash outcomes |
-| `src/bridge/routes/session-v2.ts` | c9015cb fix(bridge): mirror dsh pending queue to the TUI and drop prompt debounce |
+| `src/bridge/routes/session-v1.ts` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
+| `src/bridge/routes/session-v2.ts` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
 | `src/bridge/routes/vcs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `src/bridge/state.ts` | c9015cb fix(bridge): mirror dsh pending queue to the TUI and drop prompt debounce |
+| `src/bridge/state.ts` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
 | `src/bridge/stubs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/help.ts` | a289e00 docs(help): mention background subagents in capability summary |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
+| `src/tui/brand.ts` | eba383f feat(tui): print DSH OC brand before --mini launches |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
-| `src/tui/index.ts` | 5c1cdba feat(tui): allow disabling the exit hint via DSH_OC_DISABLE_EXIT_NOTE |
+| `src/tui/index.ts` | eba383f feat(tui): print DSH OC brand before --mini launches |
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `scripts/audit-local-sessions.sh` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
-| `scripts/check-all.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
+| `scripts/check-all.sh` | adc1576 ci: bound each e2e script with a timeout so hung suites fail fast |
 | `scripts/cleanup-e2e-runs.sh` | ec31177 chore: add e2e run directory cleanup script |
-| `scripts/cleanup-merged-branches.sh` | 2848dc8 fix(scripts): accept --apply/--remote flags before the target branch |
+| `scripts/cleanup-merged-branches.sh` | 2f1ab51 chore(scripts): enumerate remote merged branches for cleanup |
 | `scripts/e2e-api-attachment.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
-| `scripts/e2e-api-permission.sh` | d9b4559 test(e2e): harden permission suites against slow runners |
+| `scripts/e2e-api-permission.sh` | efd27f4 test(e2e): make api-permission resilient to mock sequence drift |
 | `scripts/e2e-api.sh` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
+| `scripts/e2e-cli-bin.sh` | 7ed1c96 fix(e2e): run dsh-oc under the isolated DSH_HOME |
 | `scripts/e2e-real-llm.sh` | 66c7188 test(e2e): stable real-LLM goal path and agent-tab coverage |
 | `scripts/e2e-tui-abort.sh` | 1ed1c51 test(e2e): assert interrupt settles the TUI spinner |
-| `scripts/e2e-tui-agent-tab.sh` | 66c7188 test(e2e): stable real-LLM goal path and agent-tab coverage |
+| `scripts/e2e-tui-agent-lock.sh` | 1c1e685 test(e2e): cover locked agent switching in the real TUI |
+| `scripts/e2e-tui-agent-tab.sh` | 9af8f69 fix(bridge): keep real agent preset in messages/labels and stop first-reply duplication |
 | `scripts/e2e-tui-boot.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-brand.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-command.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
@@ -253,9 +257,10 @@
 | `scripts/e2e-tui-dir-filter.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-dir.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-fork.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-goal-command.sh` | c854d53 test(e2e): cover TUI /goal with a full objective |
 | `scripts/e2e-tui-goal.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
-| `scripts/e2e-tui-mini.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-mini.sh` | 53d043f fix(e2e): wait for mini input ready instead of any OpenCode text |
 | `scripts/e2e-tui-offline.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-permission-ext.sh` | 45b0726 test(e2e): make question highlight assertion theme-agnostic |
 | `scripts/e2e-tui-permission.sh` | d9b4559 test(e2e): harden permission suites against slow runners |
@@ -276,6 +281,7 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 

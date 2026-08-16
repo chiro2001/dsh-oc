@@ -703,13 +703,19 @@ function upsertPartialV2(
   turn: number,
   step: number,
   created: number,
+  seq: number,
+  pushFn?: (message: SessionMessage, seq: number) => void,
 ): V2AssistantState {
   const stepKey = `${turn}:${step}`
   let info = pending.get(stepKey)
   if (!info) {
     info = partialV2Assistant(provisionalMessageId(opts.sessionId, turn, step), created, opts)
     pending.set(stepKey, info)
-    messages.push(info)
+    if (pushFn === undefined) {
+      messages.push(info)
+    } else {
+      pushFn(info, seq)
+    }
   }
   const blocks = blocksByStep.get(stepKey)
   if (blocks) {
@@ -858,8 +864,17 @@ export function convertMessagesV2(
   events: readonly SessionEvent[],
   opts: MessageConvertOptions,
   views?: ReadonlyArray<ToolEventView | undefined>,
+  anchorSeqs?: number[],
 ): SessionMessage[] {
   const messages: SessionMessage[] = []
+  const pushMessage = (message: SessionMessage, seq: number): void => {
+    messages.push(message)
+    anchorSeqs?.push(seq)
+  }
+  const spliceMessage = (index: number): void => {
+    messages.splice(index, 1)
+    anchorSeqs?.splice(index, 1)
+  }
   const calls = new Map<string, ToolCallInfo>()
   const blockStarts = new Map<string, number>()
   const turnStarts = new Map<number, number>()
@@ -887,7 +902,7 @@ export function convertMessagesV2(
             : textFromBlocks(data.content as readonly { type: string; text?: unknown }[]),
           type: 'user',
         }
-        messages.push(message)
+        pushMessage(message, event.seq)
         break
       }
       case 'assistant/chunk': {
@@ -910,6 +925,8 @@ export function convertMessagesV2(
             data.turn,
             data.step,
             earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+            event.seq,
+            (message, seq) => pushMessage(message, seq),
           )
         }
         break
@@ -942,6 +959,8 @@ export function convertMessagesV2(
           chunk.data.turn,
           chunk.data.step,
           earliestBlockStart(blockStarts, chunk.data.turn, chunk.data.step) ?? turnStarts.get(chunk.data.turn) ?? time0,
+          chunk.seq,
+          (message, seq) => pushMessage(message, seq),
         )
         break
       }
@@ -958,8 +977,8 @@ export function convertMessagesV2(
         const pendingIndex = pendingMessage === undefined
           ? -1
           : messages.findIndex((message) => message.id === pendingMessage.id)
-        messages.push(state.info)
-        if (pendingIndex !== -1) messages.splice(pendingIndex, 1)
+        pushMessage(state.info, event.seq)
+        if (pendingIndex !== -1) spliceMessage(pendingIndex)
         pending.delete(stepKey)
         pendingCallsByStep.delete(stepKey)
         for (const [callId, call] of state.calls) calls.set(callId, call)
@@ -1008,7 +1027,7 @@ export function convertMessagesV2(
           if (text !== undefined) {
             const id = `goal:${event.seq}`
             const model = opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
-            messages.push({
+            pushMessage({
               id,
               time: { created: event.time, completed: event.time },
               type: 'assistant',
@@ -1020,7 +1039,7 @@ export function convertMessagesV2(
               content: [{ type: 'text', id: `${id}:note`, text }],
               cost: 0,
               tokens: ZERO_TOKENS,
-            })
+            }, event.seq)
           }
         }
         break

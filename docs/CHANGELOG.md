@@ -8,6 +8,9 @@
 
 ### 新增
 
+- `GET /api/session/{id}/history`：SDK v2 历史端点（`limit` + `after` 事件
+  seq 游标），返回 `{ data: SessionMessage[], hasMore }`；v2 消息转换新增
+  消息锚点 seq 记录，`after` 为负数返回 400。
 - 后台子代理能力开启：`GET /experimental/capabilities` 返回
   `{ backgroundSubagents: true }`，并新增
   `POST /experimental/session/{id}/background` no-op 成功路由（dsh 会话

@@ -17,10 +17,13 @@
 - 生命周期面：`GET /global/health`、`POST /global/dispose`、
   `POST /instance/dispose`（dispose 为 no-op 确认，dsh 拥有进程生命周期）。
 
-仍为 LATER 的 SDK 路由：`/api/session/{id}/history`（durable event 流，需为
-每种 dsh 事件写独立映射，当前无客户端消费，TUI 用 `/global/event` +
-message 端点）、`/api/pty/*`（dsh 无 PTY RPC）、`/api/integration/*` 与
-`/api/credential/*`（dsh 凭据面未暴露）、`/global/upgrade`（自动更新明确关闭）。
+已实现：`/api/session/{id}/history`（`limit` + `after` 事件 seq 游标，
+返回 `{ data: SessionMessage[], hasMore }`，复用 v2 消息转换并带消息锚点
+seq，`after` 非负整数否则 400）。
+
+仍为 LATER 的 SDK 路由：`/api/pty/*`（dsh 无 PTY RPC）、`/api/integration/*`
+与 `/api/credential/*`（dsh 凭据面未暴露）、`/global/upgrade`（自动更新
+明确关闭）。
 
 ## 优先级总览
 

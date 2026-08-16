@@ -422,6 +422,48 @@ describe('bridge router: session routes', () => {
     expect(await router.exitNoteNeeded()).toBe(false)
   })
 
+  it('serves v2 session history with an after cursor and limit', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [
+            { event: makeUserEvent('hello', 'm1', 1000) },
+            { event: makeAssistantEvent([{ type: 'text', text: 'answer' }], 'm2', 1100) },
+          ],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server } = await boot(api)
+
+    const all = await request(server, 'GET', '/api/session/s1/history')
+    expect(all.status).toBe(200)
+    const allBody = all.body as { data?: unknown[]; hasMore?: boolean }
+    expect(allBody).toMatchObject({ hasMore: false })
+    expect(allBody.data).toHaveLength(2)
+
+    const tail = await request(server, 'GET', '/api/session/s1/history?after=2')
+    expect(tail.status).toBe(200)
+    const tailBody = tail.body as { data?: Array<{ type?: string; text?: string }> }
+    expect(tailBody.data).toHaveLength(1)
+    expect(tailBody.data?.[0]).toMatchObject({
+      type: 'assistant',
+      content: [{ type: 'text', text: 'answer' }],
+    })
+
+    const page = await request(server, 'GET', '/api/session/s1/history?limit=1')
+    expect(page.status).toBe(200)
+    const pageBody = page.body as { data?: unknown[]; hasMore?: boolean }
+    expect(pageBody.data).toHaveLength(1)
+    expect(pageBody.hasMore).toBe(true)
+
+    const bad = await request(server, 'GET', '/api/session/s1/history?after=-1')
+    expect(bad.status).toBe(400)
+  })
+
   it('filters session lists by the directory query', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
