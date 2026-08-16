@@ -100,6 +100,7 @@ while (( SECONDS < deadline )); do
   done
   if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
     echo "e2e: dsh exited while waiting for TUI render: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+    cat "$E2E_RUN_DIR/dsh-stderr.txt" >&2 2>/dev/null || true
     exit 1
   fi
   sleep 1
