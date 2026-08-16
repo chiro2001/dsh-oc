@@ -536,6 +536,7 @@ export function convertMessagesV1(
           opts,
           (index, blockType) => blockStarts.get(`${data.turn}:${data.step}:${index}:${blockType}`),
           (index, blockType) => blockEnds.get(`${data.turn}:${data.step}:${index}:${blockType}`),
+          (index, blockType) => provisionalPartId(opts.sessionId, data.turn, data.step, blockType, index),
         )
         for (const [callId, call] of messageCalls) calls.set(callId, call)
         const pendingEntry = pending.get(stepKey)
@@ -643,7 +644,9 @@ export function assistantMessageFromEvent(
   partIdFor?: (index: number, blockType: string) => string | undefined,
 ): V1MessageEntry {
   const id = String(event.data.message.id)
-  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart, blockEnd, partIdFor)
+  const effectivePartIdFor = partIdFor ?? ((index: number, blockType: string) =>
+    provisionalPartId(opts.sessionId, event.data.turn, event.data.step, blockType, index))
+  const { parts } = assistantPartsFromMessage(event.data.message, event.time, opts, blockStart, blockEnd, effectivePartIdFor)
   return {
     info: assistantMessageInfo(event.data.message, event.time, parentID ?? id, opts, event.data.usage, created, finish),
     parts,
@@ -768,7 +771,7 @@ function toV2Assistant(
     if (block.type === 'text') {
       const part: SessionMessageAssistantText = {
         type: 'text',
-        id: `${messageID}:${index}`,
+        id: provisionalPartId(opts.sessionId, data.turn, data.step, 'text', index),
         text: block.text,
       }
       content.push(part)
@@ -776,7 +779,7 @@ function toV2Assistant(
       const start = blockStart?.(index, block.type) ?? event.time
       content.push({
         type: 'reasoning',
-        id: `${messageID}:${index}`,
+        id: provisionalPartId(opts.sessionId, data.turn, data.step, 'reasoning', index),
         text: block.text,
         time: { created: start, completed: event.time },
       })

@@ -213,7 +213,9 @@ describe('convert/message (v1)', () => {
     expect(entries.map((entry) => entry.info.role)).toEqual(['user', 'assistant'])
     expect(entries[1]?.info.id).toBe('m-final')
     expect(entries.some((entry) => String(entry.info.id).startsWith('msg_pending:'))).toBe(false)
-    expect(entries[1]?.parts.some((part) => part.id.startsWith('prt_stream:'))).toBe(false)
+    // Final v1 parts reuse the streamed `prt_stream:` ids so history merges
+    // with the live SSE without rendering duplicate text blocks.
+    expect(entries[1]?.parts.every((part) => part.id.startsWith('prt_stream:'))).toBe(true)
     const final = entries[1]
     if (final?.info.role === 'assistant') {
       expect(final.info.time).toEqual({ created: 1020, completed: 2000 })

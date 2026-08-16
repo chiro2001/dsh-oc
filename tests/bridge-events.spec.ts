@@ -1880,7 +1880,8 @@ describe('bridge events: projection and control frames', () => {
     const assistantIds = updates
       .map((event) => (event.payload.properties.info as { id?: string }).id)
       .filter((id) => id?.startsWith('msg_assistant_2'))
-    expect(assistantIds).toEqual(['msg_assistant_2', 'msg_assistant_2'])
+    // start update + completion reset (completed=no) + final completion.
+    expect(assistantIds).toEqual(['msg_assistant_2', 'msg_assistant_2', 'msg_assistant_2'])
     const streamedPart = events.find((event) =>
       event.payload.type === 'message.part.updated'
       && (event.payload.properties.part as { type?: string }).type === 'text'
@@ -1988,7 +1989,11 @@ describe('bridge events: projection and control frames', () => {
     const stepTwoUpdates = stepTwo.filter((event) =>
       event.payload.type === 'message.updated'
       && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
-    expect(stepTwoUpdates).toHaveLength(1)
+    // The follow-up finalization emits a completion reset then the completed
+    // update (official TUI behavior), still under the same turn message id.
+    expect(stepTwoUpdates).toHaveLength(2)
+    expect((stepTwoUpdates[0]?.payload.properties.info as { time?: { completed?: number } }).time?.completed).toBeUndefined()
+    expect((stepTwoUpdates[1]?.payload.properties.info as { time: { completed?: number } }).time.completed).toBe(1200)
     const textParts = [...stepOne, ...stepTwo].filter((event) =>
       event.payload.type === 'message.part.updated'
       && (event.payload.properties.part as { type?: string }).type === 'text'
@@ -2288,9 +2293,9 @@ describe('bridge events: projection and control frames', () => {
       event.payload.type === 'message.updated'
       && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
     // Opening update + tool-call finalize (completed unset) + follow-up
-    // completion; turn/end must not emit another completion for the
-    // already-finalized message.
-    expect(updates).toHaveLength(3)
+    // completion reset + follow-up completion; turn/end must not emit
+    // another completion for the already-finalized message.
+    expect(updates).toHaveLength(4)
     const completions = updates
       .map((event) => (event.payload.properties.info as { time?: { completed?: number } }).time?.completed)
       .filter((value): value is number => value !== undefined)

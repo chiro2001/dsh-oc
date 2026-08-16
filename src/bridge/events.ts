@@ -1028,6 +1028,23 @@ export class MuxEventTranslator {
             })) as unknown as Array<Record<string, unknown>>,
           }
         }, true)
+        // The official TUI resets streamed parts when a completed=no
+        // message.updated arrives after the final parts; without that reset
+        // update, a fast completion can leave the streamed text block AND the
+        // final text block both rendered (duplicate reply).
+        const last = events.at(-1)
+        if (last?.payload.type === 'message.updated'
+          && (last.payload.properties.info as { time?: { completed?: number } }).time?.completed !== undefined) {
+          events.pop()
+          const info = last.payload.properties.info as { time: { created: number; completed: number } }
+          events.push(
+            makeEvent(directory, 'message.updated', {
+              sessionID: sessionId,
+              info: { ...info, time: { created: info.time.created } },
+            }, project),
+            last,
+          )
+        }
         if (streamed) state.provisionalMessageIds.delete(stepKey)
         this.currentAssistant.set(sessionId, messageID)
         let calls = this.pendingCalls.get(sessionId)
