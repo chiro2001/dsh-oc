@@ -1,0 +1,6 @@
+{"type":"turn/start","seq":1,"time":1001000,"data":{"turn":1}}
+{"type":"user/message","seq":3,"time":1003000,"data":{"content":[{"type":"text","text":"run failing tool"}],"source":{"kind":"user"},"role":"user","id":"msg-user-2"}}
+{"type":"assistant/message","seq":4,"time":1004000,"data":{"turn":1,"step":1,"message":{"id":"msg-tool-call-err","role":"assistant","content":[{"type":"tool-call","id":"call-err","name":"bash","arguments":"{\"command\":\"false\"}"}],"source":{"kind":"model","provider":"deepseek-official","model":"mock-model"}},"usage":{"inputTokens":12,"outputTokens":4,"cacheReadTokens":0,"cacheWriteTokens":0}}}
+{"type":"tool/call","seq":5,"time":1005000,"data":{"turn":1,"step":1,"callId":"call-err","name":"bash","arguments":"{\"command\":\"false\"}"}}
+{"type":"tool/result","seq":7,"time":1007000,"data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"call-err"},"content":[{"type":"tool-result","toolCallId":"call-err","content":[{"type":"text","text":{"name":"ToolError","code":"E_TOOL"}}]}],"role":"assistant","id":"msg-tool-6"},"error":{"name":"ToolError","code":"E_TOOL"}},"sourceEventSeqs":[5]}
+{"type":"turn/end","seq":8,"time":1008000,"data":{"turn":1,"reason":{"kind":"stop"}}}

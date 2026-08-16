@@ -2251,6 +2251,63 @@ describe('bridge events: projection and control frames', () => {
     })
   })
 
+  it('completes every tool-call assistant when a turn has several', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('run tools', 'msg-user-1', 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/message', {
+          turn: 1,
+          step: 1,
+          message: {
+            id: 'dsh-tool-1' as never,
+            role: 'assistant',
+            content: [{ type: 'tool-call', id: 'c1' as never, name: 'bash', arguments: '{}' }],
+            source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-chat' },
+          },
+        }, 3, 1500),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/message', {
+          turn: 1,
+          step: 2,
+          message: {
+            id: 'dsh-tool-2' as never,
+            role: 'assistant',
+            content: [{ type: 'tool-call', id: 'c2' as never, name: 'bash', arguments: '{}' }],
+            source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-chat' },
+          },
+        }, 4, 1600),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 20, 2000),
+      }),
+    ])
+
+    const updates = events.filter((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'assistant'
+      && (event.payload.properties.info as { id?: string }).id !== undefined)
+    const completed = updates.map((event) => {
+      const info = event.payload.properties.info as { id: string; time?: { completed?: number } }
+      return { id: info.id, completed: info.time?.completed }
+    })
+    // Both tool-call assistants must receive their completion at turn/end,
+    // not only the last one (single-slot pending regression).
+    expect(completed.filter((entry) => entry.completed === 2000).map((entry) => entry.id).sort())
+      .toEqual(['dsh-tool-1', 'dsh-tool-2'])
+  })
+
   it('does not re-complete a turn message finalized by a follow-up step', () => {
     const state = new InteractionState()
     state.registerAssistantIdForUser('s1', 'msg-user-1', 'msg_turn_1')

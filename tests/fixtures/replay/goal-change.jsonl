@@ -1,0 +1,6 @@
+{"type":"turn/start","seq":1,"time":1001000,"data":{"turn":1}}
+{"type":"goal/change","seq":2,"time":1002000,"data":{"goal":{"text":"synthetic goal","status":"active"}}}
+{"type":"user/message","seq":4,"time":1004000,"data":{"content":[{"type":"text","text":"work on goal"}],"source":{"kind":"user"},"role":"user","id":"msg-user-3"}}
+{"type":"assistant/chunk","seq":5,"time":1005000,"data":{"turn":1,"step":1,"chunk":{"type":"text-delta","index":0,"blockType":"text-delta","text":"goal acknowledged"}}}
+{"type":"assistant/message","seq":7,"time":1007000,"data":{"turn":1,"step":1,"message":{"id":"msg-asst-6","role":"assistant","content":[{"type":"text","text":"goal acknowledged"}],"source":{"kind":"model","provider":"deepseek-official","model":"mock-model"}},"usage":{"inputTokens":12,"outputTokens":4,"cacheReadTokens":0,"cacheWriteTokens":0}}}
+{"type":"turn/end","seq":8,"time":1008000,"data":{"turn":1,"reason":{"kind":"stop"}}}

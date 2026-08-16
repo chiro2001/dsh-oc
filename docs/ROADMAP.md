@@ -78,9 +78,16 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   `mux-resubscribe` 以单测覆盖（重放 chunk 跨 translator 重建去重）。恢复
   契约（durable exactly-once；崩溃前缀不丢/不伪造完成/回 idle/可续聊；纯
   内存表面列为 transient）仍为实验后续断言基线。
-- 实验 1c：脱敏真实 corpus（feature manifest + allowlist 脱敏 + 人工
-  golden，不以“10+ 会话”为合格标准）+ 1.18.18 黄金轨迹 + 官方最小复现
-  （错序归因证据或中性措辞二选一）。
+- 实验 1c（2026-08-17 已落地首轮）：确定性合成回放语料
+  `scripts/build-replay-corpus.mjs` → `tests/fixtures/replay/`（7 个 fixture：
+  reasoning、单/多工具、排队、工具错误、compaction、打断、goal），
+  `tests/replay-corpus.spec.ts` 断言无未处理/错误、工具配对与终态、live
+  完成态与 durable 一致、durable v1/v2 一致。语料审计首跑即发现并修复
+  **多工具回合完成态缺陷**：同一回合多个含 tool-call 的 assistant 消息
+  只有最后一个在 turn/end 收到 completed（单槽 pending），现改为按
+  message 多槽，turn/end 全部完成。真实会话 feature 覆盖扫描
+  （`scripts/replay-corpus-manifest.mjs`）与官方 1.18.18 黄金轨迹/最小复现
+  仍为后续。
 - 实验 2（2026-08-17 已落地工具与首轮演练）：`v0.1.0-rc.2` 以 full SHA
   为真相源 —— `scripts/verify-release-artifacts.sh` 已加入 check-all 门禁：
   HEAD 源码 clean rebuild 后 committed `lib/` 零差异、npm pack 无机器绝对

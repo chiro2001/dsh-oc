@@ -8,6 +8,11 @@
 
 ### 新增
 
+- 确定性回放语料（实验 1c）：`scripts/build-replay-corpus.mjs` 生成 7 个
+  结构保持的合成 fixture（reasoning、单/多工具、排队、工具错误、compaction、
+  打断、goal）到 `tests/fixtures/replay/`；`tests/replay-corpus.spec.ts`
+  回放审计：无未处理/翻译错误、工具调用配对且终态、live 完成态与 durable
+  一致、durable v1/v2 消息面一致。
 - 预算化 flake 扫描 `scripts/flake-mini-scan.sh`：对最小高风险 e2e 脚本
   重复 N 次（默认 10），记录首败与耗时，语义失败立即停止且不重试；恢复
   三故障域首轮各 10 次全绿（结果见 docs/perf）。
@@ -153,6 +158,10 @@
 
 ### 修复
 
+- 同一回合存在多个含 tool-call 的 assistant 消息时，turn/end 现在为**每个**
+  工具消息补发 completed（此前 pending 完成态是单槽，只有最后一个工具
+  消息收到 completed，前面的工具卡在 live 视图缺少完成态；语料审计首跑
+  发现并修复，新增多工具完成态单测）。
 - v1 历史消息的 `parentID` 现在随桥接 surface id 一起 remap：此前 warm
   进程内父链仍指向原始 dsh id，消息 id 却已换成桥接 id，导致客户端无法在
   返回列表内解析父链（cold `--session` 无映射反而能解析）；修复后 warm/cold

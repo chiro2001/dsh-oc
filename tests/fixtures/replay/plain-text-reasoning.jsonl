@@ -1,0 +1,6 @@
+{"type":"turn/start","seq":1,"time":1001000,"data":{"turn":1}}
+{"type":"user/message","seq":3,"time":1003000,"data":{"content":[{"type":"text","text":"synthetic user prompt"}],"source":{"kind":"user"},"role":"user","id":"msg-user-2"}}
+{"type":"reasoning-chunks","seq0":4,"time0":1003000,"data":{"turn":1,"step":1,"dt":[],"texts":["synthetic reason"]}}
+{"type":"text-chunks","seq0":5,"time0":1004000,"data":{"turn":1,"step":1,"dt":[],"texts":["synthetic answer"]}}
+{"type":"assistant/message","seq":7,"time":1007000,"data":{"turn":1,"step":1,"message":{"id":"msg-asst-6","role":"assistant","content":[{"type":"reasoning","text":"synthetic reason"},{"type":"text","text":"synthetic answer"}],"source":{"kind":"model","provider":"deepseek-official","model":"mock-model"}},"usage":{"inputTokens":12,"outputTokens":4,"cacheReadTokens":0,"cacheWriteTokens":0}}}
+{"type":"turn/end","seq":8,"time":1008000,"data":{"turn":1,"reason":{"kind":"stop"}}}

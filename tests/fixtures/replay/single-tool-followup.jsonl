@@ -1,0 +1,9 @@
+{"type":"turn/start","seq":1,"time":1001000,"data":{"turn":1}}
+{"type":"user/message","seq":3,"time":1003000,"data":{"content":[{"type":"text","text":"run synthetic tool"}],"source":{"kind":"user"},"role":"user","id":"msg-user-2"}}
+{"type":"tool-call-chunks","seq0":4,"time0":1003000,"data":{"turn":1,"step":1,"index":0,"dt":[],"id":"call-1","name":"bash","args":["{\"command\":\"echo synth","etic\"}"]}}
+{"type":"assistant/message","seq":5,"time":1005000,"data":{"turn":1,"step":1,"message":{"id":"msg-tool-call-1","role":"assistant","content":[{"type":"tool-call","id":"call-1","name":"bash","arguments":"{\"command\":\"echo synthetic\"}"}],"source":{"kind":"model","provider":"deepseek-official","model":"mock-model"}},"usage":{"inputTokens":12,"outputTokens":4,"cacheReadTokens":0,"cacheWriteTokens":0}}}
+{"type":"tool/call","seq":6,"time":1006000,"data":{"turn":1,"step":1,"callId":"call-1","name":"bash","arguments":"{\"command\":\"echo synthetic\"}"}}
+{"type":"tool/result","seq":8,"time":1008000,"data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"call-1"},"content":[{"type":"tool-result","toolCallId":"call-1","content":[{"type":"text","text":"synthetic tool output"}]}],"role":"assistant","id":"msg-tool-7"}},"sourceEventSeqs":[6]}
+{"type":"text-chunks","seq0":9,"time0":1008000,"data":{"turn":1,"step":2,"index":0,"dt":[],"texts":["follow-up after tool"]}}
+{"type":"assistant/message","seq":10,"time":1010000,"data":{"turn":1,"step":2,"message":{"id":"msg-followup-1","role":"assistant","content":[{"type":"text","text":"follow-up after tool"}],"source":{"kind":"model","provider":"deepseek-official","model":"mock-model"}},"usage":{"inputTokens":12,"outputTokens":4,"cacheReadTokens":0,"cacheWriteTokens":0}}}
+{"type":"turn/end","seq":11,"time":1011000,"data":{"turn":1,"reason":{"kind":"stop"}}}

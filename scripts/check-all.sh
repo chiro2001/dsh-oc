@@ -15,6 +15,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# .e2e runs are regenerable test artifacts; prune when they grow large so a
+# full suite cannot exhaust disk space mid-run (54G incident, 2026-08-17).
+if [[ -d .e2e ]]; then
+  E2E_MB="$(du -sm .e2e 2>/dev/null | awk '{print $1}' || echo 0)"
+  if (( E2E_MB > 5120 )); then
+    echo "== .e2e is ${E2E_MB}MB; pruning to last 30 runs =="
+    bash scripts/cleanup-e2e-runs.sh --keep 30 --apply >/dev/null
+  fi
+fi
+
 echo "== typecheck =="
 pnpm typecheck
 

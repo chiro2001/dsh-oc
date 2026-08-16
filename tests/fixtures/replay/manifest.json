@@ -1,0 +1,77 @@
+{
+  "generator": "scripts/build-replay-corpus.mjs",
+  "version": 1,
+  "generatedAt": "2026-08-16T17:37:56.284Z",
+  "note": "Synthetic structure-preserving fixtures; no real session content.",
+  "fixtures": [
+    {
+      "file": "plain-text-reasoning.jsonl",
+      "eventCount": 6,
+      "features": [
+        "reasoning",
+        "text"
+      ],
+      "equivalence": true,
+      "bytes": 942
+    },
+    {
+      "file": "single-tool-followup.jsonl",
+      "eventCount": 9,
+      "features": [
+        "tool",
+        "streamed-args",
+        "followup-text"
+      ],
+      "equivalence": true,
+      "bytes": 1829
+    },
+    {
+      "file": "multi-tool-queued.jsonl",
+      "eventCount": 15,
+      "features": [
+        "multi-tool",
+        "queue",
+        "followup-text"
+      ],
+      "equivalence": true,
+      "bytes": 3201
+    },
+    {
+      "file": "tool-error.jsonl",
+      "eventCount": 6,
+      "features": [
+        "tool-error"
+      ],
+      "equivalence": true,
+      "bytes": 1223
+    },
+    {
+      "file": "compaction.jsonl",
+      "eventCount": 8,
+      "features": [
+        "compaction",
+        "text"
+      ],
+      "equivalence": true,
+      "bytes": 1157
+    },
+    {
+      "file": "interrupted.jsonl",
+      "eventCount": 4,
+      "features": [
+        "interrupt"
+      ],
+      "equivalence": false,
+      "bytes": 510
+    },
+    {
+      "file": "goal-change.jsonl",
+      "eventCount": 6,
+      "features": [
+        "goal"
+      ],
+      "equivalence": true,
+      "bytes": 933
+    }
+  ]
+}

@@ -182,12 +182,14 @@ export class MuxEventTranslator {
   private currentAssistant = new Map<string, string>()
   private pendingCalls = new Map<string, Map<string, ToolCallInfo>>()
   /** Assistant messages waiting for their tool step to finish before the TUI
-   * considers them complete (drives the QUEUED badge for later user prompts). */
-  private pendingAssistantCompletions = new Map<string, {
+   * considers them complete (drives the QUEUED badge for later user prompts).
+   * One turn may contain several tool-call assistant messages, so the set is
+   * keyed by session then message id. */
+  private pendingAssistantCompletions = new Map<string, Map<string, {
     messageID: string
     stepKey: string
     info: Record<string, unknown>
-  }>()
+  }>>()
   private streams = new Map<string, SessionStreamState>()
   private readonly sessionGoals: Map<string, unknown>
   private readonly sessionTodos: Map<string, unknown>
@@ -1013,7 +1015,12 @@ export class MuxEventTranslator {
             // `time.completed` unset keeps later user prompts marked QUEUED.
             const time = info.time as { created?: number; completed?: number } | undefined
             if (time !== undefined) delete time.completed
-            this.pendingAssistantCompletions.set(sessionId, {
+            let byMessage = this.pendingAssistantCompletions.get(sessionId)
+            if (byMessage === undefined) {
+              byMessage = new Map()
+              this.pendingAssistantCompletions.set(sessionId, byMessage)
+            }
+            byMessage.set(messageID, {
               messageID,
               stepKey,
               info,
@@ -1101,21 +1108,23 @@ export class MuxEventTranslator {
             state.blocks.delete(key)
           }
         }
-        const pending = this.pendingAssistantCompletions.get(sessionId)
-        if (pending !== undefined) {
-          if (!state.completedMessageIds.has(pending.messageID)) {
-            events.push(
-              makeEvent(directory, 'message.updated', {
-                sessionID: sessionId,
-                info: {
-                  ...pending.info,
-                  time: {
-                    created: (pending.info.time as { created?: number })?.created ?? event.time,
-                    completed: event.time,
+        const pendings = this.pendingAssistantCompletions.get(sessionId)
+        if (pendings !== undefined) {
+          for (const pending of pendings.values()) {
+            if (!state.completedMessageIds.has(pending.messageID)) {
+              events.push(
+                makeEvent(directory, 'message.updated', {
+                  sessionID: sessionId,
+                  info: {
+                    ...pending.info,
+                    time: {
+                      created: (pending.info.time as { created?: number })?.created ?? event.time,
+                      completed: event.time,
+                    },
                   },
-                },
-              }, project),
-            )
+                }, project),
+              )
+            }
           }
           this.pendingAssistantCompletions.delete(sessionId)
         }

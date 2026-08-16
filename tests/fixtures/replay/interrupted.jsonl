@@ -1,0 +1,4 @@
+{"type":"turn/start","seq":1,"time":1001000,"data":{"turn":1}}
+{"type":"user/message","seq":3,"time":1003000,"data":{"content":[{"type":"text","text":"interrupt me"}],"source":{"kind":"user"},"role":"user","id":"msg-user-2"}}
+{"type":"assistant/chunk","seq":4,"time":1004000,"data":{"turn":1,"step":1,"chunk":{"type":"text-delta","index":0,"blockType":"text-delta","text":"partial"}}}
+{"type":"turn/end","seq":5,"time":1005000,"data":{"turn":1,"reason":{"kind":"interrupted","message":"synthetic interrupt"}}}
