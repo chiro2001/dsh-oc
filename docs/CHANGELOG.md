@@ -55,6 +55,10 @@
 
 ### 工程化
 
+- CI e2e 每个脚本带 `timeout -k` 执行（默认 300s，`E2E_TIMEOUT` 可覆盖），
+  挂死套件快速失败并重试一次，不再拖住整个 job。
+- CI 失败工件改为打包上传（排除 `node_modules` 与 `work/.git`），上传步骤
+  限时 5 分钟，避免 `.e2e` 上传挂起数小时。
 - `CONTRIBUTING.md`、PR/Issue 模板、分支策略（main 发布 / develop 集成 /
   短生命周期功能分支）。
 - CI：push 到 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/
@@ -116,6 +120,18 @@
 
 ### 修复
 
+- 首条回复不再重复渲染：dsh 注入的插件上下文消息（`Current runtime
+  context`）不再覆盖“父锚点”，助手消息始终使用为该 prompt 注册的桥接 id，
+  与历史接口 id 一致，TUI 只渲染一次。
+- 对话前 Tab / `/preset` 切换 preset 后，TUI 侧边栏 agent 标签不再回退：
+  bridge 按会话跟踪真实 agent，并贯穿用户消息、助手消息、`session.updated`
+  与 v1/v2 历史；prompt 回显在 agent 应用后再广播；助手消息补齐官方运行时
+  的 `agent` 字段。
+- 流式错误在侧边栏显示可读文本：`session.error` 按官方判别联合
+  （`UnknownError` / `MessageAbortedError` / `ProviderAuthError`）发出，
+  不再渲染成 `[object Object]`。
+- `turn/end` 跳过已定稿消息的 pending 完成时同时删除记录，避免残留到下一
+  回合补发重复的 `message.updated`。
 - `/api/session/active` 只在会话实际 `running` 时返回该会话，空闲/不存在时返回
   `{ data: {} }`（此前无条件标记为 running）。
 - 文档化 SSE 文本 delta 成对重复的已知行为（dsh 双编码 + mux 重放；TUI 以
