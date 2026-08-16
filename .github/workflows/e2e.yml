@@ -88,6 +88,10 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: bash scripts/check-all.sh --e2e --scale ${{ github.event.inputs.sessions }}
 
+      - name: Trim e2e runs before upload
+        if: failure()
+        run: bash scripts/cleanup-e2e-runs.sh --keep 5 --apply
+
       - name: Upload e2e runs on failure
         if: failure()
         uses: actions/upload-artifact@v4
