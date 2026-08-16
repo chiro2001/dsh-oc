@@ -8,6 +8,8 @@
 
 ### 新增
 
+- flake 合并基线：6 个最小高风险脚本各 10 次共 60 次首跑全绿（当前 HEAD），
+  结果见 docs/perf/results-flake-consolidated-2026-08-17.md。
 - `e2e-cli-bin.sh` 增加 `dsh-oc --version` 断言：输出必须是
   `dsh-oc <semver> (dsh <version>)` 双版本格式。
 - `SseHub.enqueue`：无客户端连接时缓冲事件，首个 SSE 客户端接入时立即
