@@ -1633,6 +1633,51 @@ describe('bridge events: projection and control frames', () => {
     })
   })
 
+  it('streams packed tool-call-chunks rows from history replay', () => {
+    const flushed: BridgeGlobalEvent[] = []
+    let timer: (() => void) | undefined
+    const { translate } = translator(new InteractionState(), [], '/work', {
+      toolFlushMs: 1000,
+      setTimeoutImpl: (callback): { unref?(): unknown } => {
+        timer = callback
+        return {}
+      },
+      clearTimeoutImpl: () => {
+        timer = undefined
+      },
+      onFlush: (events) => flushed.push(...events),
+    })
+
+    const started = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('tool-call-chunks' as never, {
+          turn: 1,
+          step: 1,
+          index: 0,
+          id: 'c4' as never,
+          name: 'bash',
+          args: ['{"command":"echo ', 'packed"}'],
+        }, 2, 100),
+      }),
+    ])
+    expect(started.map((event) => event.payload.type)).toEqual([
+      'message.updated',
+      'session.next.tool.input.started',
+      'message.part.updated',
+    ])
+    timer?.()
+    expect(flushed.map((event) => event.payload.type)).toEqual([
+      'session.next.tool.input.delta',
+      'message.part.updated',
+    ])
+    expect(flushed[0]?.payload.properties).toMatchObject({
+      callID: 'c4',
+      delta: '{"command":"echo packed"}',
+    })
+  })
+
   it('keeps tool-call assistants incomplete until the step ends', () => {
     const { translate } = translator()
     const assistant = translate([

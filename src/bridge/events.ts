@@ -210,6 +210,26 @@ interface ToolInputState {
   ended: boolean
 }
 
+/**
+ * Packed dsh tool-call argument rows (`tool-call-chunks`) surface through the
+ * session event feed during history replay. Each member is one raw JSON
+ * arguments fragment of the same call; the row shares `turn/step/index`.
+ */
+interface ToolCallChunkRowEvent {
+  type: 'tool-call-chunks'
+  seq: number
+  time: number
+  time0: number
+  data: {
+    turn: number
+    step: number
+    index: number
+    id: unknown
+    name?: unknown
+    args: string[]
+  }
+}
+
 interface SessionStreamState {
   turnStartTime?: number
   lastUserMessageId?: string
@@ -527,6 +547,36 @@ export class MuxEventTranslator {
       }, project),
     ]
     return { state, events }
+  }
+
+  /** Feed one arguments fragment into a streamed tool input (live or packed). */
+  private feedToolCallDelta(
+    sessionId: string,
+    turn: number,
+    step: number,
+    index: number,
+    id: unknown,
+    name: unknown,
+    delta: string,
+    time: number,
+    directory: string,
+    project: string,
+  ): BridgeGlobalEvent[] {
+    const { state, events } = this.startToolInput(
+      sessionId,
+      turn,
+      step,
+      index,
+      { id: String(id), ...(typeof name === 'string' ? { name } : {}) },
+      time,
+      directory,
+      project,
+    )
+    if (state.name === '' && typeof name === 'string') state.name = name
+    state.text += delta
+    state.lastTime = time
+    this.queueToolDelta(sessionId, state, delta, time, directory, project)
+    return events
   }
 
   /** Coalesce deltas for one tool input into a single pending flush. */
@@ -1046,24 +1096,28 @@ export class MuxEventTranslator {
           )
         }
         if (chunk.type === 'tool-call-delta') {
-          const { state, events } = this.startToolInput(
+          return this.feedToolCallDelta(
             sessionId,
             event.data.turn,
             event.data.step,
             chunk.index,
-            { id: chunk.id, name: chunk.name },
+            chunk.id,
+            chunk.name,
+            chunk.argumentsDelta,
             event.time,
             directory,
             project,
           )
-          if (state.name === '' && chunk.name !== undefined) state.name = chunk.name
-          state.text += chunk.argumentsDelta
-          state.lastTime = event.time
-          this.queueToolDelta(sessionId, state, chunk.argumentsDelta, event.time, directory, project)
-          return events
         }
         return []
       }
+      case 'tool-call-chunks' as SessionEvent['type']:
+        return this.translateToolCallChunks(
+          sessionId,
+          event as unknown as ToolCallChunkRowEvent,
+          directory,
+          project,
+        )
       case 'text-chunks' as SessionEvent['type']:
       case 'reasoning-chunks' as SessionEvent['type']:
         {
@@ -1524,6 +1578,33 @@ export class MuxEventTranslator {
           time: time0,
         }, project),
       )
+    }
+    return events
+  }
+
+  /** Translate a packed `tool-call-chunks` storage row (history replay). */
+  private translateToolCallChunks(
+    sessionId: string,
+    event: ToolCallChunkRowEvent,
+    directory: string,
+    project: string,
+  ): BridgeGlobalEvent[] {
+    const events: BridgeGlobalEvent[] = []
+    const time = event.time0 ?? event.time
+    for (const fragment of event.data.args) {
+      if (typeof fragment !== 'string' || fragment.length === 0) continue
+      events.push(...this.feedToolCallDelta(
+        sessionId,
+        event.data.turn,
+        event.data.step,
+        event.data.index,
+        event.data.id,
+        event.data.name,
+        fragment,
+        time,
+        directory,
+        project,
+      ))
     }
     return events
   }
