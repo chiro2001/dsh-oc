@@ -16,6 +16,9 @@ function remapV1Messages(
   sessionId: string,
   entries: Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }>,
 ): Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }> {
+  const surfaceIdForDshId = (dshId: string): string | undefined =>
+    ctx.state.promptIdForDshId(sessionId, dshId)
+    ?? ctx.state.assistantIdForDshId(sessionId, dshId)
   const remapped: Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }> = []
   for (const entry of entries) {
     const dshId = String(entry.info.id)
@@ -25,9 +28,12 @@ function remapV1Messages(
       : undefined
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
+    const parentDshId = typeof entry.info.parentID === 'string' ? entry.info.parentID : undefined
+    const remappedParent = parentDshId === undefined ? undefined : surfaceIdForDshId(parentDshId)
     const info = {
       ...entry.info,
       ...(surfaceId === undefined ? {} : { id: surfaceId }),
+      ...(remappedParent === undefined ? {} : { parentID: remappedParent }),
       ...(sessionAgent !== undefined && entry.info.role === 'assistant'
         ? { agent: sessionAgent }
         : {}),

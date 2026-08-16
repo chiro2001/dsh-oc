@@ -66,9 +66,11 @@ round-0002 结论：rc.2 当前为条件性 NO-GO；现有恢复一致性测试�
 history 投影对比，不是 live SSE 对比，父链断言恒为空。接受项与处置见
 `expert-advice/round-0002/decision.md`。调整后的执行顺序：
 
-- 实验 1a（本轮）：修正恢复 oracle —— 等待权威 idle 代替固定 sleep；
-  v1+v2 双面签名（v1 父链/引用非空，v2 逐消息 part + tool
-  name/status/content），不再全局扁平比较。
+- 实验 1a（2026-08-17 已完成首轮）：修正恢复 oracle —— 等待权威 idle
+  （`/api/session/{id}/wait`）代替固定 sleep；v1+v2 双面签名（v1 父链解析
+  非空，v2 逐消息 part + tool name/status/output，用户文本并入），不再
+  全局扁平比较。oracle 首跑即发现并修复 v1 warm 历史 `parentID` 未随 surface
+  id remap 的悬空父链缺陷；恢复一致性 e2e 29s PASSED，已入稳定套件。
 - 实验 1b：三故障域矩阵 —— `client-sse-reconnect`、`mux-resubscribe`、
   `process-crash-recovery` 各 2–3 个最高风险 cut point；先冻结恢复契约
   （durable exactly-once；崩溃前缀不丢/不伪造完成/回 idle/可续聊；纯内存

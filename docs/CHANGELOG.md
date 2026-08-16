@@ -131,6 +131,15 @@
 
 ### 修复
 
+- v1 历史消息的 `parentID` 现在随桥接 surface id 一起 remap：此前 warm
+  进程内父链仍指向原始 dsh id，消息 id 却已换成桥接 id，导致客户端无法在
+  返回列表内解析父链（cold `--session` 无映射反而能解析）；修复后 warm/cold
+  v1 图在规范化索引下一致。
+- `e2e-recovery-consistency.sh` 升级为恢复一致性双面 oracle：等待权威
+  idle（`POST /api/session/:id/wait`）代替固定 sleep；同时比较 v1（父链/
+  part 归属）与 v2（逐消息 parts，用户文本并入）；工具 part 纳入
+  `name/status/output`，并断言至少一个 completed 工具输出与父链全部可解析
+  （不再是无父链空断言）。
 - 首条回复不再重复渲染：dsh 注入的插件上下文消息（`Current runtime
   context`）不再覆盖“父锚点”，助手消息始终使用为该 prompt 注册的桥接 id，
   与历史接口 id 一致，TUI 只渲染一次。

@@ -68,21 +68,120 @@ wait_tool() {
   return 1
 }
 
-signature() {
+signature_v2() {
   local bridge="$1"
   local sid="$2"
   local out="$3"
   curl -s "$bridge/api/session/$sid/message" | jq -c '
-    . as $all |
-    [ $all.data[] as $msg |
+    def norm_part:
+      if .type == "tool" then
+        { type, name: (.name // ""), status: .state.status,
+          text: ((.state.content // []) | map(.text // "") | join("")) }
+      else
+        { type, text: (.text // "") }
+      end;
+    [ .data[] as $msg |
       {
         type: $msg.type,
-        parent: (if $msg.parentID == null then null else
-          ([$all.data | to_entries[] | select(.value.id == $msg.parentID) | .key][0] // null) end),
-        parts: [$msg.content[]? | {type, text: (.text // .state.output // .state.input // null)}]
+        parts: (if $msg.type == "user" then [{ type: "text", text: ($msg.text // "") }]
+                else [$msg.content[]? | norm_part] end)
       }
     ]
   ' > "$out"
+}
+
+# v1 history carries the parent chain the official TUI consumes. Normalize
+# parent ids to relative indexes so warm (remapped surface ids) and cold
+# (raw dsh ids) graphs are comparable, and keep per-message parts intact.
+signature_v1() {
+  local bridge="$1"
+  local sid="$2"
+  local out="$3"
+  curl -s "$bridge/session/$sid/message" | jq -c '
+    def norm_part:
+      if .type == "tool" then
+        { type, name: (.tool // ""), status: .state.status,
+          text: (.state.output // .state.error // "") }
+      else
+        { type, text: (.text // "") }
+      end;
+    . as $all |
+    [ $all[] as $msg |
+      {
+        role: $msg.info.role,
+        parent: (if $msg.info.parentID == null then null else
+          ([ $all | to_entries[] | select(.value.info.id == $msg.info.parentID) | .key ][0] // null) end),
+        parts: [$msg.parts[]? | norm_part]
+      }
+    ]
+  ' > "$out"
+}
+
+# Wait for the authoritative idle state instead of a fixed sleep, so the
+# snapshot cannot be taken on an incomplete prefix.
+wait_idle() {
+  local bridge="$1"
+  local sid="$2"
+  local deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    local code
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$bridge/api/session/$sid/wait")"
+    if [[ "$code" == "204" ]]; then
+      return 0
+    fi
+    if [[ "$code" != "503" ]]; then
+      echo "e2e: session wait returned $code" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  echo "e2e: session did not become idle in time" >&2
+  return 1
+}
+
+# Sanity guards against empty assertions: at least one completed tool part
+# with output, and every assistant parent must resolve to an index.
+assert_graph_sane() {
+  local v1="$1"
+  local v2="$2"
+  if ! jq -e '
+    ([ .[] | select(.parts[]?.type == "tool")
+        | select(.parts[] | (.status == "completed" and (.text | length) > 0)) ] | length) > 0
+  ' "$v2" >/dev/null; then
+    echo "e2e: no completed tool part with output in v2 graph" >&2
+    cat "$v2" >&2
+    return 1
+  fi
+  if ! jq -e '
+    all(.[]; .role != "assistant" or .parent != null)
+  ' "$v1" >/dev/null; then
+    echo "e2e: v1 graph has dangling assistant parent" >&2
+    cat "$v1" >&2
+    return 1
+  fi
+  return 0
+}
+
+compare_graphs() {
+  local label="$1"
+  local live="$2"
+  local re="$3"
+  if ! jq -e -n \
+    --slurpfile a "$live" \
+    --slurpfile b "$re" '
+      ($a[0] | length) == ($b[0] | length)
+      and ([$a[0][].type] == [$b[0][].type])
+      and ([$a[0][].parent] == [$b[0][].parent])
+      and ([$a[0][].parts] == [$b[0][].parts])
+    ' >/dev/null; then
+    echo "e2e: $label graphs differ" >&2
+    echo "--- live ---" >&2
+    cat "$live" >&2
+    echo "--- reattach ---" >&2
+    cat "$re" >&2
+    return 1
+  fi
+  return 0
 }
 
 export DSH_OC_E2E_CHUNK_DELAY_MS=30
@@ -112,9 +211,11 @@ wait_tool "$E2E_BRIDGE_URL/api/session/$SID/message"
 wait_text "$E2E_BRIDGE_URL/session/$SID/message" "e2e recovery tool prompt"
 tmux send-keys -t "$E2E_TUI_SESSION" 'e2e recovery text prompt' Enter
 wait_text "$E2E_BRIDGE_URL/session/$SID/message" "e2e recovery text prompt"
-sleep 3
-signature "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/live.json"
-echo "  live signature saved"
+wait_idle "$E2E_BRIDGE_URL" "$SID"
+signature_v2 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/live-v2.json"
+signature_v1 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/live-v1.json"
+assert_graph_sane "$E2E_RUN_DIR/live-v1.json" "$E2E_RUN_DIR/live-v2.json"
+echo "  live signatures saved"
 
 echo "== re-attach with --session in a fresh dsh process =="
 e2e_tui_exit
@@ -122,25 +223,12 @@ rm -f "$E2E_RUN_DIR/dsh-exit.txt"
 e2e_tui_start "--session $SID"
 e2e_tui_wait_attach
 wait_tui_ready
-signature "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/reattach.json"
+signature_v2 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/reattach-v2.json"
+signature_v1 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/reattach-v1.json"
 
-if ! jq -e -n \
-  --slurpfile live "$E2E_RUN_DIR/live.json" \
-  --slurpfile re "$E2E_RUN_DIR/reattach.json" '
-    ($live[0] | length) == ($re[0] | length)
-    and ([$live[0][].type] == [$re[0][].type])
-    and ([$live[0][].parent] == [$re[0][].parent])
-    and ([$live[0][].parts[].type] == [$re[0][].parts[].type])
-    and ([$live[0][].parts[].text] == [$re[0][].parts[].text])
-  '; then
-  echo "e2e: live and re-attach message graphs differ" >&2
-  echo "--- live ---" >&2
-  cat "$E2E_RUN_DIR/live.json" >&2
-  echo "--- reattach ---" >&2
-  cat "$E2E_RUN_DIR/reattach.json" >&2
-  exit 1
-fi
-echo "  recovery consistent: same messages, roles, parents and parts"
+compare_graphs "v2" "$E2E_RUN_DIR/live-v2.json" "$E2E_RUN_DIR/reattach-v2.json"
+compare_graphs "v1" "$E2E_RUN_DIR/live-v1.json" "$E2E_RUN_DIR/reattach-v1.json"
+echo "  recovery consistent: v1+v2 messages, roles, parents and parts"
 
 echo "== exit through prompt submit =="
 e2e_tui_exit

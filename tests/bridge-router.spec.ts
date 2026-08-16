@@ -541,6 +541,51 @@ describe('bridge router: session routes', () => {
     expect(v2Assistants[0]?.content?.map((part) => part.type)).toEqual(['tool', 'text'])
   })
 
+  it('remaps v1 parentIDs to surface ids in warm history', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [
+            { event: makeUserEvent('hello', 'dsh-user-1', 1000) },
+            {
+              event: makeAssistantEvent([
+                { type: 'tool-call', id: 'c1' as never, name: 'bash', arguments: '{}' },
+              ], 'dsh-tool', 1100),
+            },
+            {
+              event: makeAssistantEvent([
+                { type: 'text', text: 'follow-up' },
+              ], 'dsh-text', 1200),
+            },
+          ],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server, router } = await boot(api)
+    router.ctx.state.registerPromptMessageId('s1', 'msg_user_1')
+    expect(router.ctx.state.takePromptMessageId('s1', 'dsh-user-1')).toBe('msg_user_1')
+    router.ctx.state.recordAssistantId('s1', 'dsh-tool', 'msg_tool_1')
+    router.ctx.state.recordAssistantId('s1', 'dsh-text', 'msg_text_1')
+
+    const v1 = await request(server, 'GET', '/session/s1/message')
+    expect(v1.status).toBe(200)
+    const v1Body = v1.body as Array<{ info: { id: string; role: string; parentID?: string } }>
+    expect(v1Body[0]?.info.id).toBe('msg_user_1')
+    expect(v1Body[1]?.info.parentID).toBe('msg_user_1')
+    expect(v1Body[2]?.info.parentID).toBe('msg_tool_1')
+
+    const ids = new Set(v1Body.map((entry) => entry.info.id))
+    for (const entry of v1Body) {
+      if (entry.info.parentID !== undefined) {
+        expect(ids.has(entry.info.parentID)).toBe(true)
+      }
+    }
+  })
+
   it('filters session lists by the directory query', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
