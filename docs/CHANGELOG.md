@@ -8,6 +8,16 @@
 
 ### 新增
 
+- 恢复故障域 e2e 矩阵：
+  - `scripts/e2e-recovery-crash.sh`：SIGKILL dsh 在慢流中途，`--session`
+    重启后断言持久前缀 exactly-once（不丢、不伪造完成）、会话回 idle（必要时
+    显式取消在途回合）且新 prompt 可继续（20s）。
+  - `scripts/e2e-recovery-sse-reconnect.sh`：观察者 SSE 断流重连，断言重连
+    后继续收事件且最终 v1/v2 消息图 exactly-once（13s）。
+  - mux 重订阅单测：重放的 text-chunks 跨 translator 重建由连接级 replay
+    guard 去重，不重复发送 delta。
+- 恢复断言 helper 收敛到 `tests/e2e/recovery-lib.sh`（v1/v2 签名、权威
+  idle、前缀/完全一致比较），`e2e-recovery-consistency.sh` 复用同一 oracle。
 - `GET /api/session/{id}/history`：SDK v2 历史端点（`limit` + `after` 事件
   seq 游标），返回 `{ data: SessionMessage[], hasMore, next }`；`after` 为
   独占上界（dsh 原生 `beforeSeq`，向后翻页），单页延迟有界；v2 消息转换

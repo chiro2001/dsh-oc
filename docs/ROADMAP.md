@@ -71,10 +71,13 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   非空，v2 逐消息 part + tool name/status/output，用户文本并入），不再
   全局扁平比较。oracle 首跑即发现并修复 v1 warm 历史 `parentID` 未随 surface
   id remap 的悬空父链缺陷；恢复一致性 e2e 29s PASSED，已入稳定套件。
-- 实验 1b：三故障域矩阵 —— `client-sse-reconnect`、`mux-resubscribe`、
-  `process-crash-recovery` 各 2–3 个最高风险 cut point；先冻结恢复契约
-  （durable exactly-once；崩溃前缀不丢/不伪造完成/回 idle/可续聊；纯内存
-  表面列为 transient）。
+- 实验 1b（2026-08-17 已完成首轮）：三故障域矩阵 ——
+  `process-crash-recovery`（SIGKILL 中途中止后 `--session` 重启：持久前缀
+  不丢/不伪造完成/可续聊，20s PASSED）、`client-sse-reconnect`（观察者 SSE
+  断流重连后消息图 exactly-once，13s PASSED）已入稳定套件；
+  `mux-resubscribe` 以单测覆盖（重放 chunk 跨 translator 重建去重）。恢复
+  契约（durable exactly-once；崩溃前缀不丢/不伪造完成/回 idle/可续聊；纯
+  内存表面列为 transient）仍为实验后续断言基线。
 - 实验 1c：脱敏真实 corpus（feature manifest + allowlist 脱敏 + 人工
   golden，不以“10+ 会话”为合格标准）+ 1.18.18 黄金轨迹 + 官方最小复现
   （错序归因证据或中性措辞二选一）。

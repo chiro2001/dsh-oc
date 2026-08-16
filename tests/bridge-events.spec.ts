@@ -2435,6 +2435,47 @@ describe('bridge events: projection and control frames', () => {
     expect(instance.translate(raw)).toEqual([])
   })
 
+  it('dedupes replayed text chunks across translator rebuilds (mux resubscribe)', () => {
+    const state = new InteractionState()
+    const guard = {
+      approvals: new Set<string>(),
+      questions: new Set<string>(),
+      chunks: new Set<string>(),
+    }
+    const makeTranslator = () => new MuxEventTranslator({
+      cwd: '/work',
+      state,
+      log: () => {},
+      replayGuard: guard,
+    })
+
+    const replayRow = chunkRow('text-chunks', ['part-one '], 1100, 10)
+    const replayFrame = frame({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: replayRow,
+    })
+    const first = makeTranslator()
+    const firstEvents = first.translate(replayFrame)
+    expect(firstEvents.map((event) => event.payload.type)).toContain('message.part.delta')
+    expect(firstEvents.map((event) => event.payload.properties.delta).join('')).toContain('part-one')
+
+    // The mux stream dies and is re-subscribed; dsh replays the same prefix.
+    // The replay guard is connection-scoped, so the rebuilt translator must
+    // skip the replayed row instead of emitting the delta twice.
+    const second = makeTranslator()
+    expect(second.translate(replayFrame)).toEqual([])
+
+    const nextRow = chunkRow('text-chunks', ['part-two'], 1200, 11)
+    const nextEvents = second.translate(frame({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: nextRow,
+    }))
+    expect(nextEvents.map((event) => event.payload.type)).toContain('message.part.delta')
+    expect(nextEvents.map((event) => event.payload.properties.delta).join('')).toContain('part-two')
+  })
+
   it('shares todo/goal projection state across translator rebuilds', () => {
     const shared = { todos: new Map<string, unknown>(), goals: new Map<string, unknown>() }
     const deps = { cwd: '/work', state: new InteractionState(), log: () => {}, sharedState: shared }
