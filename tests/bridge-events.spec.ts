@@ -2241,6 +2241,20 @@ describe('bridge events: projection and control frames', () => {
       .map((event) => (event.payload.properties.info as { time?: { completed?: number } }).time?.completed)
       .filter((value): value is number => value !== undefined)
     expect(completions).toEqual([1200])
+
+    // The skipped pending completion must be discarded, not deferred: a later
+    // turn/end must not emit a stale completion for the already-finalized id.
+    const nextTurn = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 2, reason: { kind: 'completed' } }, 30, 2000),
+      }),
+    ])
+    const stale = nextTurn.filter((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
+    expect(stale).toEqual([])
   })
 
   it('closes provisional messages on turn/end after an interrupt', () => {

@@ -1066,19 +1066,21 @@ export class MuxEventTranslator {
           }
         }
         const pending = this.pendingAssistantCompletions.get(sessionId)
-        if (pending !== undefined && !state.completedMessageIds.has(pending.messageID)) {
-          events.push(
-            makeEvent(directory, 'message.updated', {
-              sessionID: sessionId,
-              info: {
-                ...pending.info,
-                time: {
-                  created: (pending.info.time as { created?: number })?.created ?? event.time,
-                  completed: event.time,
+        if (pending !== undefined) {
+          if (!state.completedMessageIds.has(pending.messageID)) {
+            events.push(
+              makeEvent(directory, 'message.updated', {
+                sessionID: sessionId,
+                info: {
+                  ...pending.info,
+                  time: {
+                    created: (pending.info.time as { created?: number })?.created ?? event.time,
+                    completed: event.time,
+                  },
                 },
-              },
-            }, project),
-          )
+              }, project),
+            )
+          }
           this.pendingAssistantCompletions.delete(sessionId)
         }
         // Close provisional assistant messages that never got a final
