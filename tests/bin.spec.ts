@@ -73,6 +73,16 @@ describe('dsh-oc bin', () => {
     expect(String(result.stdout).trim()).toBe('dsh-oc 0.1.0-rc.1 (dsh 0.1.0-rc.6)')
   })
 
+  it('exits 127 with a hint when dsh is missing for --version', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'dsh-oc-nodsh-version-'))
+    tempDirs.push(empty)
+    const result = spawnSync(process.execPath, [binPath, '--version'], {
+      env: { ...process.env, PATH: empty },
+    })
+    expect(result.status).toBe(127)
+    expect(String(result.stderr)).toContain('failed to run dsh')
+  })
+
   it('exits 127 with a hint when dsh is missing', () => {
     const empty = mkdtempSync(join(tmpdir(), 'dsh-oc-nodsh-'))
     tempDirs.push(empty)

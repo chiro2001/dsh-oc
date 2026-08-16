@@ -12,6 +12,11 @@ const rawArgs = process.argv.slice(2)
 
 if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
   const dsh = spawnSync('dsh', ['--version'], { encoding: 'utf8' })
+  if (dsh.error) {
+    console.error(`dsh-oc: failed to run dsh: ${dsh.error.message}`)
+    console.error('dsh-oc: make sure the dsh CLI is installed and on PATH (npm i -g @deepseek-ai/dsh)')
+    process.exit(127)
+  }
   const dshVersion = (dsh.stdout || dsh.stderr || '').trim().split('\n')[0] || 'unknown'
   process.stdout.write(`dsh-oc ${pkg.version} (dsh ${dshVersion})\n`)
   process.exit(dsh.status ?? 1)

@@ -8,6 +8,8 @@
 
 ### 新增
 
+- `dsh-oc --version` 在 dsh 缺失时与其他路径一致：退出 127 并输出安装提示
+  （此前以 1 退出且无提示）；新增 bin 单测。
 - `docs/PROTOCOL.md` 补齐 v2 路由表：`/api/session/{id}/history`
   （`after` 独占上界 + `next` 游标语义）、`prompt`/`model`/`agent` 端点，
   并注明跨页分页不变量。
