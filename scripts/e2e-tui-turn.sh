@@ -100,12 +100,6 @@ while (( SECONDS < deadline )); do
   done
   if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
     echo "e2e: dsh exited while waiting for TUI render: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
-    echo "--- residual processes ---" >&2
-    ps -eo pid,ppid,args | rg "$E2E_RUN_DIR" >&2 || true
-    echo "--- dsh home ---" >&2
-    ls -la "$E2E_DSH_HOME" >&2 || true
-    echo "--- pane raw ---" >&2
-    tmux capture-pane -p -S -300 -t "$E2E_TUI_SESSION" 2>/dev/null | head -c 3000 | od -c | head -40 >&2 || true
     tmux capture-pane -p -S -200 -t "$E2E_TUI_SESSION" >&2 2>/dev/null || true
     exit 1
   fi
