@@ -44,7 +44,18 @@ if [[ "$E2E" == "1" ]]; then
   if [[ "${CI_E2E_SUBSET:-}" == "api" ]]; then
     E2E_SCRIPTS="e2e-api.sh e2e-api-goal.sh"
   elif [[ "${CI_E2E_SUBSET:-}" == "1" ]]; then
-    E2E_SCRIPTS="$STABLE_E2E"
+    # Optional parallel sharding for CI: each shard runs a round-robin slice
+    # of the stable suite, so two parallel runners cut wall-clock time.
+    SHARD_COUNT="${CI_E2E_SHARDS:-1}"
+    SHARD_INDEX="${CI_E2E_SHARD:-0}"
+    E2E_SCRIPTS=""
+    _i=0
+    for _s in $STABLE_E2E; do
+      if (( _i % SHARD_COUNT == SHARD_INDEX )); then
+        E2E_SCRIPTS+="$_s "
+      fi
+      _i=$((_i + 1))
+    done
   else
     E2E_SCRIPTS="$STABLE_E2E e2e-tui-timestamps.sh e2e-tui-mini.sh e2e-tui-skill.sh e2e-tui-continue.sh e2e-tui-dir-filter.sh e2e-tui-abort.sh"
   fi
