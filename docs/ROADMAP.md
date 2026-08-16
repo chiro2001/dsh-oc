@@ -105,8 +105,9 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   TUI 渲染顺序正确（完整后续文本在排队卡片上方）；桥新增
   `src/bridge/router-entry.ts` 导出（lib/bridge/router-entry.js）供外部
   harness 使用。真实会话原始 JSONL 与完整桥 SSE 轨迹回放已接入（raw
-  直放模式），当前 raw 直放因 directory/project 上下文未对齐暂不渲染对话；
-  最终归因需先对齐后继续。
+  直放模式），并新增 `SseHub.enqueue` 预连接缓冲；当前 raw 直放下官方
+  TUI 仅短暂连接后即断开（接收缓冲冲刷后不保持），对话未渲染，列为后续
+  实验项；fixture 回放与真实模型 live 证据已完成。
 - 实验 2（2026-08-17 已落地工具与首轮演练）：`v0.1.0-rc.2` 以 full SHA
   为真相源 —— `scripts/verify-release-artifacts.sh` 已加入 check-all 门禁：
   HEAD 源码 clean rebuild 后 committed `lib/` 零差异、npm pack 无机器绝对

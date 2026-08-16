@@ -11,6 +11,8 @@ interface SseClient {
 /** Registry of active SSE connections plus the encoder/cleanup logic. */
 export class SseHub {
   private clients = new Set<SseClient>()
+  /** Events enqueued before any client connected (raw replay mode). */
+  private pending: BridgeGlobalEvent[] = []
   private nextId = 1
 
   constructor(private log: (message: string) => void) {}
@@ -23,6 +25,12 @@ export class SseHub {
       closed: false,
     }
     this.clients.add(client)
+    // A client that connects late must still receive events queued before
+    // it subscribed (raw replay / recorded traces).
+    if (this.pending.length > 0) {
+      const queued = this.pending.splice(0)
+      for (const event of queued) this.send(client, event)
+    }
     res.on('close', () => this.remove(client))
     res.on('error', (error) => {
       this.log(`[bridge/sse] client ${client.id} error: ${error.message}`)
@@ -54,6 +62,15 @@ export class SseHub {
     for (const client of [...this.clients]) {
       for (const event of events) this.send(client, event)
     }
+  }
+
+  /** Broadcast now, or buffer until the first client connects. */
+  enqueue(events: BridgeGlobalEvent[]): void {
+    if (this.clients.size === 0) {
+      this.pending.push(...events)
+      return
+    }
+    this.broadcast(events)
   }
 
   closeAll(): void {

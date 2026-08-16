@@ -37,15 +37,31 @@ const rawEvents = rawSsePath === undefined
       .map((line) => JSON.parse(line.slice(6)))
       .filter((event) => event && event.payload)
 
+// Derive the replay context from the recorded trace so the TUI sees the
+// same directory/project as the original attach.
+const replayContext = rawEvents === undefined
+  ? undefined
+  : (() => {
+      const first = rawEvents.find((event) => event.payload?.type === 'session.updated')
+      const info = first?.payload?.properties?.info ?? {}
+      return {
+        directory: first?.directory ?? info.directory ?? process.cwd(),
+        project: first?.project ?? info.projectID ?? 'replay-project',
+      }
+    })()
+
 const ok = (value) => ({ rpcId: 'rpc-1', result: { ok: true, value } })
 const item = {
   sessionId,
   updatedAt: 2000,
   running: true,
   blank: false,
-  cwd: process.cwd(),
+  cwd: replayContext?.directory ?? process.cwd(),
   agentPreset: 'build',
-  projections: { asOfSeq: 0, values: { title: 'Minimal Server Session' } },
+  projections: {
+    asOfSeq: 0,
+    values: { title: replayContext === undefined ? 'Minimal Server Session' : 'Replay Session' },
+  },
 }
 
 const api = {
@@ -126,21 +142,52 @@ const api = {
   respond: async () => ({ accepted: true }),
 }
 
-const router = createBridgeRouter(api, { cwd: process.cwd(), sseRetryBaseMs: 10 })
+const router = createBridgeRouter(api, {
+  cwd: replayContext?.directory ?? process.cwd(),
+  sseRetryBaseMs: 10,
+})
 const server = await startBridgeServer(router)
 process.stdout.write(`READY ${server.url}\n`)
 
 if (rawEvents !== undefined) {
   // Raw replay mode: broadcast the recorded bridge SSE events verbatim to
-  // every connected client, in the exact recorded order and timing. Wait
-  // for the first SSE client so the opening events are not lost.
+  // every connected client, in the exact recorded order and timing. Events
+  // enqueued before the first client connects are buffered by the hub and
+  // flushed on subscribe, so late-connecting clients miss nothing.
   void (async () => {
-    const waitDeadline = Date.now() + 30_000
-    while (router.ctx.hub.size === 0 && Date.now() < waitDeadline) {
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100))
+    if (replayContext !== undefined) {
+      router.ctx.hub.enqueue([{
+        directory: replayContext.directory,
+        project: replayContext.project,
+        payload: {
+          id: 'replay-session-updated',
+          type: 'session.updated',
+          properties: {
+            sessionID: sessionId,
+            info: {
+              id: sessionId,
+              directory: replayContext.directory,
+              projectID: replayContext.project,
+              title: 'Replay Session',
+            },
+          },
+        },
+      }])
     }
-    for (const event of rawEvents) {
-      router.ctx.hub.broadcast([event])
+    for (const source of rawEvents) {
+      const event = {
+        ...source,
+        directory: replayContext?.directory ?? source.directory,
+        project: replayContext?.project ?? source.project,
+        payload: {
+          ...source.payload,
+          properties: {
+            ...source.payload.properties,
+            ...(replayContext === undefined ? {} : { sessionID: sessionId }),
+          },
+        },
+      }
+      router.ctx.hub.enqueue([event])
       await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
     }
   })()

@@ -15,6 +15,7 @@ import {
 import { InteractionState } from '../src/bridge/state.js'
 import { createBridgeRouter } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
+import { SseHub } from '../src/bridge/sse.js'
 import { fakeApi, makeAssistantEvent, makeUserEvent, okRpc, sessionEvent } from './helpers.js'
 
 const tempDirs: string[] = []
@@ -2566,6 +2567,39 @@ describe('bridge events: SSE connection lifecycle', () => {
 
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((server) => server.close()))
+  })
+
+  it('buffers enqueued events until the first client connects', () => {
+    const hub = new SseHub(() => {})
+    const written: string[] = []
+    const fakeRes = {
+      write: (chunk: string) => {
+        written.push(chunk)
+        return true
+      },
+      on: () => fakeRes,
+      destroyed: false,
+    }
+    const event: BridgeGlobalEvent = {
+      directory: '/work',
+      payload: {
+        id: 'e1',
+        type: 'session.updated',
+        properties: { sessionID: 's1' },
+        data: {},
+      },
+    }
+    hub.enqueue([event])
+    expect(written).toEqual([])
+
+    const client = hub.add(fakeRes as never)
+    expect(written.join('')).toContain('session.updated')
+    expect(written.join('')).toContain('"id":"e1"')
+
+    // With a connected client, enqueue broadcasts immediately.
+    hub.enqueue([{ ...event, payload: { ...event.payload, id: 'e2' } }])
+    expect(written.join('')).toContain('"id":"e2"')
+    hub.remove(client)
   })
 
   it('streams events and cleans up the mux consumer on disconnect', async () => {

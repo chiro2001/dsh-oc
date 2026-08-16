@@ -3900,6 +3900,8 @@ interface SseClient {
 declare class SseHub {
   private log;
   private clients;
+  /** Events enqueued before any client connected (raw replay mode). */
+  private pending;
   private nextId;
   constructor(log: (message: string) => void);
   add(res: ServerResponse): SseClient;
@@ -3907,6 +3909,8 @@ declare class SseHub {
   send(client: SseClient, event: BridgeGlobalEvent): void;
   /** Fan one event batch out to every connected SSE client. */
   broadcast(events: BridgeGlobalEvent[]): void;
+  /** Broadcast now, or buffer until the first client connects. */
+  enqueue(events: BridgeGlobalEvent[]): void;
   closeAll(): void;
   get size(): number;
 }
