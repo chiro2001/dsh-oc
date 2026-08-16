@@ -236,7 +236,16 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 | `session/projection: todos` | `todo.updated` |
 | `session/projection: goal` | `todo.updated`（合并 goal 为首条） |
 | `session/projection: produced-files` | `session.diff` |
-| `session/queue`, `session/jobs` | P1 忽略；P3 再评估 |
+| `session/queue`（订阅初始化） | 首次为该 session 时镜像 pending inbox → 每条用户消息 `message.updated` + `message.part.updated`（TUI 显示 QUEUED） |
+| `session/event: agent/inbox/spliced` | 增量：插入用户消息 → `message.updated`；`outcome: canceled` 移除 → `message.removed`；claim（无 outcome）不删除，等 `user/message` 同 id upsert |
+| `session/jobs` | 忽略 |
+
+> **排队消息可见性**：bridge 丢弃旧的 `session/queue` 会导致排队中的 prompt 在
+> TUI 无任何反馈，用户以为发送失败而重发，队列积压后模型回复旧消息。现在
+> `session/queue` 只做首次投影（全量帧无法区分 claim 与 cancel），后续由
+> `agent/inbox/spliced` 增量维护；含未完成工具调用的 assistant 消息不设置
+> `time.completed`，`step/end`/`turn/end` 时再补，让官方 TUI 的 QUEUED 判定
+> （最后一个未完成 assistant 之后的用户消息）生效。
 
 > **已知行为（文本 delta 成对重复）**：dsh 0.1.0-rc.6 对同一段流式文本同时下发
 > `assistant/chunk`（text-delta）与 packed `text-chunks` 两种编码，且新 mux 订阅

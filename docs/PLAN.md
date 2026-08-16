@@ -349,7 +349,8 @@ async function call<K extends keyof DshApiProxy>(
      - `todo/write` → `todo.updated`
    - `approval/requested|resolved` → `permission.asked/replied`
    - `question/requested|resolved` → `question.asked/replied/rejected`
-   - `session/queue` 和 `session/jobs` 首版可忽略或映射为 session update。
+   - `session/queue` 订阅初始化时镜像 pending inbox（排队消息在 TUI 显示 QUEUED），
+     `agent/inbox/spliced` 增量维护；`session/jobs` 仍忽略。
 3. 事件必须带 `directory`（session cwd）与 `project`/`workspace` 可选字段；opencode TUI 按 directory 过滤事件。
 4. SSE 断开时取消 dsh mux consumer（用 `AbortController`）。
 

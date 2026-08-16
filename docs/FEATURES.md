@@ -49,6 +49,7 @@
 |---|---|---|---|---|
 | Tool call / result 四态映射 | ✅ | `src/bridge/convert/tool.ts`、`src/bridge/events.ts` | `tests/convert/tool.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
 | 工具参数流式（`tool-call-delta` → input.started/delta/ended + v1 ToolPart 增量） | ✅ | `src/bridge/events.ts` `startToolInput`/`queueToolDelta`/`flushToolDelta` | `tests/bridge-events.spec.ts`、`scripts/e2e-api.sh` | 本提交 |
+| 排队 prompt 可见（`session/queue` 初始化 + `agent/inbox/spliced` 增量 → QUEUED 消息） | ✅ | `src/bridge/events.ts` `queuedMessageEvents`、`src/bridge/state.ts` inbox 投影 | `tests/bridge-events.spec.ts`、`scripts/e2e-tui-queue.sh` | 本提交 |
 | v2 tool 生命周期（called/progress/success/failed） | ✅ | `src/bridge/events.ts` `endToolInput`/`completeToolInputImmediately` | `tests/bridge-events.spec.ts`、`scripts/e2e-api.sh` | 本提交 |
 | 高频 chunk 节流/批处理 | ✅ | `MuxEventTranslator` `toolFlushMs` + 合并 pending delta | `tests/bridge-events.spec.ts`（fake timer） | 本提交 |
 | bash/pwsh 实时输出 progress | 🟡 | dsh 0.1.0-rc.6 无实时输出帧；参数流式已实时，输出仅在 result 时可见 | `docs/PROTOCOL.md`、`tests/bridge-events.spec.ts` | 本提交 |
@@ -267,7 +268,6 @@
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
-
 
 
 
