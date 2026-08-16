@@ -54,7 +54,7 @@ if [[ "$E2E" == "1" ]]; then
     e2e-tui-help.sh e2e-tui-print-logs.sh e2e-api-permission.sh \
     e2e-tui-permission.sh e2e-tui-permission-mini.sh e2e-tui-permission-ext.sh e2e-tui-queue.sh \
     e2e-tui-agent-tab.sh e2e-tui-agent-lock.sh e2e-tui-queue-live.sh e2e-recovery-consistency.sh"
-  STABLE_E2E+=" e2e-recovery-crash.sh e2e-recovery-sse-reconnect.sh"
+  STABLE_E2E+=" e2e-recovery-crash.sh e2e-recovery-sse-reconnect.sh e2e-golden-trace.sh"
   if [[ "${CI_E2E_SUBSET:-}" == "api" ]]; then
     E2E_SCRIPTS="e2e-api.sh e2e-api-goal.sh"
   elif [[ "${CI_E2E_SUBSET:-}" == "1" ]]; then

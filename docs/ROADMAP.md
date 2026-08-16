@@ -88,7 +88,11 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   按 message 多槽，turn/end 全部完成）。真实会话 feature 覆盖扫描
   `scripts/replay-corpus-manifest.mjs` 显示 64 会话/58,609 事件的 12 个
   特征已被语料全覆盖（结果见 docs/perf/coverage-real-sessions-2026-08-17.md）。
-  官方 1.18.18 黄金轨迹/最小复现仍为后续。
+  官方 1.18.18 黄金轨迹基线已落地（`scripts/e2e-golden-trace.sh` +
+  `scripts/normalize-golden-trace.mjs`）：真实 TUI 工具+后续文本场景的桥
+  SSE 归一化轨迹（去 id/时间/路径）提交为
+  `tests/fixtures/golden/recovery-tool-followup-1.18.18.sse.jsonl`，结构
+  可跨运行复现并已入稳定套件；官方最小复现（错序归因）仍为后续。
 - 实验 2（2026-08-17 已落地工具与首轮演练）：`v0.1.0-rc.2` 以 full SHA
   为真相源 —— `scripts/verify-release-artifacts.sh` 已加入 check-all 门禁：
   HEAD 源码 clean rebuild 后 committed `lib/` 零差异、npm pack 无机器绝对

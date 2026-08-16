@@ -8,6 +8,11 @@
 
 ### 新增
 
+- 1.18.18 黄金 SSE 轨迹基线：`scripts/e2e-golden-trace.sh` 在真实 TUI 上
+  跑“工具+后续文本”场景并用观察者 SSE 录轨，`scripts/normalize-golden-trace.mjs`
+  归一化（去随机 id、绝对时间、机器路径），基线提交到
+  `tests/fixtures/golden/`；重复运行结构一致，已入 stable 套件，供未来
+  vendor 升级语义差分。
 - 最小 permission e2e `scripts/e2e-tui-permission-mini.sh`：真实 TUI 单次
   Allow-once 循环（弹窗 → 批准 → 工具完成 → 恰好一次回复 → 无残留权限），
   10–11s；已入 stable 套件，flake 扫描 10/10 全绿。
