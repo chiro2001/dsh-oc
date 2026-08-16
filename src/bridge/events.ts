@@ -1278,9 +1278,17 @@ export class MuxEventTranslator {
       case 'approval/policy' as SessionEvent['type']:
       case 'command/run' as SessionEvent['type']:
       case 'command/done' as SessionEvent['type']:
+      case 'session/end-seed' as SessionEvent['type']:
+      case 'approval/asked' as SessionEvent['type']:
+      case 'approval/decided' as SessionEvent['type']:
         // Log-only / environment-snapshot events: no TUI surface. Explicitly
         // silent so genuinely unknown event types stay loud in the logs.
         return []
+      case 'agent-preset/selected' as SessionEvent['type']: {
+        const preset = (event.data as { agentPreset?: unknown }).agentPreset
+        if (typeof preset === 'string') this.deps.state.lastAgentPreset = preset
+        return []
+      }
       case 'goal/change' as SessionEvent['type']: {
         const data = (event as unknown as { data: { goal?: unknown; cleared?: unknown } }).data
         if (data?.goal !== undefined) {

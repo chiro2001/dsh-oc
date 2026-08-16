@@ -66,6 +66,8 @@ bash scripts/check-all.sh --e2e --scale 5000
 bash scripts/cleanup-e2e-runs.sh --keep 20 --apply   # 清理 .e2e 旧 run（默认 dry-run）
 bash scripts/replay-session-audit.sh <session.jsonl[.zstd]>
                                           # 真实会话回放审计：桥翻译无未处理事件/错误
+bash scripts/audit-local-sessions.sh [sessions-dir]
+                                          # 批量审计 $DSH_HOME/sessions 全部会话（含消息 id/role 冲突检查）
 ```
 
 本地直连 dsh profile（实时验证）：`dsh plugin --profile oc add .`；改代码后

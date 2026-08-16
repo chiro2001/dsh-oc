@@ -227,8 +227,7 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 | `session/event: tool/result` | `session.next.tool.success/failed` + `message.part.updated`（ToolPart completed/error） |
 | `session/event: todo/write` | `todo.updated` |
 | `session/event: goal/change` | `todo.updated`（合并 goal 为首条） |
-| `session/event: approval/asked` | `permission.asked` |
-| `session/event: approval/decided` | `permission.replied` |
+| `session/event: approval/asked\|decided` | 持久化记录，bridge 静默（权限交互由 mux 帧 `approval/requested\|resolved` 驱动） |
 | `approval/requested` | `permission.asked` |
 | `approval/resolved` | `permission.replied` |
 | `question/requested` | `question.asked` |

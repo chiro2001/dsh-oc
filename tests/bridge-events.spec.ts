@@ -185,6 +185,44 @@ describe('bridge events: session event mapping', () => {
     expect(logs.some((line) => line.includes('unhandled'))).toBe(false)
   })
 
+  it('silently ignores seed/approval records and tracks preset selection', () => {
+    const { translate, state } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('session/end-seed' as never, {}, 1, 100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('approval/asked' as never, {
+          id: 'a1',
+          toolName: 'write',
+          callId: 'c1',
+          reason: 'need write',
+        }, 2, 200),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('approval/decided' as never, {
+          id: 'a1',
+          outcome: 'allowed-once',
+        }, 3, 300),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent-preset/selected' as never, {
+          agentPreset: 'standard',
+        }, 4, 400),
+      }),
+    ])
+    expect(events).toEqual([])
+    expect(state.lastAgentPreset).toBe('standard')
+  })
+
   it('handles the flat durable session row without a data envelope', () => {
     const { translate, state } = translator()
     state.sessionDirectories.set('s1', '/other')
