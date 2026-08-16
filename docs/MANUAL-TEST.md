@@ -41,6 +41,8 @@
 
 - 模型输出长文本时：全量 TUI 连按两次 Esc、`--mini` 按一次 Esc，应停止
   在途流并回到可输入状态；thinking 指示不应一直转圈。
+- 流式出错（如 SSE 无 `[DONE]` 或鉴权失败）：侧边栏应显示可读的错误
+  文本（如 “SSE stream ended without [DONE]”），而不是 `[object Object]`。
 
 ## 5. 退出提示
 
