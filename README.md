@@ -66,6 +66,7 @@ npm 包名为 `@chiro2001/dsh-oc`（未发布 registry，走 GitHub 源安装）
 export PATH="$HOME/.dsh/profiles/oc/node_modules/.bin:$PATH"
 dsh-oc                        # 等价 dsh --profile oc
 dsh-oc --mini                 # 等价 dsh --profile oc --mini
+dsh-oc --version              # 同时输出 dsh-oc 与 dsh 的版本
 ```
 
 pnpm 提示缺少 `@deepseek-ai/cordis` 等 peer 属于预期警告，由 dsh-base/宿主在

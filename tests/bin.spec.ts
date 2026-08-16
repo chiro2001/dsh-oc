@@ -17,6 +17,10 @@ function fakeDshBin(): string {
   mkdirSync(join(dir, 'empty'), { recursive: true })
   writeFileSync(join(dir, 'dsh'), [
     '#!/usr/bin/env bash',
+    'if [[ "$1" == "--version" ]]; then',
+    '  printf "0.1.0-rc.6\\n"',
+    '  exit 0',
+    'fi',
     'printf "%s\\n" "$*" >> "$DSH_OC_ARGS_LOG"',
     'exit "${DSH_OC_FAKE_EXIT:-0}"',
     '',
@@ -54,6 +58,19 @@ describe('dsh-oc bin', () => {
     expect(result.status).toBe(0)
     expect(String(result.stdout)).toBe('')
     expect(String(result.stderr)).toBe('')
+  })
+
+  it('prints the dsh-oc version alongside the dsh version for --version', () => {
+    const dir = fakeDshBin()
+    const result = spawnSync(process.execPath, [binPath, '--version'], {
+      env: {
+        ...process.env,
+        PATH: `${dir}:${process.env.PATH ?? ''}`,
+        DSH_OC_ARGS_LOG: join(dir, 'args.txt'),
+      },
+    })
+    expect(result.status).toBe(0)
+    expect(String(result.stdout).trim()).toBe('dsh-oc 0.1.0-rc.1 (dsh 0.1.0-rc.6)')
   })
 
   it('exits 127 with a hint when dsh is missing', () => {
