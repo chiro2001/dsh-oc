@@ -14,6 +14,7 @@ import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { z } from 'zod'
 import type { OcBridgeService } from '../index.js'
 import { helpRequested, ocHelp } from '../help.js'
+import { renderMiniBrand } from './brand.js'
 import {
   verifyOpenCodeVersion,
   resolveOpenCodeBinary as resolveBinaryFromDeps,
@@ -220,6 +221,11 @@ export function startOpenCodeTui(options: StartTuiOptions): RunningTui {
     : `http://127.0.0.1:${options.bridge.port}`
   const cwd = options.cwd ?? process.cwd()
   const env = options.env ?? process.env
+  if (options.tuiArgs.includes('--mini')) {
+    // The official mini interface skips TUI plugins and prints its own
+    // hard-coded entry logo; show the DSH OC brand first.
+    process.stdout.write(`${renderMiniBrand()}\n`)
+  }
   const spawnImpl: SpawnTui = options.spawn ?? defaultSpawn
   const setTimeoutImpl: TimerSetter = options.setTimeoutImpl ?? ((callback, ms) => setTimeout(callback, ms))
   const clearTimeoutImpl: TimerClearer = options.clearTimeoutImpl ?? (handle => {

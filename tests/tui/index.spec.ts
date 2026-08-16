@@ -372,6 +372,44 @@ describe('requestExit', () => {
 })
 
 describe('startOpenCodeTui', () => {
+  it('prints the DSH OC brand before spawning --mini', () => {
+    const fake = fakeChild()
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      startOpenCodeTui({
+        bin: '/x/opencode',
+        bridge: { url: 'http://127.0.0.1:4096', port: 4096 },
+        tuiArgs: ['--mini'],
+        cwd: '/work',
+        env: {},
+        spawn: () => fake.child,
+      })
+      const output = write.mock.calls.map((call) => String(call[0])).join('')
+      expect(output).toContain('DeepSeek Harness × OpenCode TUI')
+      expect(output).toContain('____')
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('does not print the brand for the full TUI', () => {
+    const fake = fakeChild()
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      startOpenCodeTui({
+        bin: '/x/opencode',
+        bridge: { url: 'http://127.0.0.1:4096', port: 4096 },
+        tuiArgs: [],
+        cwd: '/work',
+        env: {},
+        spawn: () => fake.child,
+      })
+      expect(write).not.toHaveBeenCalled()
+    } finally {
+      write.mockRestore()
+    }
+  })
+
   it('spawns attach with the bridge URL and inherit stdio', () => {
     const fake = fakeChild()
     const spawn = vi.fn(() => fake.child)
