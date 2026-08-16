@@ -116,5 +116,9 @@ curl -s $B/api/permission/request           # 无 pending 时 {"data":[]}
 桥接规范化数据已证明 exactly-once、父子正确（v1/v2 历史把工具与后续文本
 合并为同一消息），`--session` 重新进入会话后顺序完全正确；官方 opencode
 同类场景甚至不保留该后续文本。具体归因（renderer vs bridge 事件合法性）
-待官方 1.18.18 最小复现实验闭合。回合消息的完成时间已推迟到回合结束，
-QUEUED 标记在整轮完成前保持正确。
+待官方 1.18.18 最小复现实验闭合。已新增
+`scripts/e2e-queued-order-repro.sh` 复现记录：慢速工具+后续文本流中从键盘
+排队第二条 prompt，逐帧抓拍流式期间面板顺序并冻结归一化 SSE 基线
+（`tests/fixtures/golden/queued-followup-1.18.18.sse.jsonl`）；mock 驱动
+场景连续运行未观察到瞬态错序（61 帧/轮），真实模型时序下的复现仍为后续。
+回合消息的完成时间已推迟到回合结束，QUEUED 标记在整轮完成前保持正确。

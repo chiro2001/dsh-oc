@@ -92,7 +92,12 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   `scripts/normalize-golden-trace.mjs`）：真实 TUI 工具+后续文本场景的桥
   SSE 归一化轨迹（去 id/时间/路径）提交为
   `tests/fixtures/golden/recovery-tool-followup-1.18.18.sse.jsonl`，结构
-  可跨运行复现并已入稳定套件；官方最小复现（错序归因）仍为后续。
+  可跨运行复现并已入稳定套件。错序复现记录
+  `scripts/e2e-queued-order-repro.sh`：慢流工具+后续文本 + 键盘排队第二条
+  prompt，逐帧抓拍瞬态顺序并冻结第二份黄金基线
+  `tests/fixtures/golden/queued-followup-1.18.18.sse.jsonl`（116 事件）；
+  mock 场景连续运行未复现瞬态错序，真实模型时序/官方最小 server 的归因
+  复现仍为后续。
 - 实验 2（2026-08-17 已落地工具与首轮演练）：`v0.1.0-rc.2` 以 full SHA
   为真相源 —— `scripts/verify-release-artifacts.sh` 已加入 check-all 门禁：
   HEAD 源码 clean rebuild 后 committed `lib/` 零差异、npm pack 无机器绝对

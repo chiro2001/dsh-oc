@@ -27,6 +27,7 @@ const ID_PATTERNS = [
   /^mock-call-[0-9]+$/,
   /^rpc-[0-9a-f-]+$/,
   /^pending:session-/,
+  /^[0-9a-f]{16}$/,
 ]
 
 function token(value) {
@@ -47,7 +48,7 @@ function normalizeValue(value, key) {
   if (typeof value === 'number') {
     // Timing fields are dropped entirely (golden-trace convention: keep
     // structure and references, not absolute or relative times).
-    if (['time', 'time0', 'timestamp', 'created', 'completed', 'start', 'end', 'dt'].includes(key)) {
+    if (['time', 'time0', 'timestamp', 'created', 'completed', 'updated', 'start', 'end', 'dt'].includes(key)) {
       return undefined
     }
     return value

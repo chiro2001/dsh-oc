@@ -8,6 +8,11 @@
 
 ### 新增
 
+- 错序复现记录 `scripts/e2e-queued-order-repro.sh`：工具+慢流后续文本期间
+  从键盘排队第二条 prompt，逐帧抓拍官方 TUI 面板顺序（瞬态错序检测），并
+  冻结第二份 1.18.18 黄金 SSE 基线
+  `tests/fixtures/golden/queued-followup-1.18.18.sse.jsonl`；mock 驱动连续
+  运行未观察到瞬态错序，记录作为 renderer/bridge 归因证据。
 - 1.18.18 黄金 SSE 轨迹基线：`scripts/e2e-golden-trace.sh` 在真实 TUI 上
   跑“工具+后续文本”场景并用观察者 SSE 录轨，`scripts/normalize-golden-trace.mjs`
   归一化（去随机 id、绝对时间、机器路径），基线提交到
