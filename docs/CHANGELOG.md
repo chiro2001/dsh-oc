@@ -59,6 +59,9 @@
   挂死套件快速失败并重试一次，不再拖住整个 job。
 - CI 失败工件改为打包上传（排除 `node_modules` 与 `work/.git`），上传步骤
   限时 5 分钟，避免 `.e2e` 上传挂起数小时。
+- `scripts/cleanup-merged-branches.sh` 现在同时枚举本地与远端已合并分支
+  （dry-run 即可列出 `origin/feat-*`、`origin/chore-*` 遗留），
+  `--apply --remote` 可一键清理。
 - `CONTRIBUTING.md`、PR/Issue 模板、分支策略（main 发布 / develop 集成 /
   短生命周期功能分支）。
 - CI：push 到 `main`/`develop`/`feat-*`/`fix-*`/`docs-*`/`perf-*`/`test-*`/

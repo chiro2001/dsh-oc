@@ -22,8 +22,15 @@ for arg in "$@"; do
   esac
 done
 
+git fetch --prune origin >/dev/null 2>&1 || true
 KEEP="^(main|develop|${TARGET})$"
-merged="$(git branch --merged "$TARGET" | sed 's/^[*+ ] //' | rg -v "$KEEP" || true)"
+local_merged="$(git branch --merged "$TARGET" | sed 's/^[*+ ] //' | rg -v "$KEEP" || true)"
+remote_merged="$(git branch -r --merged "$TARGET" \
+  | sed 's/^[*+ ] //' \
+  | rg -v '^origin/(main|develop|HEAD|'"${TARGET}"')([[:space:]]|$)' \
+  | sed 's|^origin/||' \
+  | rg -v "$KEEP" || true)"
+merged="$(printf '%s\n%s\n' "$local_merged" "$remote_merged" | sed '/^$/d' | sort -u)"
 
 if [[ -z "$merged" ]]; then
   echo "cleanup-merged-branches: no merged branches to clean (target: $TARGET)"
@@ -43,8 +50,12 @@ for branch in $merged; do
     echo "skip (checked out in a worktree): $branch"
     continue
   fi
-  git branch -d "$branch"
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    git branch -d "$branch"
+  fi
   if [[ "$REMOTE" == "1" ]]; then
-    git push origin --delete "$branch"
+    if git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+      git push origin --delete "$branch"
+    fi
   fi
 done
