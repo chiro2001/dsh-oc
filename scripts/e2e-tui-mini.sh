@@ -26,7 +26,10 @@ MINI_HINT=""
 deadline=$((SECONDS + 45))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-mini.txt"
-  for pattern in "Ask anything" "OpenCode" "opencode" "1.18.18" "DSH OC"; do
+  # The DSH OC brand (printed before --mini) contains "OpenCode" in its
+  # subtitle; only "Ask anything" proves the mini interface is ready for
+  # keyboard input.
+  for pattern in "Ask anything" "1.18.18" "DSH OC"; do
     if grep -qa "$pattern" "$E2E_RUN_DIR/tui-mini.txt"; then
       MINI_HINT="$pattern"
       break 2

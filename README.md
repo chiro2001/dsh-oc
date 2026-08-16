@@ -98,6 +98,8 @@ opencode 的配置、数据、状态与缓存全部隔离在 `$DSH_HOME/opencode
 - `Allow always`：仅会话内内存记忆，重启清空。
 - 退出 splash：官方退出画面无法替换，dsh-oc 在其下方补一行 dsh 恢复说明
   （`DSH_OC_DISABLE_EXIT_NOTE=1` 可关）。
+- `--mini` 入口 logo：官方 mini 界面不加载 TUI 插件，无法替换其内置
+  OpenCode 字符画；dsh-oc 会在启动前先打印 DSH OC 品牌。
 - Esc 打断：`--mini` 单按、全量 TUI 连按两次；dsh-oc 会转为 `session.cancel`。
 - 附件：支持文本与图片，PDF 等二进制暂不支持。
 - 外围路由（MCP/LSP/formatter/skills/integration）：schema-valid stub，不伪造结果。
