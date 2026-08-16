@@ -8,6 +8,9 @@
 
 ### 新增
 
+- `docs/ROADMAP.md` 修正 LATER 说明：`/api/credential/*` 实际存在 dsh
+  `credentials.describe/set/unset` RPC，但 opencode SDK 1.18.18 无消费
+  路由，维持 LATER 待上游协议出现。
 - `docs/RELEASE.md` 增加“当前候选就绪状态（12ca493）”汇总：本地/CI 门禁、
   flake/性能/真实模型/安装链路/归因实验证据一览。
 - `dsh-oc --version` 在 dsh 缺失时与其他路径一致：退出 127 并输出安装提示

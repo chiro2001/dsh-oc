@@ -27,8 +27,9 @@ seq，`after` 非负整数否则 400）。
 > `docs/perf/results-2026-08-15.md`。
 
 仍为 LATER 的 SDK 路由：`/api/pty/*`（dsh 无 PTY RPC）、`/api/integration/*`
-与 `/api/credential/*`（dsh 凭据面未暴露）、`/global/upgrade`（自动更新
-明确关闭）。
+（dsh 无 integration 面）、`/api/credential/*`（dsh 已暴露
+`credentials.describe/set/unset` RPC，但 opencode SDK 1.18.18 无对应
+消费路由，待上游协议出现再实现）、`/global/upgrade`（自动更新明确关闭）。
 
 ## 优先级总览
 
