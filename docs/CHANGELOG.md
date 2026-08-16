@@ -135,6 +135,10 @@
 - 流式错误在侧边栏显示可读文本：`session.error` 按官方判别联合
   （`UnknownError` / `MessageAbortedError` / `ProviderAuthError`）发出，
   不再渲染成 `[object Object]`。
+- v1/v2 历史按桥接 id 合并同回合的工具调用与后续文本为单条消息，与实时
+  SSE 一致（此前历史返回两条同 id 消息，TUI 合并后会把工具卡/文本重复
+  渲染）；“工具+排队”即时视图错序经实验 1 裁决为上游 TUI 渲染行为，
+  `--session` 重新进入顺序正确。
 - `turn/end` 跳过已定稿消息的 pending 完成时同时删除记录，避免残留到下一
   回合补发重复的 `message.updated`。
 - `/api/session/active` 只在会话实际 `running` 时返回该会话，空闲/不存在时返回

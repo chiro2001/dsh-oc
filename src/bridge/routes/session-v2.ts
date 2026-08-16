@@ -16,39 +16,55 @@ function remapV2Messages(
   sessionId: string,
   messages: SessionMessagesResponse['data'],
 ): SessionMessagesResponse['data'] {
-  return messages.map((message) => {
+  const remapped: SessionMessagesResponse['data'] = []
+  for (const message of messages) {
     const promptId = ctx.state.promptIdForDshId(sessionId, message.id)
     const assistantId = promptId === undefined
       ? ctx.state.assistantIdForDshId(sessionId, message.id)
       : undefined
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
-    if (surfaceId === undefined && sessionAgent === undefined) return message
+    if (surfaceId === undefined && sessionAgent === undefined) {
+      remapped.push(message)
+      continue
+    }
+    let result: SessionMessagesResponse['data'][number]
     if (!('content' in message) || !Array.isArray(message.content)) {
-      return {
+      result = {
         ...message,
         ...(surfaceId === undefined ? {} : { id: surfaceId }),
         ...(sessionAgent !== undefined && message.type === 'assistant'
           ? { agent: sessionAgent }
           : {}),
+      } as SessionMessagesResponse['data'][number]
+    } else {
+      const content = message.content.map((part) => ({
+        ...part,
+        ...(surfaceId === undefined ? {} : {
+          id: String(part.id).replaceAll(message.id, surfaceId),
+          messageID: surfaceId,
+        }),
+      }))
+      result = {
+        ...message,
+        ...(surfaceId === undefined ? {} : { id: surfaceId }),
+        ...(sessionAgent !== undefined && message.type === 'assistant'
+          ? { agent: sessionAgent }
+          : {}),
+        content,
+      } as SessionMessagesResponse['data'][number]
+    }
+    if (surfaceId !== undefined && result.type === 'assistant') {
+      const existing = remapped.find((candidate) => candidate.id === surfaceId)
+      if (existing !== undefined && 'content' in existing && Array.isArray(existing.content)
+        && 'content' in result && Array.isArray(result.content)) {
+        existing.content.push(...result.content)
+        continue
       }
     }
-    const content = message.content.map((part) => ({
-      ...part,
-      ...(surfaceId === undefined ? {} : {
-        id: String(part.id).replaceAll(message.id, surfaceId),
-        messageID: surfaceId,
-      }),
-    }))
-    return {
-      ...message,
-      ...(surfaceId === undefined ? {} : { id: surfaceId }),
-      ...(sessionAgent !== undefined && message.type === 'assistant'
-        ? { agent: sessionAgent }
-        : {}),
-      content,
-    } as SessionMessagesResponse['data'][number]
-  })
+    remapped.push(result)
+  }
+  return remapped
 }
 
 function promptText(content: Array<{ type: string; text?: unknown }>): string {

@@ -16,7 +16,8 @@ function remapV1Messages(
   sessionId: string,
   entries: Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }>,
 ): Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }> {
-  return entries.map((entry) => {
+  const remapped: Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }> = []
+  for (const entry of entries) {
     const dshId = String(entry.info.id)
     const promptId = ctx.state.promptIdForDshId(sessionId, dshId)
     const assistantId = promptId === undefined
@@ -31,7 +32,7 @@ function remapV1Messages(
         ? { agent: sessionAgent }
         : {}),
     }
-    return {
+    const mapped: { info: Record<string, unknown>; parts: Array<Record<string, unknown>> } = {
       info,
       parts: entry.parts.map((part) => ({
         ...part,
@@ -41,7 +42,19 @@ function remapV1Messages(
         }),
       })),
     }
-  })
+    if (surfaceId !== undefined) {
+      // The same bridge id may cover the tool-call step and the follow-up
+      // text step of one turn; merge their parts into one history message so
+      // the TUI's history/live merge sees a single canonical entry.
+      const existing = remapped.find((candidate) => String(candidate.info.id) === surfaceId)
+      if (existing !== undefined) {
+        existing.parts.push(...mapped.parts)
+        continue
+      }
+    }
+    remapped.push(mapped)
+  }
+  return remapped
 }
 
 function registerPromptIds(

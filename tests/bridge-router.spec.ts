@@ -466,6 +466,51 @@ describe('bridge router: session routes', () => {
     expect(bad.status).toBe(400)
   })
 
+  it('merges same-bridge-id tool and follow-up steps in history responses', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        history: async () => okRpc({
+          events: [
+            { event: makeUserEvent('hello', 'm-user', 1000) },
+            {
+              event: makeAssistantEvent([
+                { type: 'tool-call', id: 'c1' as never, name: 'bash', arguments: '{}' },
+              ], 'dsh-tool', 1100),
+            },
+            {
+              event: makeAssistantEvent([
+                { type: 'text', text: 'follow-up' },
+              ], 'dsh-text', 1200),
+            },
+          ],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server, router } = await boot(api)
+    router.ctx.state.recordAssistantId('s1', 'dsh-tool', 'msg_turn_1')
+    router.ctx.state.recordAssistantId('s1', 'dsh-text', 'msg_turn_1')
+
+    const v1 = await request(server, 'GET', '/session/s1/message')
+    expect(v1.status).toBe(200)
+    const v1Body = v1.body as Array<{ info: { id?: string; role?: string }; parts: Array<{ type?: string }> }>
+    const assistants = v1Body.filter((entry) => entry.info.role === 'assistant')
+    expect(assistants).toHaveLength(1)
+    expect(assistants[0]?.info.id).toBe('msg_turn_1')
+    expect(assistants[0]?.parts.map((part) => part.type)).toEqual(['tool', 'text'])
+
+    const v2 = await request(server, 'GET', '/api/session/s1/message')
+    expect(v2.status).toBe(200)
+    const v2Body = v2.body as { data?: Array<{ id?: string; type?: string; content?: Array<{ type?: string }> }> }
+    const v2Assistants = v2Body.data?.filter((entry) => entry.type === 'assistant') ?? []
+    expect(v2Assistants).toHaveLength(1)
+    expect(v2Assistants[0]?.id).toBe('msg_turn_1')
+    expect(v2Assistants[0]?.content?.map((part) => part.type)).toEqual(['tool', 'text'])
+  })
+
   it('filters session lists by the directory query', async () => {
     const base = fakeApi()
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
