@@ -97,7 +97,7 @@ echo "== run A: allow once / allow always / auto-approve =="
 # Three consecutive tool calls drive the once -> always -> auto-approve
 # dialogs; keep extra tool calls + success slots for slow runners.
 e2e_new_run "tui-permission" "workspace-write" \
-  "tool_call_success,tool_call_success,tool_call_success,tool_call_success,success,success,success,success,success,success" "0"
+  "tool_call_success,tool_call_success,tool_call_success,tool_call_success,tool_call_success,tool_call_success,tool_call_success,tool_call_success,success,success,success,success,success,success,success,success,success,success,success,success" "0"
 use_standard_preset
 e2e_tui_start ""
 e2e_tui_wait_attach
