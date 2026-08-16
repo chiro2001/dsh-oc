@@ -35,7 +35,7 @@ trap cleanup EXIT
 
 export DSH_OC_E2E_CHUNK_DELAY_MS=150
 export DSH_OC_E2E_CHUNK_SIZE=4
-export DSH_OC_E2E_SUCCESS_TEXT="order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup"
+export DSH_OC_E2E_SUCCESS_TEXT="order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup"
 e2e_new_run "queued-order-repro" "danger-full-access" \
   "tool_call_success,slow_success,slow_success,slow_success,slow_success,slow_success" "1" \
   '{"command":"echo order-repro","description":"tool","sandbox_permissions":"danger-full-access","justification":"e2e"}'
@@ -61,22 +61,22 @@ curl -sN --max-time 180 "$E2E_BRIDGE_URL/api/session/$SID/event" \
   > "$E2E_RUN_DIR/trace.raw" 2>/dev/null &
 SSE_PID=$!
 
-echo "== wait for the tool result, then queue a second prompt mid-follow-up =="
+echo "== wait for the tool part, then queue a second prompt while busy =="
 deadline=$((SECONDS + 60))
 while (( SECONDS < deadline )); do
   if curl -s "$E2E_BRIDGE_URL/api/session/$SID/message" | jq -e '
       [.data[] | select(.type == "assistant")
-        | .content[]? | select(.type == "tool" and .state.status == "completed")] | length > 0
+        | .content[]? | select(.type == "tool")] | length > 0
     ' >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 if (( SECONDS >= deadline )); then
-  echo "e2e: tool did not complete in time" >&2
+  echo "e2e: tool part did not appear in time" >&2
   exit 1
 fi
-echo "  tool completed; sending queued prompt"
+echo "  tool part visible; sending queued prompt"
 tmux send-keys -t "$E2E_TUI_SESSION" 'order repro queued prompt' Enter
 
 QUEUED_SEEN=""

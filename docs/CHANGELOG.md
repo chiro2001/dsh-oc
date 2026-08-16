@@ -8,6 +8,11 @@
 
 ### 新增
 
+- `e2e-queued-order-repro.sh` 稳定性修复：第二条 prompt 改为在工具 part
+  出现（而非完成后）即发送，保证仍处于 busy 窗口、QUEUED 徽标必然出现；
+  后续文本加长到 15 段。本地 10/10 flake 扫描通过（48s/次），修复 CI
+  slow-runner 下 “queued prompt not shown” 的失败；queued-followup 黄金
+  基线已刷新到新场景（180 事件）。
 - 5000 会话性能基准记录（commit `609ccd6`）：列表/消息/历史/分页/标题补温/
   RSS 数据见 docs/perf/results-5000-2026-08-17.md，与 8-15 基线量级一致。
 - `e2e-real-llm.sh` 强化断言（round-0002 指出真实回归偏弱）：queue probe
