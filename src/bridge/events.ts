@@ -165,6 +165,8 @@ interface SessionStreamState {
   blockPartIds: Map<string, string>
   /** Message ids already opened for streaming in this session (per turn). */
   openedMessageIds: Set<string>
+  /** Message ids already completed by a final assistant/message this turn. */
+  completedMessageIds: Set<string>
   compactions: Map<string, CompactionStreamState>
   toolInputs: Map<string, ToolInputState>
 }
@@ -212,6 +214,7 @@ export class MuxEventTranslator {
         blocks: new Map(),
         blockPartIds: new Map(),
         openedMessageIds: new Set(),
+        completedMessageIds: new Set(),
         compactions: new Map(),
         toolInputs: new Map(),
       }
@@ -994,6 +997,8 @@ export class MuxEventTranslator {
               stepKey,
               info,
             })
+          } else if ((info.time as { completed?: number } | undefined)?.completed !== undefined) {
+            state.completedMessageIds.add(messageID)
           }
           return {
             info,
@@ -1059,7 +1064,7 @@ export class MuxEventTranslator {
           }
         }
         const pending = this.pendingAssistantCompletions.get(sessionId)
-        if (pending !== undefined) {
+        if (pending !== undefined && !state.completedMessageIds.has(pending.messageID)) {
           events.push(
             makeEvent(directory, 'message.updated', {
               sessionID: sessionId,
@@ -1078,6 +1083,7 @@ export class MuxEventTranslator {
         // assistant/message (interrupt/error): without `completed` the TUI
         // keeps them pending forever (the "spinner keeps spinning" class).
         for (const [stepKey, messageID] of [...state.provisionalMessageIds]) {
+          if (state.completedMessageIds.has(messageID)) continue
           const created = state.blockStarts.get(`${stepKey}:text`)
             ?? state.blockStarts.get(`${stepKey}:reasoning`)
             ?? state.turnStartTime
@@ -1102,6 +1108,7 @@ export class MuxEventTranslator {
         }
         state.provisionalMessageIds.clear()
         state.openedMessageIds.clear()
+        state.completedMessageIds.clear()
         this.currentAssistant.delete(sessionId)
         this.pendingCalls.delete(sessionId)
         this.clearToolTimers(sessionId)
@@ -1109,23 +1116,13 @@ export class MuxEventTranslator {
         return events
       }
       case 'step/end' as SessionEvent['type']: {
-        const stepKey = `${(event.data as { turn: number }).turn}:${(event.data as { step: number }).step}`
-        const pending = this.pendingAssistantCompletions.get(sessionId)
-        if (pending === undefined || pending.stepKey !== stepKey) return []
-        this.pendingAssistantCompletions.delete(sessionId)
-        const info = {
-          ...pending.info,
-          time: {
-            created: (pending.info.time as { created?: number })?.created ?? event.time,
-            completed: event.time,
-          },
-        }
-        return [
-          makeEvent(directory, 'message.updated', {
-            sessionID: sessionId,
-            info,
-          }, project),
-        ]
+        // A tool-call step may be followed by more steps of the same turn
+        // (e.g. the follow-up text after the tool result). Completing the
+        // message here marks the card finished too early and later parts for
+        // the same message render out of order. Defer completion to
+        // `turn/end`; the QUEUED badge for prompts submitted mid-turn stays
+        // correct as long as the message is incomplete.
+        return []
       }
       case 'todo/write':
         this.sessionTodos.set(sessionId, event.data.todos)

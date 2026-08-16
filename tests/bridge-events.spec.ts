@@ -2115,7 +2115,7 @@ describe('bridge events: projection and control frames', () => {
     })
   })
 
-  it('keeps tool-call assistants incomplete until the step ends', () => {
+  it('keeps tool-call assistants incomplete until the turn ends', () => {
     const { translate } = translator()
     const assistant = translate([
       frame({
@@ -2139,21 +2139,95 @@ describe('bridge events: projection and control frames', () => {
     expect(info.time).toMatchObject({ created: 5000 })
     expect(info.time?.completed).toBeUndefined()
 
-    const completed = translate([
+    // step/end must not complete the message: a follow-up step of the same
+    // turn may still stream parts under this message id.
+    const stepEnded = translate([
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
         event: sessionEvent('step/end', { turn: 1, step: 1 }, 12, 6000),
       }),
     ])
-    expect(completed).toHaveLength(1)
-    expect(completed[0]?.payload).toMatchObject({
+    expect(stepEnded).toEqual([])
+
+    const ended = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 13, 6500),
+      }),
+    ])
+    const completion = ended.find((event) => event.payload.type === 'message.updated')
+    expect(completion?.payload).toMatchObject({
       type: 'message.updated',
       properties: {
         sessionID: 's1',
-        info: { id: 'assistant-tool-1', time: { created: 5000, completed: 6000 } },
+        info: { id: 'assistant-tool-1', time: { created: 5000, completed: 6500 } },
       },
     })
+  })
+
+  it('does not re-complete a turn message finalized by a follow-up step', () => {
+    const state = new InteractionState()
+    state.registerAssistantIdForUser('s1', 'msg-user-1', 'msg_turn_1')
+    const { translate } = translator(state)
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'tool-call-delta',
+            index: 0,
+            id: 'c1' as never,
+            name: 'bash',
+            argumentsDelta: '{}',
+          },
+        }, 3, 950),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'tool-call', id: 'c1' as never, name: 'bash', arguments: '{}' },
+        ], 'dsh-asst-1', 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('text-chunks', [' answer'], 1100, 11, 0, 1, 2),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: 'answer' },
+        ], 'dsh-asst-2', 1200),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 20, 1300),
+      }),
+    ])
+    const updates = events.filter((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
+    // Opening update + tool-call finalize (completed unset) + follow-up
+    // completion; turn/end must not emit another completion for the
+    // already-finalized message.
+    expect(updates).toHaveLength(3)
+    const completions = updates
+      .map((event) => (event.payload.properties.info as { time?: { completed?: number } }).time?.completed)
+      .filter((value): value is number => value !== undefined)
+    expect(completions).toEqual([1200])
   })
 
   it('closes provisional messages on turn/end after an interrupt', () => {
