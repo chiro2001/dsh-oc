@@ -142,6 +142,49 @@ describe('bridge events: session event mapping', () => {
     }
   })
 
+  it('silently ignores log-only session events without log noise', () => {
+    const logs: string[] = []
+    const { translate } = translator(new InteractionState(), logs)
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('step/start' as never, { turn: 1, step: 2 }, 20, 3000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('request/header' as never, { header: { config: {} } }, 21, 3100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('command/run' as never, {
+          commandId: 'cmd-1',
+          name: 'goal',
+          args: 'x',
+          source: { kind: 'user' },
+        }, 22, 3200),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('command/done' as never, {
+          commandId: 'cmd-1',
+          kind: 'success',
+          text: 'Goal created',
+        }, 23, 3300),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('sandbox/mode' as never, { mode: 'danger-full-access' }, 24, 3400),
+      }),
+    ])
+    expect(events).toEqual([])
+    expect(logs.some((line) => line.includes('unhandled'))).toBe(false)
+  })
+
   it('translates compaction checkpoints into message parts and compaction events', () => {
     const { translate } = translator()
     const events = translate([
@@ -1273,10 +1316,10 @@ describe('bridge events: session event mapping', () => {
       .translate(frame({
         type: 'session/event',
         sessionId: 's1' as never,
-        event: sessionEvent('request/header', { header: {}, reason: 'turn' }, 1, 100),
+        event: sessionEvent('totally-unknown-event' as never, { value: 1 }, 1, 100),
       }))
     expect(events).toEqual([])
-    expect(logs.some((line) => line.includes('request/header'))).toBe(true)
+    expect(logs.some((line) => line.includes('totally-unknown-event'))).toBe(true)
     const status = new MuxEventTranslator({ cwd: '/work', state, log: () => {} })
       .translate(frame({
         type: 'session/event',

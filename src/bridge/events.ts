@@ -1269,6 +1269,18 @@ export class MuxEventTranslator {
       case 'todo/write':
         this.sessionTodos.set(sessionId, event.data.todos)
         return this.todoUpdateEvents(sessionId, directory, project)
+      case 'step/start' as SessionEvent['type']:
+      case 'request/header' as SessionEvent['type']:
+      case 'request/context' as SessionEvent['type']:
+      case 'session/title-llm-request' as SessionEvent['type']:
+      case 'permission/preset' as SessionEvent['type']:
+      case 'sandbox/mode' as SessionEvent['type']:
+      case 'approval/policy' as SessionEvent['type']:
+      case 'command/run' as SessionEvent['type']:
+      case 'command/done' as SessionEvent['type']:
+        // Log-only / environment-snapshot events: no TUI surface. Explicitly
+        // silent so genuinely unknown event types stay loud in the logs.
+        return []
       case 'goal/change' as SessionEvent['type']: {
         const data = (event as unknown as { data: { goal?: unknown; cleared?: unknown } }).data
         if (data?.goal !== undefined) {
