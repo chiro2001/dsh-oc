@@ -23,10 +23,20 @@ trap cleanup EXIT
 
 FIXTURE="${1:-tests/fixtures/replay/queued-mid-followup.jsonl}"
 SID="${2:-session-11111111-1111-4111-8111-111111111111}"
+MARKER="${DSH_OC_MINIMAL_MARKER:-QUEUED-MID-SECOND-PROMPT}"
+DELAY_MS="${DSH_OC_MINIMAL_DELAY_MS:-120}"
+CJK_MODE="${DSH_OC_MINIMAL_CJK:-0}"
+RAW_SSE="${DSH_OC_MINIMAL_SSE:-}"
+CAPTURE_SECONDS="${DSH_OC_MINIMAL_CAPTURE_SECONDS:-15}"
 
 echo "== start minimal scripted server =="
-node scripts/minimal-oc-server.mjs "$FIXTURE" "$SID" 120 \
-  > "$RUN_DIR/server.out" 2> "$RUN_DIR/server.err" &
+if [[ -n "$RAW_SSE" ]]; then
+  node scripts/minimal-oc-server.mjs --sse "$RAW_SSE" "$SID" "$DELAY_MS" \
+    > "$RUN_DIR/server.out" 2> "$RUN_DIR/server.err" &
+else
+  node scripts/minimal-oc-server.mjs "$FIXTURE" "$SID" "$DELAY_MS" \
+    > "$RUN_DIR/server.out" 2> "$RUN_DIR/server.err" &
+fi
 SERVER_PID=$!
 URL=""
 deadline=$((SECONDS + 20))
@@ -70,7 +80,7 @@ echo "  TUI ready"
 
 echo "== capture streaming frames =="
 FRAME_COUNT=0
-deadline=$((SECONDS + 15))
+deadline=$((SECONDS + CAPTURE_SECONDS))
 while (( SECONDS < deadline )); do
   FRAME_COUNT=$((FRAME_COUNT + 1))
   tmux capture-pane -p -t "$SESSION" > "$RUN_DIR/frame-${FRAME_COUNT}.txt" 2>/dev/null || true
@@ -81,7 +91,7 @@ echo "== analyze pane order =="
 TRANSIENT="not-observed"
 SPLIT_FRAME=""
 for f in "$RUN_DIR"/frame-*.txt; do
-  QUEUED_LINE="$(grep -n 'QUEUED-MID-SECOND-PROMPT' "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
+  QUEUED_LINE="$(grep -n "$MARKER" "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
   PART1_LINE="$(grep -n 'follow-up part one' "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
   PART2_LINE="$(grep -n 'follow-up part two' "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
   if [[ -n "$QUEUED_LINE" && -n "$PART1_LINE" && -n "$PART2_LINE" ]] \
@@ -94,11 +104,23 @@ done
 echo "  transient: $TRANSIENT (frame=${SPLIT_FRAME:-na}, frames=$FRAME_COUNT)"
 
 FINAL="$RUN_DIR/frame-${FRAME_COUNT}.txt"
-FQ="$(grep -n 'QUEUED-MID-SECOND-PROMPT' "$FINAL" 2>/dev/null | head -1 | cut -d: -f1 || true)"
+FQ="$(grep -n "$MARKER" "$FINAL" 2>/dev/null | head -1 | cut -d: -f1 || true)"
 F1="$(grep -n 'follow-up part one' "$FINAL" 2>/dev/null | head -1 | cut -d: -f1 || true)"
 F2="$(grep -n 'follow-up part two' "$FINAL" 2>/dev/null | head -1 | cut -d: -f1 || true)"
-printf 'scenario=minimal-server-queued-mid-followup\nopencode=1.18.18\nfixture=%s\ntransient=%s\nsplit_frame=%s\nframes=%s\nfinal_queued_line=%s\nfinal_part1_line=%s\nfinal_part2_line=%s\n' \
-  "$FIXTURE" "$TRANSIENT" "${SPLIT_FRAME:-na}" "$FRAME_COUNT" "${FQ:-na}" "${F1:-na}" "${F2:-na}" \
+if [[ "$CJK_MODE" == "1" ]]; then
+  CJK_BELOW=0
+  for f in "$RUN_DIR"/frame-*.txt; do
+    QL="$(grep -n "$MARKER" "$f" 2>/dev/null | head -1 | cut -d: -f1 || true)"
+    if [[ -n "$QL" ]] && sed -n "$((QL + 1)),\$p" "$f" | rg -qP '[\x{4e00}-\x{9fff}]' 2>/dev/null; then
+      CJK_BELOW=$((CJK_BELOW + 1))
+    fi
+  done
+  echo "  cjk-below-queued frames: $CJK_BELOW"
+else
+  CJK_BELOW="na"
+fi
+printf 'scenario=minimal-server-queued-mid-followup\nopencode=1.18.18\nfixture=%s\ntransient=%s\nsplit_frame=%s\nframes=%s\nfinal_queued_line=%s\nfinal_part1_line=%s\nfinal_part2_line=%s\ncjk_below_queued_frames=%s\n' \
+  "$FIXTURE" "$TRANSIENT" "${SPLIT_FRAME:-na}" "$FRAME_COUNT" "${FQ:-na}" "${F1:-na}" "${F2:-na}" "$CJK_BELOW" \
   > "$RUN_DIR/report.txt"
 echo "  report: $RUN_DIR/report.txt"
 

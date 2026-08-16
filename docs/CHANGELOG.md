@@ -8,6 +8,13 @@
 
 ### 新增
 
+- 最小 server 支持 raw SSE 直放模式（`minimal-oc-server.mjs --sse <trace.raw>`）：
+  把录制的桥 SSE 事件按原序广播给官方 TUI；复现驱动支持自定义 marker、
+  事件延迟、CJK 启发式与抓拍时长（`DSH_OC_MINIMAL_*`）。真实会话原始
+  JSONL 与完整桥 SSE 轨迹的回放均已接入：fixture 回放渲染顺序正确；raw
+  直放因事件 directory/project 与 attach 上下文未对齐暂不渲染对话，列为
+  后续实验项。`e2e-real-queued-order.sh` 改为首个 prompt 前开始录全量
+  `/global/event` 轨迹。
 - 官方最小 server 归因 harness：`scripts/minimal-oc-server.mjs` 用桥组件 +
   脚本化事件序列（无 dsh、无真实模型）提供完整 OpenCode 兼容面，
   `scripts/e2e-minimal-server-repro.sh` 驱动官方 1.18.18 TUI attach 并

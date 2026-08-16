@@ -104,7 +104,9 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   用桥组件 + 脚本化事件序列（queued-mid-followup fixture）喂官方 TUI，
   TUI 渲染顺序正确（完整后续文本在排队卡片上方）；桥新增
   `src/bridge/router-entry.ts` 导出（lib/bridge/router-entry.js）供外部
-  harness 使用。最终归因仍需在最小 server 上复现真实会话原始事件序列。
+  harness 使用。真实会话原始 JSONL 与完整桥 SSE 轨迹回放已接入（raw
+  直放模式），当前 raw 直放因 directory/project 上下文未对齐暂不渲染对话；
+  最终归因需先对齐后继续。
 - 实验 2（2026-08-17 已落地工具与首轮演练）：`v0.1.0-rc.2` 以 full SHA
   为真相源 —— `scripts/verify-release-artifacts.sh` 已加入 check-all 门禁：
   HEAD 源码 clean rebuild 后 committed `lib/` 零差异、npm pack 无机器绝对

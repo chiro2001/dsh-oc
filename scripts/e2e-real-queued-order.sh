@@ -102,6 +102,12 @@ e2e_tui_wait_attach
 wait_ready
 echo "  TUI ready"
 
+# Record the full bridge SSE from before the first prompt so the trace is
+# complete enough for raw replay on the minimal server.
+curl -sN --max-time 300 "$E2E_BRIDGE_URL/global/event" \
+  > "$E2E_RUN_DIR/trace.raw" 2>/dev/null &
+SSE_PID=$!
+
 tmux send-keys -t "$E2E_TUI_SESSION" 'real order repro: 先运行 ls 列出当前目录前 5 项，然后写一段 300 字左右的说明文字，慢慢输出。' Enter
 SID=""
 deadline=$((SECONDS + 30))
@@ -112,10 +118,6 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
-
-curl -sN --max-time 240 "$E2E_BRIDGE_URL/api/session/$SID/event" \
-  > "$E2E_RUN_DIR/trace.raw" 2>/dev/null &
-SSE_PID=$!
 
 echo "== wait for tool completion, then queue a second prompt =="
 deadline=$((SECONDS + 180))

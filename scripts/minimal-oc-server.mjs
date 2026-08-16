@@ -7,19 +7,35 @@
 // jitter beyond the configurable per-event delay.
 //
 // Usage: node scripts/minimal-oc-server.mjs [fixture.jsonl] [session-id] [delay-ms]
+//        node scripts/minimal-oc-server.mjs --sse <trace.raw> [session-id] [delay-ms]
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createBridgeRouter, startBridgeServer } from '../lib/bridge/router-entry.js'
 
-const fixturePath = resolve(process.argv[2] ?? 'tests/fixtures/replay/queued-mid-followup.jsonl')
-const sessionId = process.argv[3] ?? 'session-11111111-1111-4111-8111-111111111111'
-const delayMs = Number(process.argv[4] ?? '120')
+const args = process.argv.slice(2)
+const sseIndex = args.indexOf('--sse')
+const rawSsePath = sseIndex === -1 ? undefined : args[sseIndex + 1]
+const fixturePath = sseIndex === -1
+  ? resolve(args[0] ?? 'tests/fixtures/replay/queued-mid-followup.jsonl')
+  : resolve('tests/fixtures/replay/queued-mid-followup.jsonl')
+const sessionId = sseIndex === -1
+  ? (args[1] ?? 'session-11111111-1111-4111-8111-111111111111')
+  : (args[sseIndex + 2] ?? 'session-11111111-1111-4111-8111-111111111111')
+const delayMs = sseIndex === -1 ? Number(args[2] ?? '120') : Number(args[sseIndex + 3] ?? '20')
 
 const events = readFileSync(fixturePath, 'utf8')
   .trim()
   .split('\n')
   .filter(Boolean)
   .map((line) => JSON.parse(line))
+
+const rawEvents = rawSsePath === undefined
+  ? undefined
+  : readFileSync(resolve(rawSsePath), 'utf8')
+      .split('\n')
+      .filter((line) => line.startsWith('data: '))
+      .map((line) => JSON.parse(line.slice(6)))
+      .filter((event) => event && event.payload)
 
 const ok = (value) => ({ rpcId: 'rpc-1', result: { ok: true, value } })
 const item = {
@@ -79,6 +95,7 @@ const api = {
   llm: { models: async () => ok({ groups: [], failures: [] }) },
   events: {
     mux: async function* () {
+      if (rawEvents !== undefined) return
       // The TUI validates the attached session from its first session.updated.
       yield {
         rpcId: 'rpc-session',
@@ -112,6 +129,22 @@ const api = {
 const router = createBridgeRouter(api, { cwd: process.cwd(), sseRetryBaseMs: 10 })
 const server = await startBridgeServer(router)
 process.stdout.write(`READY ${server.url}\n`)
+
+if (rawEvents !== undefined) {
+  // Raw replay mode: broadcast the recorded bridge SSE events verbatim to
+  // every connected client, in the exact recorded order and timing. Wait
+  // for the first SSE client so the opening events are not lost.
+  void (async () => {
+    const waitDeadline = Date.now() + 30_000
+    while (router.ctx.hub.size === 0 && Date.now() < waitDeadline) {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100))
+    }
+    for (const event of rawEvents) {
+      router.ctx.hub.broadcast([event])
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
+    }
+  })()
+}
 
 const shutdown = async () => {
   await server.close()
