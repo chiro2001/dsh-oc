@@ -8,11 +8,16 @@
 
 ### 新增
 
-- 确定性回放语料（实验 1c）：`scripts/build-replay-corpus.mjs` 生成 7 个
+- 真实会话 feature 覆盖扫描 `scripts/replay-corpus-manifest.mjs`：只输出
+  事件类型/特征计数，不接触真实内容；64 个真实会话的 12 个特征已全部被
+  合成语料覆盖（long-session 由 spec 运行时生成覆盖），报告见
+  docs/perf/coverage-real-sessions-2026-08-17.md。
+- 确定性回放语料（实验 1c）：`scripts/build-replay-corpus.mjs` 生成 10 个
   结构保持的合成 fixture（reasoning、单/多工具、排队、工具错误、compaction、
-  打断、goal）到 `tests/fixtures/replay/`；`tests/replay-corpus.spec.ts`
-  回放审计：无未处理/翻译错误、工具调用配对且终态、live 完成态与 durable
-  一致、durable v1/v2 消息面一致。
+  打断、goal、plugin-context、session-title、unfinished-turn）到
+  `tests/fixtures/replay/`；`tests/replay-corpus.spec.ts` 回放审计：无未处理/
+  翻译错误、工具调用配对且终态、live 完成态与 durable 一致、durable v1/v2
+  消息面一致、运行时 10k 事件长会话。
 - 预算化 flake 扫描 `scripts/flake-mini-scan.sh`：对最小高风险 e2e 脚本
   重复 N 次（默认 10），记录首败与耗时，语义失败立即停止且不重试；恢复
   三故障域首轮各 10 次全绿（结果见 docs/perf）。

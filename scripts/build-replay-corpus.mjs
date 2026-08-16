@@ -131,6 +131,14 @@ function goalChange(goal) {
   return ev('goal/change', { goal })
 }
 
+function sessionTitle(title = 'synthetic session title') {
+  return ev('session/title', {
+    title,
+    messageSeqs: [1],
+    source: { kind: 'llm' },
+  })
+}
+
 function fixture(name, features, build, equivalence = true) {
   seq = 0
   turn = 0
@@ -221,6 +229,27 @@ const fixtures = [
     assistantMessage([{ type: 'text', text: 'goal acknowledged' }]),
     endTurn(),
   ]),
+  fixture('plugin-context', ['plugin-context', 'text'], () => [
+    startTurn(),
+    user('Current runtime context: synthetic plugin context', 'msg-plugin-context'),
+    user('synthetic user prompt'),
+    chunkRow('text-chunks', ['synthetic answer']),
+    assistantMessage([{ type: 'text', text: 'synthetic answer' }]),
+    endTurn(),
+  ]),
+  fixture('session-title', ['session-title', 'text'], () => [
+    sessionTitle('synthetic session title'),
+    startTurn(),
+    user('synthetic user prompt'),
+    chunkRow('text-chunks', ['synthetic answer']),
+    assistantMessage([{ type: 'text', text: 'synthetic answer' }]),
+    endTurn(),
+  ]),
+  fixture('unfinished-turn', ['unfinished-turn'], () => [
+    startTurn(),
+    user('still running'),
+    assistantChunk('text-delta', 'partial answer', 0),
+  ], false),
 ]
 
 const manifest = {

@@ -1,7 +1,7 @@
 {
   "generator": "scripts/build-replay-corpus.mjs",
   "version": 1,
-  "generatedAt": "2026-08-16T17:37:56.284Z",
+  "generatedAt": "2026-08-16T18:06:15.006Z",
   "note": "Synthetic structure-preserving fixtures; no real session content.",
   "fixtures": [
     {
@@ -72,6 +72,35 @@
       ],
       "equivalence": true,
       "bytes": 933
+    },
+    {
+      "file": "plugin-context.jsonl",
+      "eventCount": 6,
+      "features": [
+        "plugin-context",
+        "text"
+      ],
+      "equivalence": true,
+      "bytes": 986
+    },
+    {
+      "file": "session-title.jsonl",
+      "eventCount": 6,
+      "features": [
+        "session-title",
+        "text"
+      ],
+      "equivalence": true,
+      "bytes": 911
+    },
+    {
+      "file": "unfinished-turn.jsonl",
+      "eventCount": 3,
+      "features": [
+        "unfinished-turn"
+      ],
+      "equivalence": false,
+      "bytes": 393
     }
   ]
 }

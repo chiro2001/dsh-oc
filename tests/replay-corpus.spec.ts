@@ -179,9 +179,12 @@ describe('replay corpus (experiment 1c)', () => {
       let completedAssistantCount = 0
       const queuedUsers = new Set<string>()
       let sawTodoUpdate = false
+      let sawSessionUpdated = false
       for (const event of all) {
         const props = event.payload.properties as Record<string, unknown>
-        if (event.payload.type === 'message.part.updated') {
+        if (event.payload.type === 'session.updated') {
+          sawSessionUpdated = true
+        } else if (event.payload.type === 'message.part.updated') {
           const part = props.part as { type?: string; callID?: string; state?: { status?: string } } | undefined
           if (part?.type === 'tool' && part.callID !== undefined) {
             const statuses = toolStatuses.get(part.callID) ?? []
@@ -228,11 +231,100 @@ describe('replay corpus (experiment 1c)', () => {
           message.role === 'assistant' && message.parts.some((part) => part.text.includes('synthetic goal'))))
           .toBe(true)
         expect(sawTodoUpdate).toBe(true)
+      } else if (fixture.features.includes('unfinished-turn')) {
+        // No turn/end: durable keeps an open partial assistant and live
+        // keeps the provisional one without a completion.
+        const partial = v1Norm.filter((message) => message.role === 'assistant')
+        expect(partial.length).toBeGreaterThan(0)
+        expect(partial.some((message) => message.parts.some((part) => part.text.length > 0))).toBe(true)
+        expect(completedAssistantCount).toBe(0)
       }
       if (fixture.features.includes('queue')) {
         // The queued user must be surfaced live at the splice point.
         expect(queuedUsers.has('msg-queued-1')).toBe(true)
       }
+      if (fixture.features.includes('session-title')) {
+        expect(sawSessionUpdated).toBe(true)
+      }
     })
   }
+
+  it('replays a generated 10k-event long session without issues', async () => {
+    // Long-session coverage is generated at test time to keep the committed
+    // corpus small (feature manifest records long-session as covered).
+    const events: SessionEvent[] = [
+      {
+        type: 'turn/start',
+        seq: 1,
+        time: 1_000_000,
+        data: { turn: 1 },
+      } as unknown as SessionEvent,
+      {
+        type: 'user/message',
+        seq: 2,
+        time: 1_000_100,
+        data: {
+          content: [{ type: 'text', text: 'long synthetic prompt' }],
+          source: { kind: 'user' },
+          role: 'user',
+          id: 'msg-long-user',
+        },
+      } as unknown as SessionEvent,
+    ]
+    for (let index = 0; index < 10_000; index += 1) {
+      events.push({
+        type: 'text-chunks',
+        seq0: 3 + index,
+        time0: 1_000_200 + index,
+        data: { turn: 1, step: 1, index: 0, dt: [], texts: ['x'] },
+      } as unknown as SessionEvent)
+    }
+    events.push({
+      type: 'assistant/message',
+      seq: 10_003,
+      time: 2_000_000,
+      data: {
+        turn: 1,
+        step: 1,
+        message: {
+          id: 'msg-long-asst',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'x'.repeat(10_000) }],
+          source: { kind: 'model', provider: 'deepseek-official', model: 'mock-model' },
+        },
+        usage: { inputTokens: 1, outputTokens: 10_000, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      },
+    } as unknown as SessionEvent)
+    events.push({
+      type: 'turn/end',
+      seq: 10_004,
+      time: 2_000_100,
+      data: { turn: 1, reason: { kind: 'completed' } },
+    } as unknown as SessionEvent)
+
+    const { all, unhandled, errors } = replay(events)
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(errors).toEqual([])
+    expect(unhandled).toEqual({})
+
+    const opts: MessageConvertOptions = {
+      sessionId: 's1',
+      cwd: '/work',
+      defaultModel: { providerID: 'deepseek', modelID: 'mock-model' },
+    }
+    const v1 = convertMessagesV1(events, opts)
+    const v2 = convertMessagesV2(events, opts)
+    expect(v1.filter((entry) => entry.info.role === 'assistant').length).toBe(1)
+    expect(v2.filter((message) => message.type === 'assistant').length).toBe(1)
+    const assistant = v2.find((message) => message.type === 'assistant')
+    expect(String((assistant?.content?.[0] as { text?: string } | undefined)?.text ?? '').length)
+      .toBe(10_000)
+    const completed = all.filter((event) => {
+      const info = event.payload.properties.info as { role?: string; time?: { completed?: number } } | undefined
+      return event.payload.type === 'message.updated'
+        && info?.role === 'assistant'
+        && info.time?.completed !== undefined
+    })
+    expect(completed.length).toBeGreaterThanOrEqual(1)
+  })
 })
