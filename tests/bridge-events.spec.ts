@@ -1826,6 +1826,36 @@ describe('bridge events: projection and control frames', () => {
     })
   })
 
+  it('closes provisional messages on turn/end after an interrupt', () => {
+    const { translate } = translator()
+    translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('text-chunks', ['partial '], 100, 1, 0, 1, 1),
+      }),
+    ])
+    const ended = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'aborted' } }, 2, 200),
+      }),
+    ])
+    const updated = ended.filter((event) => event.payload.type === 'message.updated')
+    expect(updated.length).toBeGreaterThan(0)
+    const info = updated[updated.length - 1]?.payload.properties.info as {
+      id?: string
+      role?: string
+      time?: { created?: number; completed?: number }
+    }
+    expect(info).toMatchObject({
+      role: 'assistant',
+      time: { completed: 200 },
+    })
+    expect(info.id).toMatch(/^msg_pending:/)
+  })
+
   it('dedupes replayed approval and question frames per SSE connection', () => {
     const state = new InteractionState()
     const guard = { approvals: new Set<string>(), questions: new Set<string>() }

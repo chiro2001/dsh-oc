@@ -1241,6 +1241,33 @@ export class MuxEventTranslator {
           )
           this.pendingAssistantCompletions.delete(sessionId)
         }
+        // Close provisional assistant messages that never got a final
+        // assistant/message (interrupt/error): without `completed` the TUI
+        // keeps them pending forever (the "spinner keeps spinning" class).
+        for (const [stepKey, messageID] of [...state.provisionalMessageIds]) {
+          const created = state.blockStarts.get(`${stepKey}:text`)
+            ?? state.blockStarts.get(`${stepKey}:reasoning`)
+            ?? state.turnStartTime
+            ?? event.time
+          const base = provisionalAssistantMessage(
+            sessionId,
+            this.deps,
+            messageID,
+            created,
+            state.lastUserMessageId ?? `pending:${sessionId}:user`,
+          )
+          const baseTime = base.time as { created?: number } | undefined
+          events.push(
+            makeEvent(directory, 'message.updated', {
+              sessionID: sessionId,
+              info: {
+                ...base,
+                time: { created: baseTime?.created ?? created, completed: event.time },
+              },
+            }, project),
+          )
+        }
+        state.provisionalMessageIds.clear()
         this.currentAssistant.delete(sessionId)
         this.pendingCalls.delete(sessionId)
         this.clearToolTimers(sessionId)

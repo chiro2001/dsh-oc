@@ -48,6 +48,9 @@ describe('local sessions audit', () => {
       const unhandled: Record<string, number> = {}
       const errors: string[] = []
       const roles = new Map<string, string>()
+      const outInfosById = new Map<string, { id?: string; role?: string; completed?: number }>()
+      const callIds = new Set<string>()
+      const resultIds = new Set<string>()
       const translator = new MuxEventTranslator({
         cwd: '/work', state,
         log: (m) => {
@@ -66,18 +69,54 @@ describe('local sessions audit', () => {
             payload: { type: 'session/event', sessionId: 's1', event },
           })) {
             if (translated.payload.type === 'message.updated') {
-              const info = (translated.payload.properties as { info?: { id?: string; role?: string } }).info
-              if (info?.id && info.role) {
+              const info = (translated.payload.properties as {
+                info?: { id?: string; role?: string; time?: { completed?: number } }
+              }).info
+              if (info?.id) {
                 const previous = roles.get(info.id)
-                if (previous !== undefined && previous !== info.role) {
+                if (previous !== undefined && info.role !== undefined && previous !== info.role) {
                   errors.push('message id ' + info.id + ' role conflict: ' + previous + ' vs ' + info.role)
                 }
-                roles.set(info.id, info.role)
+                if (info.role !== undefined) roles.set(info.id, info.role)
+                outInfosById.set(info.id, { ...info, completed: info.time?.completed })
               }
+            }
+            if (translated.payload.type === 'session.next.tool.called') {
+              callIds.add(String((translated.payload.properties as { callID?: unknown }).callID))
+            }
+            if (translated.payload.type === 'session.next.tool.success'
+              || translated.payload.type === 'session.next.tool.failed') {
+              resultIds.add(String((translated.payload.properties as { callID?: unknown }).callID))
             }
           }
         } catch (error) {
           errors.push('seq ' + event.seq + ' ' + event.type + ': ' + (error instanceof Error ? error.message : String(error)))
+        }
+      }
+      const userEvents = lines.map((l) => JSON.parse(l))
+        .filter((e) => e.type === 'user/message' && e.data?.source?.kind === 'user')
+      const translatedUsers = new Set([...outInfosById.values()].filter((i) => i.role === 'user').map((i) => i.id))
+      const missingUsers = userEvents.filter((e) => !translatedUsers.has(String(e.data.id)))
+      if (missingUsers.length > 0) {
+        errors.push(missingUsers.length + ' user messages missing from translation (e.g. ' + missingUsers[0].data.id + ')')
+      }
+      // Completion/pairing checks apply only to sessions that closed with a
+      // turn/end; a still-running session legitimately has open messages.
+      const parsed = lines.map((l) => JSON.parse(l))
+      const lastTurnEnd = parsed.map((e) => e.type).lastIndexOf('turn/end')
+      const tailTypes = lastTurnEnd === -1
+        ? parsed.map((e) => e.type)
+        : parsed.slice(lastTurnEnd + 1).map((e) => e.type)
+      const sessionDone = lastTurnEnd !== -1
+        && tailTypes.every((t) => ['request/header', 'request/context', 'session/end-seed'].includes(t))
+      if (sessionDone) {
+        const openAssistants = [...outInfosById.values()].filter((i) => i.role === 'assistant' && i.completed === undefined)
+        if (openAssistants.length > 0) {
+          errors.push(openAssistants.length + ' assistant messages never completed (e.g. ' + openAssistants[0].id + ')')
+        }
+        const unpairedCalls = [...callIds].filter((id) => !resultIds.has(id))
+        if (unpairedCalls.length > 0) {
+          errors.push(unpairedCalls.length + ' tool calls without result (e.g. ' + unpairedCalls[0] + ')')
         }
       }
       const unhandledCount = Object.values(unhandled).reduce((a, b) => a + b, 0)
