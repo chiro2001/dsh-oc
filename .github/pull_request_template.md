@@ -14,6 +14,8 @@
 - [ ] `pnpm run probe`（__/62）
 - [ ] 相关 e2e：`bash scripts/e2e-tui-*.sh` / `e2e-api*.sh`（列出）
 - [ ] `pnpm run features:update`（如涉及能力矩阵）
+- [ ] `bash scripts/verify-release-artifacts.sh`（如涉及构建产物/发布）
+- [ ] `bash scripts/check-all.sh --e2e`（如涉及桥/TUI/协议路由）
 
 ## 影响面
 

@@ -18,7 +18,7 @@ labels: bug
 ## 环境
 
 - dsh 版本：`dsh --version`
-- dsh-oc 版本：`dsh --profile oc --help` 首行
+- dsh-oc 版本：`dsh-oc --version`（或 `dsh --profile oc --help` 首行）
 - opencode 二进制：`opencode --version`
 - OS / 终端 / tmux 是否使用
 

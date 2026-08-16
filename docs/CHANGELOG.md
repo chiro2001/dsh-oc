@@ -8,6 +8,8 @@
 
 ### 新增
 
+- `.github` 模板升级：bug 报告改用 `dsh-oc --version`；PR 自测清单补充
+  工件审计与全量 e2e 选项。
 - `bridge-router.spec.ts` 追加“翻页间追加消息”游标契约测试：首页后追加新
   回合，旧页游标不变、无重复，全量读取恰好包含追加内容一次。
 - `bridge-router.spec.ts` 新增分页边界不变量测试：`limit` 切过工具回合时，
