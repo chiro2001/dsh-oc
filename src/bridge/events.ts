@@ -276,8 +276,10 @@ export class MuxEventTranslator {
     const existing = state.provisionalMessageIds.get(stepKey)
     if (existing !== undefined) return { messageID: existing, events: [] }
     const bridgeId = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
-    const messageID = bridgeId ?? provisionalMessageId(sessionId, turn, step)
     const alreadyOpen = bridgeId !== undefined && state.openedMessageIds.has(bridgeId)
+    const messageID = alreadyOpen
+      ? provisionalMessageId(sessionId, turn, step)
+      : (bridgeId ?? provisionalMessageId(sessionId, turn, step))
     state.provisionalMessageIds.set(stepKey, messageID)
     if (bridgeId !== undefined) state.openedMessageIds.add(bridgeId)
     return {
@@ -1465,8 +1467,10 @@ export class MuxEventTranslator {
       let provisionalId = state.provisionalMessageIds.get(stepKey)
       if (!provisionalId) {
         const bridgeId = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
-        provisionalId = bridgeId ?? provisionalMessageId(sessionId, event.data.turn, event.data.step)
         const alreadyOpen = bridgeId !== undefined && state.openedMessageIds.has(bridgeId)
+        provisionalId = alreadyOpen
+          ? provisionalMessageId(sessionId, event.data.turn, event.data.step)
+          : (bridgeId ?? provisionalMessageId(sessionId, event.data.turn, event.data.step))
         state.provisionalMessageIds.set(stepKey, provisionalId)
         if (bridgeId !== undefined) state.openedMessageIds.add(bridgeId)
         if (!alreadyOpen) {

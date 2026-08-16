@@ -1931,7 +1931,7 @@ describe('bridge events: projection and control frames', () => {
     })
   })
 
-  it('does not reopen the same turn message for a later step of the same turn', () => {
+  it('gives the follow-up step its own message id for recoverable history', () => {
     const state = new InteractionState()
     state.registerAssistantIdForUser('s1', 'msg-user-1', 'msg_turn_1')
     const { translate } = translator(state)
@@ -1981,19 +1981,31 @@ describe('bridge events: projection and control frames', () => {
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
-        event: makeAssistantEvent([
-          { type: 'text', text: ' answer' },
-        ], 'dsh-asst-2', 1200),
+        event: sessionEvent('assistant/message', {
+          turn: 1,
+          step: 2,
+          message: {
+            id: 'dsh-asst-2' as never,
+            role: 'assistant',
+            content: [{ type: 'text', text: ' answer' }],
+            source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-chat' },
+          },
+        }, 12, 1200),
       }),
     ])
     const stepTwoUpdates = stepTwo.filter((event) =>
       event.payload.type === 'message.updated'
       && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
-    // The follow-up finalization emits a completion reset then the completed
-    // update (official TUI behavior), still under the same turn message id.
-    expect(stepTwoUpdates).toHaveLength(2)
-    expect((stepTwoUpdates[0]?.payload.properties.info as { time?: { completed?: number } }).time?.completed).toBeUndefined()
-    expect((stepTwoUpdates[1]?.payload.properties.info as { time: { completed?: number } }).time.completed).toBe(1200)
+    // The follow-up gets a fresh provisional id so live and restarted
+    // history views keep the same message structure (the in-memory bridge id
+    // mapping is not durable across processes).
+    expect(stepTwoUpdates.map((event) => (event.payload.properties.info as { id?: string }).id))
+      .toEqual([])
+    const followUpIds = stepTwo
+      .filter((event) => event.payload.type === 'message.updated')
+      .map((event) => (event.payload.properties.info as { id?: string }).id)
+      .filter((id): id is string => typeof id === 'string' && id.startsWith('msg_pending:s1:1:2'))
+    expect(followUpIds.length).toBeGreaterThan(0)
     const textParts = [...stepOne, ...stepTwo].filter((event) =>
       event.payload.type === 'message.part.updated'
       && (event.payload.properties.part as { type?: string }).type === 'text'
@@ -2002,7 +2014,7 @@ describe('bridge events: projection and control frames', () => {
       expect((event.payload.properties.part as { messageID?: string }).messageID).toBe('msg_turn_1')
     }
     expect(state.assistantIdForDshId('s1', 'dsh-asst-1')).toBe('msg_turn_1')
-    expect(state.assistantIdForDshId('s1', 'dsh-asst-2')).toBe('msg_turn_1')
+    expect(state.assistantIdForDshId('s1', 'dsh-asst-2')).not.toBe('msg_turn_1')
   })
 
   it('skips queue surfacing for TUI-submitted prompts with a local card', () => {
@@ -2279,9 +2291,16 @@ describe('bridge events: projection and control frames', () => {
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
-        event: makeAssistantEvent([
-          { type: 'text', text: 'answer' },
-        ], 'dsh-asst-2', 1200),
+        event: sessionEvent('assistant/message', {
+          turn: 1,
+          step: 2,
+          message: {
+            id: 'dsh-asst-2' as never,
+            role: 'assistant',
+            content: [{ type: 'text', text: 'answer' }],
+            source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-chat' },
+          },
+        }, 12, 1200),
       }),
       frame({
         type: 'session/event',
@@ -2292,14 +2311,14 @@ describe('bridge events: projection and control frames', () => {
     const updates = events.filter((event) =>
       event.payload.type === 'message.updated'
       && (event.payload.properties.info as { id?: string }).id === 'msg_turn_1')
-    // Opening update + tool-call finalize (completed unset) + follow-up
-    // completion reset + follow-up completion; turn/end must not emit
-    // another completion for the already-finalized message.
-    expect(updates).toHaveLength(4)
+    // Opening update + tool-call finalize (completed unset) + turn/end
+    // completion. The follow-up step owns its own message id, so it cannot
+    // finalize the tool message.
+    expect(updates).toHaveLength(3)
     const completions = updates
       .map((event) => (event.payload.properties.info as { time?: { completed?: number } }).time?.completed)
       .filter((value): value is number => value !== undefined)
-    expect(completions).toEqual([1200])
+    expect(completions).toEqual([1300])
 
     // The skipped pending completion must be discarded, not deferred: a later
     // turn/end must not emit a stale completion for the already-finalized id.
