@@ -608,6 +608,57 @@ describe('bridge router: session routes', () => {
     expect(combined.map((m) => m.type)).toEqual(['user', 'assistant', 'user', 'assistant'])
   })
 
+  it('keeps pagination stable when messages append between pages', async () => {
+    const withSeq = (event: SessionEvent, seq: number): SessionEvent =>
+      ({ ...event, seq }) as SessionEvent
+    const events = [
+      { event: withSeq(makeUserEvent('u1', 'm1', 1000), 1) },
+      { event: withSeq(makeAssistantEvent([{ type: 'text', text: 'a1' }], 'a1', 1100), 2) },
+      { event: withSeq(makeUserEvent('u2', 'm2', 1200), 3) },
+      { event: withSeq(makeAssistantEvent([{ type: 'text', text: 'a2' }], 'a2', 1300), 4) },
+    ]
+    const api: BridgeApi = {
+      ...fakeApi(),
+      sessions: {
+        ...fakeApi().sessions,
+        history: async (request) => {
+          const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
+          let window = events
+          if (payload.beforeSeq !== undefined) {
+            window = events.filter((entry) => entry.event.seq < payload.beforeSeq)
+          }
+          const max = payload.maxMessages ?? events.length
+          const tail = window.slice(-max)
+          return okRpc({ events: tail, hasMore: window.length > tail.length })
+        },
+      },
+    }
+    const { server } = await boot(api)
+
+    const page = await request(server, 'GET', '/api/session/s1/history?limit=1')
+    const pageBody = page.body as { data?: Array<{ text?: string }>; hasMore?: boolean; next?: number }
+    const textOf = (m: { text?: string; content?: Array<{ text?: string }> }): string =>
+      m.text ?? m.content?.[0]?.text ?? ''
+    expect(pageBody.data?.[0] && textOf(pageBody.data[0])).toBe('a2')
+    expect(pageBody.next).toBe(4)
+
+    // A new turn is appended after the first page was fetched.
+    events.push(
+      { event: withSeq(makeUserEvent('u3', 'm3', 1400), 5) },
+      { event: withSeq(makeAssistantEvent([{ type: 'text', text: 'a3' }], 'a3', 1500), 6) },
+    )
+
+    const older = await request(server, 'GET', `/api/session/s1/history?after=${pageBody.next}`)
+    const olderBody = older.body as { data?: Array<{ text?: string }>; hasMore?: boolean }
+    expect(olderBody.data?.map(textOf)).toEqual(['u1', 'a1', 'u2'])
+    expect(olderBody.hasMore).toBe(false)
+
+    // A fresh full read sees each message exactly once, including the append.
+    const all = await request(server, 'GET', '/api/session/s1/history')
+    const allBody = all.body as { data?: Array<{ text?: string }> }
+    expect(allBody.data?.map(textOf)).toEqual(['u1', 'a1', 'u2', 'a2', 'u3', 'a3'])
+  })
+
   it('remaps v1 parentIDs to surface ids in warm history', async () => {
     const base = fakeApi()
     const api: BridgeApi = {

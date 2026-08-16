@@ -8,6 +8,8 @@
 
 ### 新增
 
+- `bridge-router.spec.ts` 追加“翻页间追加消息”游标契约测试：首页后追加新
+  回合，旧页游标不变、无重复，全量读取恰好包含追加内容一次。
 - `bridge-router.spec.ts` 新增分页边界不变量测试：`limit` 切过工具回合时，
   `after`/`next` 以已转换消息的最旧 seq 为锚点，工具事件（tool/call、
   tool/result 不独立成消息）整体落在同一侧页，跨页合并后工具 part 恰好
