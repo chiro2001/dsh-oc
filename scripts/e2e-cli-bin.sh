@@ -52,6 +52,14 @@ if [[ "$SHORT" != "$LONG" ]]; then
 fi
 echo "  dsh-oc --help == dsh --profile oc --help"
 
+VER="$(dsh-oc --version 2>&1)"
+if [[ ! "$VER" =~ dsh-oc[[:space:]][0-9]+\.[0-9]+\.[0-9]+ ]] || [[ "$VER" != *"(dsh "* ]]; then
+  echo "e2e: dsh-oc --version output unexpected:" >&2
+  echo "$VER" >&2
+  exit 1
+fi
+echo "  dsh-oc --version ok: $VER"
+
 node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null
 
 echo "e2e-cli-bin: PASSED in $((SECONDS - SCRIPT_START))s"
