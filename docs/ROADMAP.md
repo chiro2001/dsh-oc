@@ -81,9 +81,14 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
 - 实验 1c：脱敏真实 corpus（feature manifest + allowlist 脱敏 + 人工
   golden，不以“10+ 会话”为合格标准）+ 1.18.18 黄金轨迹 + 官方最小复现
   （错序归因证据或中性措辞二选一）。
-- 实验 2：`v0.1.0-rc.2` 以 full SHA 为真相源：干净 rebuild 后 `lib/` 零
-  差异、远端 SHA 冷装、前版升级/旧会话恢复/回滚、至少 Linux x64 +
-  macOS arm64 smoke；通过后再打受保护 tag。
+- 实验 2（2026-08-17 已落地工具与首轮演练）：`v0.1.0-rc.2` 以 full SHA
+  为真相源 —— `scripts/verify-release-artifacts.sh` 已加入 check-all 门禁：
+  HEAD 源码 clean rebuild 后 committed `lib/` 零差异、npm pack 无机器绝对
+  路径、记录 package version/tarball sha256/package-tree hash；
+  `scripts/e2e-install-rollback.sh`（manual）从远端 full SHA 冷装候选并跑
+  真实 TUI smoke（28s），再回滚到前版 spec 复跑（23s），并探测同 profile
+  内 re-add 行为。版本号未 bump 前 in-place 结果不可作为缓存安全证明；
+  待 rc.2 版本 bump 后重跑并打受保护 tag。
 - 实验 3：flake 分层统计（最小高风险 case 各 10 次，零失败后扩到 30–60
   次；release-lane 预算 30–45 分钟；语义首败不 retry）。
 - `--continue` 完整消息图变体不再优先：保留 `e2e-tui-continue.sh` 选择

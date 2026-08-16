@@ -8,6 +8,12 @@
 
 ### 新增
 
+- 发布工件审计 `scripts/verify-release-artifacts.sh`（已入 `check-all` 门禁）：
+  从 HEAD 源码干净重建并断言 committed `lib/` 零差异；npm pack 扫描机器
+  绝对路径；输出 package version、tarball sha256 与 package-tree hash。
+- 安装/升级/回滚演练 `scripts/e2e-install-rollback.sh`（manual）：从远端
+  GitHub full SHA 冷装候选并跑真实 TUI smoke，回滚到前版 spec 复跑，同
+  profile 内探测 re-add 行为；版本 bump 前 in-place 结果仅作命令路径验证。
 - 恢复故障域 e2e 矩阵：
   - `scripts/e2e-recovery-crash.sh`：SIGKILL dsh 在慢流中途，`--session`
     重启后断言持久前缀 exactly-once（不丢、不伪造完成）、会话回 idle（必要时

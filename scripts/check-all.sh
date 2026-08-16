@@ -27,6 +27,9 @@ pnpm run probe
 echo "== perf smoke (200 sessions) =="
 node scripts/perf.mjs --sessions 200 --quiet >/dev/null
 
+echo "== release artifact audit =="
+bash scripts/verify-release-artifacts.sh
+
 if [[ -n "$SCALE" ]]; then
   echo "== perf scale (${SCALE} sessions) =="
   node scripts/perf.mjs --sessions "$SCALE" --quiet >/dev/null
