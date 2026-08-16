@@ -162,6 +162,8 @@ e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
 
 - `main`：稳定发布线，README 安装命令默认 `#main`。
 - `develop`：集成交付线，日常开发与用户实时验证；稳定后回合 main。
+- 发布候选（rc.N）按 `docs/RELEASE.md` 执行：版本 bump、全套门禁、
+  full-SHA 远端安装/回滚演练、真实模型 smoke、受保护 tag；npm 保持 NO-GO。
 - 功能分支：`feat-*` / `fix-*` / `docs-*` / `perf-*` / `test-*` / `chore-*`，
   从 develop 拉出，短生命周期。
 - 提交规范：Conventional Commits（feat/fix/docs/perf/test/chore/refactor）。

@@ -118,6 +118,7 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   真实 TUI smoke（28s），再回滚到前版 spec 复跑（23s），并探测同 profile
   内 re-add 行为。版本号未 bump 前 in-place 结果不可作为缓存安全证明；
   待 rc.2 版本 bump 后重跑并打受保护 tag。
+  发布执行清单见 `docs/RELEASE.md`。
 - vendor ABI 升级 lane（2026-08-17 已落地）：`scripts/upgrade-lane.sh`
   对候选 opencode 二进制跑黄金场景（版本检查经
   `DSH_OC_BYPASS_VERSION_CHECK=1` 旁路，仅手动 lane 使用），归一化轨迹与

@@ -59,6 +59,9 @@ dsh plugin --profile oc add chiro2001/dsh-oc
 固定分支/版本用 pnpm git spec，例如 `github:chiro2001/dsh-oc#develop`。
 npm 包名为 `@chiro2001/dsh-oc`（未发布 registry，走 GitHub 源安装）。
 
+发布与候选流程见 `docs/RELEASE.md`（版本 bump → 全套门禁 → full-SHA
+安装/回滚演练 → 受保护 tag）。
+
 安装后可用简写命令 `dsh-oc`（等价于 `dsh --profile oc`，参数原样透传）。
 它由 npm `bin` 提供：把 profile 的 bin 目录加入 PATH 即可直接使用，例如：
 
