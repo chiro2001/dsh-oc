@@ -151,7 +151,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`ccfed90`（2026-08-16）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`cfddd26`（2026-08-16）。
 
 ### 路由注册表
 
@@ -169,21 +169,16 @@
 | `GET` | `/formatter` | json | `src/bridge/stubs.ts` |
 | `GET` | `/lsp` | json | `src/bridge/stubs.ts` |
 | `GET` | `/mcp` | json | `src/bridge/stubs.ts` |
-| `GET` | `/vcs` | json | `src/bridge/routes/vcs.ts`（真实 git 信息） |
-| `GET` | `/vcs/status` | json | `src/bridge/routes/vcs.ts` |
-| `GET` | `/vcs/diff` | json | `src/bridge/routes/vcs.ts` |
-| `GET` | `/vcs/diff/raw` | json | `src/bridge/routes/vcs.ts` |
-| `GET` | `/api/fs/read/*` | json(raw) | `src/bridge/routes/fs.ts`（工作区文件读取，越界 400） |
-| `GET` | `/api/fs/list` | json | `src/bridge/routes/fs.ts` |
-| `GET` | `/api/fs/find` | json | `src/bridge/routes/fs.ts`（跳过依赖/构建目录） |
 
 ### 测试覆盖
 
 | 测试文件 | 用例数 | 最后更新 |
 |---|---|---|
-| `tests/bridge-events.spec.ts` | 40 | 2e52727 feat(bridge): add v2 interrupt route and dedupe replayed stream chunks |
-| `tests/bridge-git.spec.ts` | 1 | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `tests/bridge-router.spec.ts` | 82 | ac52b2a feat(bridge): add single provider lookup endpoint |
+| `tests/bin.spec.ts` | 3 | e157b88 feat(cli): add dsh-oc shortcut command |
+| `tests/bridge-events.spec.ts` | 51 | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
+| `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
+| `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
+| `tests/bridge-router.spec.ts` | 93 | cf264fd docs(readme): simplify per user review; feat(bridge): queue backlog hint on slash outcomes |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 20 | 653f1da fix(bridge): end reasoning parts at the last reasoning chunk time |
 | `tests/convert/model.spec.ts` | 7 | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
@@ -215,20 +210,23 @@
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 0de1c30 feat(bridge): stream tool input deltas and v2 tool lifecycle events |
 | `src/bridge/errors.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
-| `src/bridge/events.ts` | 2e52727 feat(bridge): add v2 interrupt route and dedupe replayed stream chunks |
-| `src/bridge/git.ts` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `src/bridge/http.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
+| `src/bridge/events.ts` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
+| `src/bridge/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
+| `src/bridge/git.ts` | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
+| `src/bridge/http.ts` | 5f6aad0 feat(bridge): serve workspace files over /api/fs with wildcard routing |
 | `src/bridge/index.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `src/bridge/router.ts` | d8aaf64 feat(bridge): add per-session SSE event stream |
-| `src/bridge/routes.ts` | 942b799 refactor(bridge): split route registrations into domain modules |
-| `src/bridge/routes/boot.ts` | ac52b2a feat(bridge): add single provider lookup endpoint |
+| `src/bridge/router.ts` | 93f3536 fix(bridge): handle flat durable session row and isolate frame translation |
+| `src/bridge/routes.ts` | 5f6aad0 feat(bridge): serve workspace files over /api/fs with wildcard routing |
+| `src/bridge/routes/boot.ts` | c958de3 feat(bridge): add global health and lifecycle dispose endpoints |
+| `src/bridge/routes/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/routes/permission.ts` | fd1e4b5 feat(bridge): add SDK v2 permission reply alias route |
-| `src/bridge/routes/session-v1.ts` | f6afc34 feat(bridge): add single-message lookup endpoint |
-| `src/bridge/routes/session-v2.ts` | c9dd380 feat(bridge): add v2 single-message lookup alias |
+| `src/bridge/routes/session-v1.ts` | cf264fd docs(readme): simplify per user review; feat(bridge): queue backlog hint on slash outcomes |
+| `src/bridge/routes/session-v2.ts` | c9015cb fix(bridge): mirror dsh pending queue to the TUI and drop prompt debounce |
+| `src/bridge/routes/vcs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/bridge/rpc.ts` | 61e8a42 feat(bridge): serve the dsh skill catalog through /skill routes |
 | `src/bridge/sse.ts` | 18b1438 feat(bridge): one-shot slash command ux and visible compact execution |
-| `src/bridge/state.ts` | 9457a1b feat(bridge): apply Tab-selected agent on prompts; warn once when dsh locks the preset |
-| `src/bridge/stubs.ts` | 3b56c7c feat(bridge): enable background subagents capability and background endpoint |
+| `src/bridge/state.ts` | c9015cb fix(bridge): mirror dsh pending queue to the TUI and drop prompt debounce |
+| `src/bridge/stubs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/help.ts` | a289e00 docs(help): mention background subagents in capability summary |
 | `src/index.ts` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
@@ -237,37 +235,48 @@
 | `src/tui/node-undici.d.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `scripts/check-all.sh` | 396b49b test(e2e): add real TUI permission and question dialog coverage |
+| `scripts/audit-local-sessions.sh` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
+| `scripts/check-all.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
+| `scripts/cleanup-e2e-runs.sh` | ec31177 chore: add e2e run directory cleanup script |
 | `scripts/cleanup-merged-branches.sh` | 2848dc8 fix(scripts): accept --apply/--remote flags before the target branch |
+| `scripts/e2e-api-attachment.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
 | `scripts/e2e-api-goal.sh` | 13460d4 feat(bridge): /goal complete via goals API plus full lifecycle e2e |
-| `scripts/e2e-api.sh` | ac52b2a feat(bridge): add single provider lookup endpoint |
-| `scripts/e2e-tui-abort.sh` | 2e52727 feat(bridge): add v2 interrupt route and dedupe replayed stream chunks |
-| `scripts/e2e-tui-boot.sh` | a01f3e5 test(boot): scope opencode-serve assertion to dsh child process |
-| `scripts/e2e-tui-brand.sh` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
-| `scripts/e2e-tui-command.sh` | dfcb45e test(e2e): retry transient curl failures via e2e_curl helper |
-| `scripts/e2e-tui-continue.sh` | 9e9454f test(e2e): assert real title for resumed --continue session |
-| `scripts/e2e-tui-dir-filter.sh` | bca2ad6 test(e2e): use jq @uri instead of python3 for URL encoding |
-| `scripts/e2e-tui-dir.sh` | 7ed9ee0 test(e2e): cover relative --dir resolution in the real TUI |
-| `scripts/e2e-tui-fork.sh` | 8820b66 test(e2e): cover attach --fork --session in the real TUI |
-| `scripts/e2e-tui-goal.sh` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
+| `scripts/e2e-api-permission.sh` | d9b4559 test(e2e): harden permission suites against slow runners |
+| `scripts/e2e-api.sh` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
+| `scripts/e2e-real-llm.sh` | 66c7188 test(e2e): stable real-LLM goal path and agent-tab coverage |
+| `scripts/e2e-tui-abort.sh` | 1ed1c51 test(e2e): assert interrupt settles the TUI spinner |
+| `scripts/e2e-tui-agent-tab.sh` | 66c7188 test(e2e): stable real-LLM goal path and agent-tab coverage |
+| `scripts/e2e-tui-boot.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-brand.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-command.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-continue.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-dir-filter.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-dir.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-fork.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-goal.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-help.sh` | f574dfb feat(tui): dsh --profile oc --help capability summary and README matrix |
-| `scripts/e2e-tui-mini.sh` | f00ee9b test(e2e): assert dsh-oc exit note after graceful mini exit |
-| `scripts/e2e-tui-offline.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
-| `scripts/e2e-tui-permission.sh` | 82c0f57 test(e2e): cover mini always/reject/question permission flows |
-| `scripts/e2e-tui-print-logs.sh` | 071dfdc test(e2e): assert --print-logs forwarding through the fake opencode child |
-| `scripts/e2e-tui-skill.sh` | 360a21d test(e2e): verify skill slash command with Enter+Enter submission |
-| `scripts/e2e-tui-stream.sh` | 5509bb3 test(e2e): measure streamed text prefix across wrapped pane |
-| `scripts/e2e-tui-timestamps.sh` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
-| `scripts/e2e-tui-tools.sh` | b24d9d5 fix(bridge): independent fork sessions and git-tracked sidebar diffs |
-| `scripts/e2e-tui-turn.sh` | 01b5bf0 feat(bridge): show real durable session titles in the list |
+| `scripts/e2e-tui-mini.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-offline.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-permission-ext.sh` | 45b0726 test(e2e): make question highlight assertion theme-agnostic |
+| `scripts/e2e-tui-permission.sh` | d9b4559 test(e2e): harden permission suites against slow runners |
+| `scripts/e2e-tui-print-logs.sh` | 7561559 test(e2e): assert --log-level value passthrough to opencode child |
+| `scripts/e2e-tui-queue-live.sh` | e37d7fd test(e2e): keyboard queue while a live stream is running |
+| `scripts/e2e-tui-queue.sh` | c9015cb fix(bridge): mirror dsh pending queue to the TUI and drop prompt debounce |
+| `scripts/e2e-tui-skill.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-stream.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-timestamps.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-tools.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-turn.sh` | 63aed43 ci: restore stable push suite after proxy fix |
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/generate-tui-branding-art.mjs` | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `scripts/perf-session-gen.mjs` | 3d8a88d feat(perf): session history generator and bridge performance harness |
 | `scripts/perf.mjs` | 2ee0b75 perf(scripts): report session title coverage in perf runs |
 | `scripts/probe-opencode.mjs` | 942b799 refactor(bridge): split route registrations into domain modules |
+| `scripts/replay-session-audit.sh` | 54c9c31 test(bridge): add reusable real-session replay audit script |
 | `scripts/update-feature-matrix.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 <!-- FEATURES:AUTO:END -->
+
 
 
 
