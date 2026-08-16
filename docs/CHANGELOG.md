@@ -8,6 +8,9 @@
 
 ### 新增
 
+- `docs/PROTOCOL.md` 补齐 v2 路由表：`/api/session/{id}/history`
+  （`after` 独占上界 + `next` 游标语义）、`prompt`/`model`/`agent` 端点，
+  并注明跨页分页不变量。
 - `e2e-tui-turn.sh` 增加工具 part 恰好一次断言：历史中 bash 工具卡片只能
   出现 1 次（“动态工具调用两次相同显示”回归项）。
 - `e2e-tui-preset-inherit.sh`：对话前 `/preset minimal`（含选择器确认

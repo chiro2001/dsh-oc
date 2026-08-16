@@ -187,9 +187,13 @@ GET /api/integration?location[directory]=...
 | `POST /session/{id}/command` | MAP | `/preset`、`/goal` 经 dsh command registry 执行并广播 busy/idle；`/help` 本地返回能力摘要 |
 | `GET /session/{id}/children` | MAP | 会话列表中 `parentSessionId == id` 的 subagent 子会话（`convertSessionSummary`） |
 | `GET /api/session/{id}` | MAP | 同 v1 |
-| `GET /api/session/{id}/message` | MAP | 同 v1 |
+| `GET /api/session/{id}/message` | MAP | 同 v1；`cursor.previous` 提供上一页锚点 |
+| `GET /api/session/{id}/history` | MAP | v2 历史分页：`limit` + `after`（独占上界，映射 dsh `beforeSeq` 向后翻页），返回 `{ data, hasMore, next }` |
 | `GET /api/session/{id}/context` | MAP | `{ data: SessionMessage[] }`（复用 v2 消息转换，无游标） |
 | `GET /api/session/{id}/message/{messageID}` | MAP | `{ data: SessionMessage }` 单条查询；未找到 404 |
+| `POST /api/session/{id}/prompt` | MAP | v2 prompt（同 v1，`messageID` 可选；slash 命令经 command registry） |
+| `POST /api/session/{id}/model` | MAP | v2 模型选择（含 `variant`，`reconcileModelSelection` 兜底） |
+| `POST /api/session/{id}/agent` | MAP | v2 agent 切换（`switchAgentPreset` + 广播 `session.updated`） |
 | `GET /api/session/{id}/event` | MAP | 按会话过滤的 SSE 事件流（`/global/event` 子集） |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
 | `GET /api/session/{id}/permission/{rid}` | MAP | 单条 pending approval（session 不匹配 404） |
@@ -207,6 +211,10 @@ GET /api/integration?location[directory]=...
 | `GET /global/health` | MAP | `{ healthy: true, version }` |
 | `POST /global/dispose` / `POST /instance/dispose` | MAP | no-op 确认 `true`（dsh 拥有进程生命周期） |
 | 其他未列路由 | LATER | 501 或 schema-valid 空响应 |
+
+> `after` 为**独占上界**：返回事件 seq 严格小于 `after` 的消息页，`next`
+> 为本页最旧锚点 seq（供独立客户端连续向前翻页）；`after` 非负整数否则
+> 400。分页边界会切开工具回合时，跨页游标保证无漏页/重页（恢复 e2e 覆盖）。
 
 ---
 
