@@ -81,7 +81,9 @@ wait_ready() {
   local deadline=$((SECONDS + 90))
   while (( SECONDS < deadline )); do
     e2e_tui_capture "$E2E_RUN_DIR/ready.txt"
-    grep -qa 'Ask anything' "$E2E_RUN_DIR/ready.txt" && return 0
+    # Real attach sessions do not show the home "Ask anything" placeholder;
+    # the model footer or the status line is the reliable render signal.
+    grep -qaE 'Build ·|Context|ctrl\+p commands' "$E2E_RUN_DIR/ready.txt" && return 0
     [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]] && return 1
     sleep 1
   done
@@ -148,8 +150,12 @@ if [[ "$QUICK" != "1" ]]; then
 fi
 
 echo "== goal + variant =="
-curl -s -X POST "$B/session/$SID/message" -H 'Content-Type: application/json' \
-  -d '{"parts":[{"type":"text","text":"创建一个 goal：验证 dsh-oc 真实 LLM 集成"}]}' >/dev/null
+# Use the deterministic /goal command (same path as the TUI) instead of
+# asking the model to call create_goal itself: real-model behavior varies
+# and a model that merely narrates instead of invoking the tool stalls the
+# probe. The model-driven create_goal path is still covered by e2e-api-goal.sh.
+curl -s -X POST "$B/session/$SID/command" -H 'Content-Type: application/json' \
+  -d '{"command":"goal","arguments":"验证 dsh-oc 真实 LLM 集成"}' >/dev/null
 GOAL_OK=""
 deadline=$((SECONDS + 90))
 while (( SECONDS < deadline )); do
