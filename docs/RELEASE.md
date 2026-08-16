@@ -41,9 +41,9 @@ SHA** 为真相源，`lib/` 构建产物必须随提交且与源码零差异。
 8. **更新本地安装**：`dsh plugin --profile oc add github:chiro2001/dsh-oc#v0.1.0-rc.2`，
    `dsh-oc --version` 应输出 `dsh-oc 0.1.0-rc.2 (dsh ...)`。
 
-## 当前候选就绪状态（2026-08-17，commit `12ca493`）
+## 当前候选就绪状态（2026-08-17，commit `8d40031`）
 
-以下证据在提交 `12ca493`（main/develop 同步）上验证通过，rc.2 仅剩
+以下证据在提交 `8d40031`（main/develop 同步）上验证通过，rc.2 仅剩
 版本 bump + tag（需用户确认）：
 
 - 本地门禁：340 单测、probe 62/62、工件审计（lib 零差异、pack 无
