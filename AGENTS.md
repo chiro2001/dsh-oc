@@ -73,6 +73,7 @@ bash scripts/audit-local-sessions.sh [sessions-dir]
 bash scripts/e2e-recovery-crash.sh        # 故障域：SIGKILL 中途崩溃后 --session 重启恢复
 bash scripts/e2e-recovery-sse-reconnect.sh # 故障域：观察者 SSE 断流重连后 exactly-once
 node scripts/build-replay-corpus.mjs      # 重新生成 tests/fixtures/replay 合成语料（结构保持，无真实内容）
+node scripts/replay-corpus-manifest.mjs   # 扫描真实会话的 feature 覆盖，输出语料覆盖差集（无内容外泄）
  ```
 
 本地直连 dsh profile（实时验证）：`dsh plugin --profile oc add .`；改代码后

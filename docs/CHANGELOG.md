@@ -8,6 +8,9 @@
 
 ### 新增
 
+- flake 扫描第二轮：`e2e-tui-queue-live.sh` 与 `e2e-tui-agent-tab.sh`
+  各 10 次首跑全绿（此前 CI 偶发 flake 的两个脚本），结果见
+  docs/perf/results-flake-tui-2026-08-17.md。
 - 真实会话 feature 覆盖扫描 `scripts/replay-corpus-manifest.mjs`：只输出
   事件类型/特征计数，不接触真实内容；64 个真实会话的 12 个特征已全部被
   合成语料覆盖（long-session 由 spec 运行时生成覆盖），报告见

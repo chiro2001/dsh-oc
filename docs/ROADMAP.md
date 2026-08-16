@@ -104,6 +104,10 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   `docs/perf/results-flake-recovery-2026-08-17.md`）。扫描首跑发现 crash
   oracle 过严（把崩溃边界内未落盘 chunk 的合法恢复判失败），已改为
   “持久前缀 or 尾部文本前缀”语义。
+- 实验 3 第二轮（2026-08-17）：queue-live 与 agent-tab 各 10 次全绿
+  （19–20s / 11–12s，见
+  `docs/perf/results-flake-tui-2026-08-17.md`）；permission 最小 case
+  拆分后补跑。
 - `--continue` 完整消息图变体不再优先：保留 `e2e-tui-continue.sh` 选择
   契约，后续可补低成本 `-c` 选择契约。
 
