@@ -46,6 +46,7 @@ prompt_tool() {
 
 wait_permission() {
   local file="$1"
+  local sid="${2:-}"
   local deadline=$((SECONDS + 60))
   while (( SECONDS < deadline )); do
     curl -s "$BRIDGE/permission" > "$file" || true
@@ -54,6 +55,12 @@ wait_permission() {
   done
   echo "e2e: no permission within 60s" >&2
   cat "$file" >&2 2>/dev/null || true
+  echo "--- session messages ---" >&2
+  if [[ -n "$sid" ]]; then
+    curl -s "$BRIDGE/session/$sid/message" | jq -r '.. | objects | select(has("text")) | .text' 2>/dev/null | tail -8 >&2 || true
+  fi
+  echo "--- mock log tail ---" >&2
+  tail -8 "$E2E_MOCK_ERR" >&2 2>/dev/null || true
   return 1
 }
 
@@ -87,7 +94,7 @@ wait_assistant() {
 
 echo "== run A: v1 once / v2 always / auto-approve / cross-session isolation =="
 CORE_SEQ=""
-for _i in 1 2 3 4 5; do
+for _i in 1 2 3 4 5 6 7 8 9 10; do
   if [[ -n "$CORE_SEQ" ]]; then CORE_SEQ+=","; fi
   CORE_SEQ+="tool_call_success,success,success"
 done
@@ -104,7 +111,7 @@ S1="$(create_session)"
 echo "  session $S1"
 
 prompt_tool "$S1"
-wait_permission "$E2E_RUN_DIR/perm1.json"
+wait_permission "$E2E_RUN_DIR/perm1.json" "$S1"
 PID1="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm1.json")"
 jq -e --arg s "$S1" '.[0].sessionID == $s and .[0].permission == "bash"' "$E2E_RUN_DIR/perm1.json" >/dev/null
 V2_LIST="$(curl -s "$BRIDGE/api/session/$S1/permission")"
@@ -130,7 +137,7 @@ fi
 echo "  v1 once resolved; no saved grant"
 
 prompt_tool "$S1"
-wait_permission "$E2E_RUN_DIR/perm2.json"
+wait_permission "$E2E_RUN_DIR/perm2.json" "$S1"
 PID2="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm2.json")"
 CODE="$(curl -s -o "$E2E_RUN_DIR/v2-always.json" -w '%{http_code}' \
   -X POST "$BRIDGE/api/session/$S1/permission/$PID2/reply" -H 'Content-Type: application/json' \
@@ -150,7 +157,7 @@ echo "  same-session third call auto-approved without a dialog"
 S2="$(create_session)"
 echo "  new session $S2"
 prompt_tool "$S2"
-wait_permission "$E2E_RUN_DIR/perm3.json"
+wait_permission "$E2E_RUN_DIR/perm3.json" "$S2"
 PID3="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm3.json")"
 jq -e --arg s "$S2" '.[0].sessionID == $s' "$E2E_RUN_DIR/perm3.json" >/dev/null
 CODE="$(curl -s -o "$E2E_RUN_DIR/v2-alias.json" -w '%{http_code}' \
@@ -181,7 +188,7 @@ CODE="$(curl -s -o "$E2E_RUN_DIR/saved-delete-404.json" -w '%{http_code}' \
 echo "  DELETE /api/permission/saved/:id removed grant; second delete -> 404"
 
 prompt_tool "$S1"
-wait_permission "$E2E_RUN_DIR/perm4.json"
+wait_permission "$E2E_RUN_DIR/perm4.json" "$S1"
 PID4="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm4.json")"
 curl -s -X POST "$BRIDGE/permission/$PID4/reply" -H 'Content-Type: application/json' \
   -d '{"reply":"reject"}' | jq -e '. == true' >/dev/null
@@ -254,7 +261,7 @@ open_sse "$BRIDGE" "$E2E_RUN_DIR/error-sse.txt"
 S4="$(create_session)"
 echo "  session $S4"
 prompt_tool "$S4"
-wait_permission "$E2E_RUN_DIR/perm4.json"
+wait_permission "$E2E_RUN_DIR/perm4.json" "$S4"
 PID4="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm4.json")"
 
 CODE="$(curl -s -o "$E2E_RUN_DIR/err-empty.json" -w '%{http_code}' \

@@ -65,6 +65,8 @@ wait_permission_dialog() {
   done
   echo "e2e: permission dialog did not appear" >&2
   tail -40 "$file" >&2 || true
+  echo "--- mock log tail ---" >&2
+  tail -8 "$E2E_MOCK_ERR" >&2 2>/dev/null || true
   return 1
 }
 
@@ -92,7 +94,10 @@ active_session_id() {
 }
 
 echo "== run A: allow once / allow always / auto-approve =="
-e2e_new_run "tui-permission" "workspace-write" "tool_call_success,tool_call_success,tool_call_success,success,success" "0"
+# Three consecutive tool calls drive the once -> always -> auto-approve
+# dialogs; keep extra tool calls + success slots for slow runners.
+e2e_new_run "tui-permission" "workspace-write" \
+  "tool_call_success,tool_call_success,tool_call_success,tool_call_success,success,success,success,success,success,success" "0"
 use_standard_preset
 e2e_tui_start ""
 e2e_tui_wait_attach
