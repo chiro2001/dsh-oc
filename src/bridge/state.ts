@@ -63,6 +63,16 @@ export class InteractionState {
   readonly inboxProjections = new Map<string, InboxProjection>()
   /** Message ids already surfaced to the TUI as queued user messages. */
   readonly presentQueuedIds = new Set<string>()
+  /** dsh user message ids already echoed by the prompt route (broadcast). */
+  private readonly broadcastDshIds = new Set<string>()
+  /** TUI-generated `messageID`s from prompt submissions, FIFO per session. */
+  private readonly promptMessageIds = new Map<string, string[]>()
+  /** dsh user message id -> TUI prompt id (kept so history echoes match). */
+  private readonly dshPromptMessageIds = new Map<string, string>()
+  /** Bridge-generated assistant message ids keyed by user message id. */
+  private readonly assistantIdsByUser = new Map<string, Map<string, string>>()
+  /** dsh assistant message id -> bridge assistant id (history echo match). */
+  private readonly dshAssistantIds = new Map<string, string>()
   sessionListCache?: { items: SessionSummary[]; at: number }
   /** In-flight session.list RPC shared by concurrent callers (incl. prefetch). */
   sessionListLoading?: Promise<SessionSummary[]>
@@ -216,6 +226,84 @@ export class InteractionState {
 
   private queuedKey(sessionId: string, messageId: string): string {
     return `${sessionId}\u0000${messageId}`
+  }
+
+  /** Whether a user message id was already surfaced as a queued card. */
+  hasPresentedQueued(sessionId: string, messageId: string): boolean {
+    return this.presentQueuedIds.has(this.queuedKey(sessionId, messageId))
+  }
+
+  /** Forget a presented queued id once the same message becomes durable. */
+  clearPresentedQueued(sessionId: string, messageId: string): void {
+    this.presentQueuedIds.delete(this.queuedKey(sessionId, messageId))
+  }
+
+  /** Remember a durable user message id already broadcast by the prompt route. */
+  markBroadcastDshId(sessionId: string, dshId: string): void {
+    this.broadcastDshIds.add(`${sessionId}\u0000${dshId}`)
+  }
+
+  /** Whether the durable user message was already broadcast at submission. */
+  isBroadcastDshId(sessionId: string, dshId: string): boolean {
+    return this.broadcastDshIds.has(`${sessionId}\u0000${dshId}`)
+  }
+
+  /** Register a TUI-generated message id for the next user echo of a session. */
+  registerPromptMessageId(sessionId: string, promptId: string): void {
+    const queue = this.promptMessageIds.get(sessionId)
+    if (queue === undefined) {
+      this.promptMessageIds.set(sessionId, [promptId])
+    } else {
+      queue.push(promptId)
+    }
+  }
+
+  /** Oldest registered prompt id that has not been echoed yet, if any. */
+  peekPromptMessageId(sessionId: string): string | undefined {
+    return this.promptMessageIds.get(sessionId)?.[0]
+  }
+
+  /**
+   * Consume the oldest prompt id for a session once its dsh user message
+   * arrives; returns the surface id (prompt id when known, else the dsh id).
+   */
+  takePromptMessageId(sessionId: string, dshId: string): string {
+    const queue = this.promptMessageIds.get(sessionId)
+    const promptId = queue?.shift()
+    if (queue !== undefined && queue.length === 0) this.promptMessageIds.delete(sessionId)
+    if (promptId === undefined) return dshId
+    this.dshPromptMessageIds.set(`${sessionId}\u0000${dshId}`, promptId)
+    return promptId
+  }
+
+  /** Map a durable dsh message id back to its TUI prompt id, if registered. */
+  promptIdForDshId(sessionId: string, dshId: string): string | undefined {
+    return this.dshPromptMessageIds.get(`${sessionId}\u0000${dshId}`)
+  }
+
+  /** Register the assistant id that will back a user turn's streamed reply. */
+  registerAssistantIdForUser(sessionId: string, userId: string, assistantId: string): void {
+    let byUser = this.assistantIdsByUser.get(sessionId)
+    if (byUser === undefined) {
+      byUser = new Map()
+      this.assistantIdsByUser.set(sessionId, byUser)
+    }
+    byUser.set(userId, assistantId)
+  }
+
+  /** Assistant id registered for a user turn, if any. */
+  assistantIdForUser(sessionId: string, userId: string): string | undefined {
+    return this.assistantIdsByUser.get(sessionId)?.get(userId)
+  }
+
+  /** Record a dsh->bridge assistant id mapping after a streamed turn. */
+  recordAssistantId(sessionId: string, dshId: string, bridgeId: string): void {
+    this.dshAssistantIds.set(`${sessionId}\u0000${dshId}`, bridgeId)
+  }
+
+  /** Map a durable dsh assistant id back to its bridge id, if registered. */
+  assistantIdForDshId(sessionId: string, dshId: string): string | undefined {
+    return this.dshAssistantIds.get(`${sessionId}\u0000${dshId}`)
   }
 
   /**

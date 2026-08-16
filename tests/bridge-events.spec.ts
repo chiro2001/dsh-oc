@@ -468,6 +468,8 @@ describe('bridge events: session event mapping', () => {
       }),
     ])
 
+    // The provisional `message.updated` (created, no completed) is emitted
+    // when streaming starts under the same stable id the final update reuses.
     const provisionalIndex = events.findIndex((event) =>
       event.payload.type === 'message.updated'
       && String((event.payload.properties.info as { id?: unknown }).id).startsWith('msg_pending:'))
@@ -595,6 +597,63 @@ describe('bridge events: session event mapping', () => {
       id: 'prt_stream:s1:1:1:reasoning:0',
       text: ' think',
       time: { start: 1100, end: 1100 },
+    })
+  })
+
+  it('reuses streamed reasoning/text part ids when the final message follows a text block', () => {
+    const { translate } = translator()
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('reasoning-chunks', [' think'], 1100, 10),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: chunkRow('text-chunks', [' answer'], 1200, 11, 1),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'reasoning', text: ' think' },
+          { type: 'text', text: ' answer' },
+        ], 'm-reason', 2000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 20, 2100),
+      }),
+    ])
+
+    const finalParts = events.filter((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { messageID?: string }).messageID === 'msg_pending:s1:1:1')
+    const reasoning = finalParts.find((event) =>
+      (event.payload.properties.part as { type?: string }).type === 'reasoning'
+      && (event.payload.properties.part as { text?: string }).text === ' think')
+    const text = finalParts.find((event) =>
+      (event.payload.properties.part as { type?: string }).type === 'text'
+      && (event.payload.properties.part as { text?: string }).text === ' answer')
+    expect(reasoning?.payload.properties.part).toMatchObject({
+      id: 'prt_stream:s1:1:1:reasoning:0',
+      text: ' think',
+    })
+    expect(text?.payload.properties.part).toMatchObject({
+      id: 'prt_stream:s1:1:1:text:1',
+      text: ' answer',
     })
   })
 
@@ -846,7 +905,7 @@ describe('bridge events: session event mapping', () => {
       'message.part.updated',
     ])
     const provisionalID = (started[0]?.payload.properties as { info: { id: string } }).info.id
-    expect(provisionalID).toMatch(/^msg_pending:s1:1:1$/)
+    expect(provisionalID).toBe('msg_pending:s1:1:1')
     expect((started[2]?.payload.properties as { part: { messageID: string } }).part.messageID).toBe(provisionalID)
     expect(started[1]?.payload.properties).toMatchObject({
       sessionID: 's1',
@@ -1014,7 +1073,7 @@ describe('bridge events: session event mapping', () => {
       'message.part.updated',
     ])
     const messageID = (events[0]?.payload.properties as { info: { id: string } }).info.id
-    expect(messageID).toMatch(/^msg_pending:s1:1:1$/)
+    expect(messageID).toBe('msg_pending:s1:1:1')
     expect((events.at(-1)?.payload.properties as { part: { messageID: string } }).part.messageID).toBe(messageID)
     expect(events.find((event) => event.payload.type === 'session.next.tool.progress')?.payload.properties)
       .toMatchObject({
@@ -1624,6 +1683,169 @@ describe('bridge events: projection and control frames', () => {
         text: 'hello from queue',
       },
     })
+  })
+
+  it('does not re-emit a user message already surfaced from the queue', () => {
+    const { translate } = translator()
+    const queued = translate([
+      frame({
+        type: 'session/queue',
+        sessionId: 's1' as never,
+        items: [{
+          id: 'queued-1' as never,
+          placement: 'queued',
+          message: {
+            id: 'queued-1' as never,
+            role: 'user',
+            content: [{ type: 'text', text: 'hello from queue' }],
+            source: { kind: 'user' },
+          },
+        }],
+      }),
+    ])
+    expect(queued).toHaveLength(2)
+
+    const durable = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello from queue', 'queued-1', 1500),
+      }),
+    ])
+    expect(durable).toEqual([])
+
+    const fresh = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('second prompt', 'queued-2', 1600),
+      }),
+    ])
+    expect(fresh.map((event) => event.payload.type)).toEqual([
+      'message.updated',
+      'message.part.updated',
+    ])
+    expect(fresh[0]?.payload.properties).toMatchObject({
+      info: { id: 'queued-2' },
+    })
+  })
+
+  it('skips the durable echo for prompts already broadcast by the route', () => {
+    const state = new InteractionState()
+    state.registerPromptMessageId('s1', 'msg_tui_1')
+    const { translate } = translator(state)
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'dsh-msg-1', 1500),
+      }),
+    ])
+    expect(events).toEqual([])
+    expect(state.promptIdForDshId('s1', 'dsh-msg-1')).toBe('msg_tui_1')
+  })
+
+  it('reuses the prompt placeholder assistant id for the streamed reply', () => {
+    const state = new InteractionState()
+    state.registerAssistantIdForUser('s1', 'msg-user-1', 'msg_assistant_1')
+    const { translate } = translator(state)
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-1', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: 'answer' },
+        ], 'dsh-asst-1', 1100),
+      }),
+    ])
+    const assistant = events.find((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'assistant')
+    expect(assistant?.payload.properties).toMatchObject({
+      info: { id: 'msg_assistant_1', parentID: 'msg-user-1' },
+    })
+    const part = events.find((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { messageID?: string }).messageID === 'msg_assistant_1')
+    expect(part?.payload.properties.part).toMatchObject({
+      messageID: 'msg_assistant_1',
+      id: 'msg_assistant_1:0',
+    })
+    expect(state.assistantIdForDshId('s1', 'dsh-asst-1')).toBe('msg_assistant_1')
+  })
+
+  it('keeps the placeholder assistant id across streamed chunks', () => {
+    const state = new InteractionState()
+    state.registerAssistantIdForUser('s1', 'msg-user-2', 'msg_assistant_2')
+    const { translate } = translator(state)
+    const events = translate([
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeUserEvent('hello', 'msg-user-2', 900),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('assistant/chunk', {
+          turn: 1,
+          step: 1,
+          chunk: {
+            type: 'text-delta',
+            index: 0,
+            text: 'answ',
+          },
+        }, 2, 1000),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: makeAssistantEvent([
+          { type: 'text', text: 'answer' },
+        ], 'dsh-asst-2', 1100),
+      }),
+    ])
+    const updates = events.filter((event) => event.payload.type === 'message.updated')
+    const assistantIds = updates
+      .map((event) => (event.payload.properties.info as { id?: string }).id)
+      .filter((id) => id?.startsWith('msg_assistant_2'))
+    expect(assistantIds).toEqual(['msg_assistant_2', 'msg_assistant_2'])
+    const streamedPart = events.find((event) =>
+      event.payload.type === 'message.part.updated'
+      && (event.payload.properties.part as { type?: string }).type === 'text'
+      && (event.payload.properties.part as { text?: string }).text === 'answer')
+    expect(streamedPart?.payload.properties.part).toMatchObject({
+      messageID: 'msg_assistant_2',
+    })
+    expect(state.assistantIdForDshId('s1', 'dsh-asst-2')).toBe('msg_assistant_2')
+  })
+
+  it('skips queue surfacing for TUI-submitted prompts with a local card', () => {
+    const state = new InteractionState()
+    state.registerPromptMessageId('s1', 'msg_tui_2')
+    const { translate } = translator(state)
+    const events = translate([
+      frame({
+        type: 'session/queue',
+        sessionId: 's1' as never,
+        items: [{
+          id: 'dsh-msg-2' as never,
+          placement: 'queued',
+          message: {
+            id: 'dsh-msg-2' as never,
+            role: 'user',
+            content: [{ type: 'text', text: 'queued prompt' }],
+            source: { kind: 'user' },
+          },
+        }],
+      }),
+    ])
+    expect(events).toEqual([])
   })
 
   it('does not resurface queue snapshot messages already seen', () => {

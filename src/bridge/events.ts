@@ -161,6 +161,8 @@ interface SessionStreamState {
   blockEnds: Map<string, number>
   finishReasons: Map<string, string>
   blocks: Map<string, StreamBlockState>
+  /** Durable streamed block part ids keyed by `${turn}:${step}:${index}:${blockType}`. */
+  blockPartIds: Map<string, string>
   compactions: Map<string, CompactionStreamState>
   toolInputs: Map<string, ToolInputState>
 }
@@ -206,6 +208,7 @@ export class MuxEventTranslator {
         blockEnds: new Map(),
         finishReasons: new Map(),
         blocks: new Map(),
+        blockPartIds: new Map(),
         compactions: new Map(),
         toolInputs: new Map(),
       }
@@ -248,8 +251,9 @@ export class MuxEventTranslator {
   /**
    * Make sure the current step has a provisional assistant message id so tool
    * parts stream under the same message that the final `assistant/message`
-   * will reuse (otherwise the TUI renders two cards: a streamed one under
-   * `assistant:turn:step` and the final one under the real message id).
+   * will reuse (same id, so the TUI updates one card instead of rendering
+   * two). The bridge-generated id registered for the user turn is preferred
+   * so the streamed reply also merges with the prompt-route placeholder.
    */
   private ensureProvisionalMessage(
     sessionId: string,
@@ -263,7 +267,8 @@ export class MuxEventTranslator {
     const stepKey = `${turn}:${step}`
     const existing = state.provisionalMessageIds.get(stepKey)
     if (existing !== undefined) return { messageID: existing, events: [] }
-    const messageID = provisionalMessageId(sessionId, turn, step)
+    const messageID = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
+      ?? provisionalMessageId(sessionId, turn, step)
     state.provisionalMessageIds.set(stepKey, messageID)
     return {
       messageID,
@@ -792,6 +797,25 @@ export class MuxEventTranslator {
       }
       case 'user/message': {
         this.deps.state.markInput()
+        const dshId = String(event.data.id)
+        const surfaceId = this.deps.state.takePromptMessageId(sessionId, dshId)
+        if (surfaceId !== dshId) {
+          // The prompt route already echoed this user message (with the
+          // bridge-generated id) so the TUI could render its queued card
+          // immediately; re-emitting it here would duplicate the card.
+          this.deps.state.markBroadcastDshId(sessionId, dshId)
+          this.streamState(sessionId).lastUserMessageId = surfaceId
+          return []
+        }
+        if (this.deps.state.hasPresentedQueued(sessionId, dshId)) {
+          // The queued card for this id is already on screen (surfaced from
+          // `agent/inbox/spliced`); re-emitting the same user message would
+          // render a second card. Keep the durable id in the stream state so
+          // the assistant message still parents to it.
+          this.deps.state.clearPresentedQueued(sessionId, dshId)
+          this.streamState(sessionId).lastUserMessageId = dshId
+          return []
+        }
         const events = messageEvents(sessionId, this.deps, () => {
           const entry = userMessageFromEvent(event, messageOptions(sessionId, this.deps))
           return {
@@ -832,7 +856,7 @@ export class MuxEventTranslator {
             ),
           )
         }
-        this.streamState(sessionId).lastUserMessageId = String(event.data.id)
+        this.streamState(sessionId).lastUserMessageId = dshId
         return events
       }
       case 'compaction/start' as SessionEvent['type']:
@@ -918,9 +942,18 @@ export class MuxEventTranslator {
       case 'assistant/message': {
         const state = this.streamState(sessionId)
         const stepKey = `${event.data.turn}:${event.data.step}`
+        const dshId = String(event.data.message.id)
         const provisionalId = state.provisionalMessageIds.get(stepKey)
         const streamed = provisionalId !== undefined
-        const messageID = streamed ? provisionalId : String(event.data.message.id)
+        const bridgeForUser = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
+        const messageID = streamed
+          ? provisionalId
+          : (bridgeForUser ?? dshId)
+        if (streamed) {
+          this.deps.state.recordAssistantId(sessionId, dshId, provisionalId)
+        } else if (bridgeForUser !== undefined) {
+          this.deps.state.recordAssistantId(sessionId, dshId, bridgeForUser)
+        }
         const created = earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
           ?? state.turnStartTime
           ?? event.time
@@ -934,8 +967,7 @@ export class MuxEventTranslator {
             state.lastUserMessageId,
             state.finishReasons.get(stepKey) ?? 'stop',
             (index, blockType) => {
-              const block = state.blocks.get(`${event.data.turn}:${event.data.step}:${index}`)
-              return block !== undefined && block.blockType === blockType ? block.partId : undefined
+              return state.blockPartIds.get(`${event.data.turn}:${event.data.step}:${index}:${blockType}`)
             },
           )
           const info = { ...entry.info, id: messageID } as unknown as Record<string, unknown>
@@ -952,7 +984,11 @@ export class MuxEventTranslator {
           }
           return {
             info,
-            parts: entry.parts.map((part) => ({ ...part, messageID })) as unknown as Array<Record<string, unknown>>,
+            parts: entry.parts.map((part) => ({
+              ...part,
+              id: String(part.id).replaceAll(dshId, messageID),
+              messageID,
+            })) as unknown as Array<Record<string, unknown>>,
           }
         })
         if (streamed) state.provisionalMessageIds.delete(stepKey)
@@ -1289,6 +1325,11 @@ export class MuxEventTranslator {
     const events: BridgeGlobalEvent[] = []
     for (const message of messages) {
       if (message.source.kind !== 'user') continue
+      // Prompts echoed by the prompt route (or surfaced there via the dsh
+      // user/message echo) must not be presented again from the queue; that
+      // would render a second user card.
+      if (this.deps.state.peekPromptMessageId(sessionId) !== undefined) continue
+      if (this.deps.state.isBroadcastDshId(sessionId, String(message.id))) continue
       const model = this.deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
       events.push(
         makeEvent(directory, 'message.updated', {
@@ -1364,7 +1405,8 @@ export class MuxEventTranslator {
       const stepKey = `${event.data.turn}:${event.data.step}`
       let provisionalId = state.provisionalMessageIds.get(stepKey)
       if (!provisionalId) {
-        provisionalId = provisionalMessageId(sessionId, event.data.turn, event.data.step)
+        provisionalId = this.deps.state.assistantIdForUser(sessionId, state.lastUserMessageId ?? '')
+          ?? provisionalMessageId(sessionId, event.data.turn, event.data.step)
         state.provisionalMessageIds.set(stepKey, provisionalId)
         events.push(
           makeEvent(directory, 'message.updated', {
@@ -1388,6 +1430,7 @@ export class MuxEventTranslator {
         sent: 0,
       }
       state.blocks.set(blockKey, block)
+      state.blockPartIds.set(blockStartKey, block.partId)
     }
     const sent = block.sent
     block.text += event.data.texts.join('')

@@ -11,6 +11,36 @@ import { toPermissionV2 } from '../convert/permission.js'
 import { toQuestionV2 } from '../convert/question.js'
 import type { RouteRegistrar } from '../routes.js'
 
+function remapV2Messages(
+  ctx: R.BridgeRouteContext,
+  sessionId: string,
+  messages: SessionMessagesResponse['data'],
+): SessionMessagesResponse['data'] {
+  return messages.map((message) => {
+    const promptId = ctx.state.promptIdForDshId(sessionId, message.id)
+    const assistantId = promptId === undefined
+      ? ctx.state.assistantIdForDshId(sessionId, message.id)
+      : undefined
+    const surfaceId = promptId ?? assistantId
+    if (surfaceId === undefined) return message
+    if (!('content' in message) || !Array.isArray(message.content)) {
+      return { ...message, id: surfaceId }
+    }
+    const content = message.content.map((part) => ({
+      ...part,
+      id: String(part.id).replaceAll(message.id, surfaceId),
+      messageID: surfaceId,
+    }))
+    return { ...message, id: surfaceId, content } as SessionMessagesResponse['data'][number]
+  })
+}
+
+function promptText(content: Array<{ type: string; text?: unknown }>): string {
+  return content.filter((part) => part.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text as string)
+    .join('')
+}
+
 export function registerSessionV2Routes(register: RouteRegistrar): void {
   // ---- v2 sessions ----
   register('GET', '/api/session', 'json', async (req, ctx) => {
@@ -100,7 +130,8 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
 
   register('POST', '/api/session/:sessionID/prompt', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
-    const content = R.parsePromptParts(R.bodyAsRecord(req.body).parts, ctx.cwd)
+    const body = R.bodyAsRecord(req.body)
+    const content = R.parsePromptParts(body.parts, ctx.cwd)
     const slash = R.slashPromptCapture(content)
     if (slash !== undefined) {
       const outcome = await R.runSlashCommand(ctx, id, slash)
@@ -116,6 +147,13 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
         },
       })
     }
+    const promptUserID = typeof body.messageID === 'string' && body.messageID.length > 0
+      ? body.messageID
+      : `msg_${randomUUID()}`
+    ctx.state.registerPromptMessageId(id, promptUserID)
+    const assistantID = `msg_${randomUUID()}`
+    ctx.state.registerAssistantIdForUser(id, promptUserID, assistantID)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, req.body)
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
@@ -125,7 +163,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     ctx.state.invalidateSession(id)
     return R.json(200, {
       data: {
-        id: `msg_${randomUUID()}`,
+        id: promptUserID,
         sessionID: id,
         prompt: { parts: content },
         delivery: 'queue',
@@ -187,8 +225,9 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       },
       entries.map((entry) => entry.view),
     )
+    const remapped = remapV2Messages(ctx, id, data)
     const response: SessionMessagesResponse = {
-      data: req.query.get('order') === 'desc' ? data.reverse() : data,
+      data: req.query.get('order') === 'desc' ? remapped.reverse() : remapped,
       cursor: {
         ...(history.hasMore && oldest !== undefined ? { previous: R.encodeMessageCursor(oldest) } : {}),
       },
@@ -230,7 +269,8 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       },
       entries.map((entry) => entry.view),
     )
-    const found = data.find((message) => message.id === messageID)
+    const remapped = remapV2Messages(ctx, id, data)
+    const found = remapped.find((message) => message.id === messageID)
     if (found === undefined) throw notFound('message not found', { messageID })
     return R.json(200, { data: found })
   })

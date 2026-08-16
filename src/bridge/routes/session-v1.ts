@@ -1,5 +1,6 @@
 // session-v1 routes for the dsh-oc bridge.
 import * as R from '../router.js'
+import { randomUUID } from 'node:crypto'
 import type { HistoryEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionStatus } from '@opencode-ai/sdk/v2/types'
 import { badRequest, notFound } from '../errors.js'
@@ -9,6 +10,50 @@ import { convertMessagesV1 } from '../convert/message.js'
 import { convertSessionSummary } from '../convert/session.js'
 import { filterGitTrackedDiffs } from '../git.js'
 import type { RouteRegistrar } from '../routes.js'
+
+function remapV1Messages(
+  ctx: R.BridgeRouteContext,
+  sessionId: string,
+  entries: Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }>,
+): Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }> {
+  return entries.map((entry) => {
+    const dshId = String(entry.info.id)
+    const promptId = ctx.state.promptIdForDshId(sessionId, dshId)
+    const assistantId = promptId === undefined
+      ? ctx.state.assistantIdForDshId(sessionId, dshId)
+      : undefined
+    const surfaceId = promptId ?? assistantId
+    if (surfaceId === undefined) return entry
+    return {
+      info: { ...entry.info, id: surfaceId },
+      parts: entry.parts.map((part) => ({
+        ...part,
+        id: String(part.id).replaceAll(dshId, surfaceId),
+        messageID: surfaceId,
+      })),
+    }
+  })
+}
+
+function registerPromptIds(
+  ctx: R.BridgeRouteContext,
+  sessionId: string,
+  body: Record<string, unknown>,
+): { promptUserID: string; assistantID: string } {
+  const promptUserID = typeof body.messageID === 'string' && body.messageID.length > 0
+    ? body.messageID
+    : `msg_${randomUUID()}`
+  ctx.state.registerPromptMessageId(sessionId, promptUserID)
+  const assistantID = `msg_${randomUUID()}`
+  ctx.state.registerAssistantIdForUser(sessionId, promptUserID, assistantID)
+  return { promptUserID, assistantID }
+}
+
+function promptText(content: Array<{ type: string; text?: unknown }>): string {
+  return content.filter((part) => part.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text as string)
+    .join('')
+}
 
 export function registerSessionV1Routes(register: RouteRegistrar): void {
   // ---- v1 sessions ----
@@ -88,17 +133,17 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: limit })
     const defaultModel = await R.defaultModelRef(ctx)
-    const entries = history.events
-    return R.json(200, convertMessagesV1(
-      entries.map((entry) => entry.event),
+    const entries = convertMessagesV1(
+      history.events.map((entry) => entry.event),
       {
         sessionId: id,
         cwd: ctx.cwd,
         defaultModel,
         onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`),
       },
-      entries.map((entry) => entry.view),
-    ))
+      history.events.map((entry) => entry.view),
+    )
+    return R.json(200, remapV1Messages(ctx, id, entries))
   })
 
   register('GET', '/session/:id/message/:messageID', 'json', async (req, ctx) => {
@@ -116,20 +161,24 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       },
       history.events.map((entry) => entry.view),
     )
-    const found = entries.find((entry) => entry.info.id === messageID)
+    const remapped = remapV1Messages(ctx, id, entries)
+    const found = remapped.find((entry) => entry.info.id === messageID)
     if (found === undefined) throw notFound('message not found', { messageID })
     return R.json(200, found)
   })
 
   register('POST', '/session/:id/message', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    const content = R.parsePromptParts(R.bodyAsRecord(req.body).parts, ctx.cwd)
+    const body = R.bodyAsRecord(req.body)
+    const content = R.parsePromptParts(body.parts, ctx.cwd)
     const slash = R.slashPromptCapture(content)
     if (slash !== undefined) {
       const outcome = await R.runSlashCommand(ctx, id, slash)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
+    const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, req.body)
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
@@ -137,20 +186,26 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
-    return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd))
+    return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
+      id: assistantID,
+      parentID: promptUserID,
+    }))
   })
 
   // Alias used by the dsh-oc e2e matrix; the official SDK prompt route is
   // `POST /session/:id/message` (v1) and `POST /api/session/:id/prompt` (v2).
   register('POST', '/session/:id/prompt', 'json', async (req, ctx) => {
     const id = req.params.id as string
-    const content = R.parsePromptParts(R.bodyAsRecord(req.body).parts, ctx.cwd)
+    const body = R.bodyAsRecord(req.body)
+    const content = R.parsePromptParts(body.parts, ctx.cwd)
     const slash = R.slashPromptCapture(content)
     if (slash !== undefined) {
       const outcome = await R.runSlashCommand(ctx, id, slash)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
+    const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, req.body)
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
@@ -158,7 +213,10 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
-    return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd))
+    return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
+      id: assistantID,
+      parentID: promptUserID,
+    }))
   })
 
   // `opencode --mini` interactive attach submits through promptAsync.
@@ -172,6 +230,8 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(204)
     }
+    const { promptUserID } = registerPromptIds(ctx, id, body)
+    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
     await R.applyAgentFromBody(ctx, id, body)
     if (!(await R.applyModelSelection(ctx, id, body))) {
       await R.reconcileModelSelection(ctx, id)

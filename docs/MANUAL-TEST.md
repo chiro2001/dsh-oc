@@ -87,3 +87,24 @@ curl -s $B/api/permission/request           # 无 pending 时 {"data":[]}
 - `Allow always` 重启清空；MCP/LSP/formatter/skills/integration 为
   schema-valid stub；opencode 退出 splash 无法替换（只有下方说明）；
   `ask_user_question` 的 `multiple` 选项在官方 TUI 中无可视多选交互。
+
+## 11. 与官方 opencode 的显示对比（1.18.18 + 本地 mock）
+
+在同一 mock provider 下逐项对比官方 `opencode attach` 与 dsh-oc：
+
+- 启动画面：官方显示 OPENCODE 字符画；dsh-oc 显示 DSH OC 字符画。
+- 基础对话：用户消息与助手回复均只渲染一次；思考期间显示 `+ Thought`，
+  完成后显示模型与耗时。
+- 工具调用：执行中只显示一张工具卡（`$ <command>`），完成后追加输出；
+  不出现“同一次调用显示两次”或“命令卡 + 结果卡并存”的重复。
+- 排队输入：模型忙碌时提交新消息，立即出现 QUEUED 卡片，第一条完成后
+  该消息自动开始处理；不出现同一消息两张卡片。
+- 退出：官方 splash（logo + session id）与 dsh-oc 的说明行都正常显示。
+
+复现步骤：`scripts/e2e-tui-queue.sh`、`scripts/e2e-tui-abort.sh`、
+`scripts/e2e-tui-permission.sh` 覆盖上述大部分场景；真实模型回归见
+`scripts/e2e-real-llm.sh`。
+
+已知残余差异：工具调用回合结束后紧跟排队消息时，工具后续文本可能短暂
+渲染在排队消息卡片之后（内容完整、无重复），随后滚动/重新进入会话时
+恢复正确顺序；不影响数据与后续轮次。

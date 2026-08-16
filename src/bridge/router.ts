@@ -61,7 +61,7 @@ import { convertGoalTodos } from './convert/goal.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
 import { agentErrorEvents, commandResultEvents, convertProducedFiles, makeEvent, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
-import { dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
+import { DEFAULT_AGENT, dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { ocHelp } from '../help.js'
 import { InteractionState, type CachedHistory } from './state.js'
 import { registerRoutes } from './routes.js'
@@ -703,13 +703,14 @@ export function pendingAssistantPlaceholder(
   sessionID: string,
   cwd: string,
   text?: string,
+  options: { id?: string; parentID?: string } = {},
 ): V1MessageEntry {
   const info: V1MessageEntry['info'] = {
-    id: `pending:${randomUUID()}`,
+    id: options.id ?? `pending:${randomUUID()}`,
     sessionID,
     role: 'assistant',
     time: { created: Date.now() },
-    parentID: `pending:${randomUUID()}`,
+    parentID: options.parentID ?? `pending:${randomUUID()}`,
     modelID: 'deepseek-chat',
     providerID: 'deepseek',
     mode: 'build',
@@ -976,6 +977,43 @@ export function broadcastSessionAgent(
         title: ctx.state.sessionTitleFor(sessionId),
         agent,
       }),
+    }, project),
+  ])
+}
+
+/** Echo a submitted user prompt immediately (the official TUI's QUEUED card). */
+export async function broadcastPromptUserMessage(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  userId: string,
+  text: string,
+  created: number,
+): Promise<void> {
+  const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
+  const project = projectIdFor(directory)
+  const model = await defaultModelRef(ctx)
+  ctx.hub.broadcast([
+    makeEvent(directory, 'message.updated', {
+      sessionID: sessionId,
+      info: {
+        id: userId,
+        sessionID: sessionId,
+        role: 'user',
+        time: { created },
+        agent: DEFAULT_AGENT,
+        model,
+      },
+    }, project),
+    makeEvent(directory, 'message.part.updated', {
+      sessionID: sessionId,
+      part: {
+        id: `${userId}:0`,
+        sessionID: sessionId,
+        messageID: userId,
+        type: 'text',
+        text,
+        time: { start: created, end: created },
+      },
     }, project),
   ])
 }
