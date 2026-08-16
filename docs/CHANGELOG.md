@@ -8,6 +8,10 @@
 
 ### 新增
 
+- 候选 opencode 升级 lane `scripts/upgrade-lane.sh`：对候选二进制跑黄金
+  场景并把归一化 SSE 轨迹与 1.18.18 基线语义差分（`--bin`/`--out`），
+  同版本验证零差异；版本检查旁路 `DSH_OC_BYPASS_VERSION_CHECK=1` 仅作用于
+  lane 场景，生产路径仍强制版本一致。
 - 错序复现记录 `scripts/e2e-queued-order-repro.sh`：工具+慢流后续文本期间
   从键盘排队第二条 prompt，逐帧抓拍官方 TUI 面板顺序（瞬态错序检测），并
   冻结第二份 1.18.18 黄金 SSE 基线

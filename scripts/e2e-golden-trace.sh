@@ -17,6 +17,14 @@ E2E_RUNID=""
 SSE_PID=""
 GOLDEN_DIR="$PWD/tests/fixtures/golden"
 GOLDEN_FILE="$GOLDEN_DIR/recovery-tool-followup-1.18.18.sse.jsonl"
+GOLDEN_OUT="${DSH_OC_GOLDEN_OUT:-}"
+CANDIDATE_ENV=""
+if [[ -n "${DSH_OC_OPENCODE_BIN:-}" || -n "$GOLDEN_OUT" ]]; then
+  CANDIDATE_ENV="DSH_OC_BYPASS_VERSION_CHECK=1"
+  if [[ -n "${DSH_OC_OPENCODE_BIN:-}" ]]; then
+    CANDIDATE_ENV="$CANDIDATE_ENV DSH_OC_OPENCODE_BIN='$DSH_OC_OPENCODE_BIN'"
+  fi
+fi
 
 cleanup() {
   local code=$?
@@ -36,7 +44,7 @@ e2e_new_run "golden-trace" "danger-full-access" \
   '{"command":"echo rec-ok","description":"tool","sandbox_permissions":"danger-full-access","justification":"e2e"}'
 
 echo "== boot real opencode TUI and drive the tool+follow-up scenario =="
-e2e_tui_start ""
+e2e_tui_start "" "$CANDIDATE_ENV"
 e2e_tui_wait_attach
 recovery_wait_tui_ready
 echo "  TUI ready"
@@ -98,7 +106,10 @@ echo "== normalize and store the golden trace =="
 node scripts/normalize-golden-trace.mjs \
   "$E2E_RUN_DIR/trace.raw" "$E2E_RUN_DIR/golden.sse.jsonl"
 mkdir -p "$GOLDEN_DIR"
-if [[ -f "$GOLDEN_FILE" ]]; then
+if [[ -n "$GOLDEN_OUT" ]]; then
+  cp "$E2E_RUN_DIR/golden.sse.jsonl" "$GOLDEN_OUT"
+  echo "  candidate trace written: $GOLDEN_OUT"
+elif [[ -f "$GOLDEN_FILE" ]]; then
   if ! diff -q "$GOLDEN_FILE" "$E2E_RUN_DIR/golden.sse.jsonl" >/dev/null; then
     if [[ "${DSH_OC_GOLDEN_OVERWRITE:-0}" == "1" ]]; then
       cp "$E2E_RUN_DIR/golden.sse.jsonl" "$GOLDEN_FILE"

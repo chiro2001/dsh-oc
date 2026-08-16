@@ -106,6 +106,12 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   真实 TUI smoke（28s），再回滚到前版 spec 复跑（23s），并探测同 profile
   内 re-add 行为。版本号未 bump 前 in-place 结果不可作为缓存安全证明；
   待 rc.2 版本 bump 后重跑并打受保护 tag。
+- vendor ABI 升级 lane（2026-08-17 已落地）：`scripts/upgrade-lane.sh`
+  对候选 opencode 二进制跑黄金场景（版本检查经
+  `DSH_OC_BYPASS_VERSION_CHECK=1` 旁路，仅手动 lane 使用），归一化轨迹与
+  1.18.18 基线语义差分；同版本验证零差异。候选版本升级流程：
+  `bash scripts/upgrade-lane.sh --bin <candidate>`，全绿后才考虑更新
+  `opencode-version.json`/asset 清单。
 - 实验 3：flake 分层统计（最小高风险 case 各 10 次，零失败后扩到 30–60
   次；release-lane 预算 30–45 分钟；语义首败不 retry）。
 - 实验 3 首轮（2026-08-17）：`scripts/flake-mini-scan.sh` 已落地；恢复三

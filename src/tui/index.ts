@@ -521,7 +521,14 @@ export class OcTuiService extends Service {
         env: process.env,
         binaryOverride: this.config.binary,
       })
-      await verifyOpenCodeVersion(resolved.bin)
+      if (process.env.DSH_OC_BYPASS_VERSION_CHECK === '1') {
+        // Upgrade lane only: allow a candidate opencode binary to run against
+        // the current bridge so its wire behavior can be diffed before the
+        // locked version is updated. Never set this in production.
+        this.ctx.logger.warn?.(`[dsh-oc] version check bypassed for ${resolved.bin}`)
+      } else {
+        await verifyOpenCodeVersion(resolved.bin)
+      }
     } catch (error) {
       this.fail(error)
       return
