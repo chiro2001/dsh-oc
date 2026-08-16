@@ -148,7 +148,7 @@ e2e_tui_start() {
   tmux send-keys -t "$E2E_TUI_SESSION" "stty -a > '$E2E_RUN_DIR/stty-before.txt'" Enter
   sleep 1
   local cmd
-  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' $extra_env && dsh --profile oc --patch '$E2E_OVERLAY' --print-logs $extra 2> '$E2E_RUN_DIR/dsh-stderr.txt'; echo DSH_EXIT=\$? > '$exit_file'"
+  cmd="cd '$E2E_WORKDIR' && export DSH_HOME='$E2E_DSH_HOME' DSH_PERMISSION_MODE='$E2E_PERMISSION_MODE' DSH_OC_E2E_MOCK_API_KEY='$E2E_API_KEY' $extra_env && dsh --profile oc --patch '$E2E_OVERLAY' --print-logs $extra; echo DSH_EXIT=\$? > '$exit_file'"
   tmux send-keys -t "$E2E_TUI_SESSION" "$cmd" Enter
 }
 
@@ -172,6 +172,7 @@ e2e_tui_wait_attach() {
     fi
     if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
       echo "e2e: dsh exited before attach: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+      cat "$E2E_RUN_DIR/dsh-stderr.txt" >&2 2>/dev/null || true
       return 1
     fi
     sleep 1
