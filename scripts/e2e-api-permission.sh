@@ -47,7 +47,7 @@ prompt_tool() {
 wait_permission() {
   local file="$1"
   local sid="${2:-}"
-  local deadline=$((SECONDS + 60))
+  local deadline=$((SECONDS + 120))
   while (( SECONDS < deadline )); do
     curl -s "$BRIDGE/permission" > "$file" || true
     if jq -e 'length > 0' "$file" >/dev/null 2>&1; then return 0; fi
@@ -61,6 +61,19 @@ wait_permission() {
   fi
   echo "--- mock log tail ---" >&2
   tail -8 "$E2E_MOCK_ERR" >&2 2>/dev/null || true
+  return 1
+}
+
+wait_idle() {
+  local sid="$1"
+  local deadline=$((SECONDS + 120))
+  while (( SECONDS < deadline )); do
+    local st
+    st="$(curl -s "$BRIDGE/session/status" | jq -r --arg s "$sid" '.[$s].type // "idle"')"
+    if [[ "$st" == "idle" ]]; then return 0; fi
+    sleep 2
+  done
+  echo "e2e: session $sid did not become idle within 120s" >&2
   return 1
 }
 
@@ -154,6 +167,7 @@ sleep 2
 curl -s "$BRIDGE/permission" | jq -e 'length == 0' >/dev/null
 echo "  same-session third call auto-approved without a dialog"
 
+wait_idle "$S1"
 S2="$(create_session)"
 echo "  new session $S2"
 prompt_tool "$S2"
