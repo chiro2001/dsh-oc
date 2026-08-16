@@ -73,7 +73,10 @@ e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
 3. 协议/桥接改动：至少跑对应的 `scripts/e2e-api*.sh`。
 4. TUI 改动：跑相关 `scripts/e2e-tui-*.sh`（boot/turn/mini/brand/continue 等）；
    完整回归用 `bash scripts/check-all.sh --e2e`。
-5. 在 PR 描述里附上测试命令与结果摘要。
+5. 构建产物/发布改动：跑 `bash scripts/verify-release-artifacts.sh`
+   （lib 零差异、pack 无绝对路径/无 src 泄漏）；候选发布演练见
+   `docs/RELEASE.md`。
+6. 在 PR 描述里附上测试命令与结果摘要。
 
 ## 提交流程
 
