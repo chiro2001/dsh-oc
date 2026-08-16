@@ -8,6 +8,7 @@
 
 ### 新增
 
+- `AGENTS.md` 更新 e2e 时长表述（稳定套件已扩展到约 15–20 分钟）。
 - `docs/ROADMAP.md` 修正 LATER 说明：`/api/credential/*` 实际存在 dsh
   `credentials.describe/set/unset` RPC，但 opencode SDK 1.18.18 无消费
   路由，维持 LATER 待上游协议出现。

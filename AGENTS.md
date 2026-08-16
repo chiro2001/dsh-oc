@@ -57,7 +57,7 @@ pnpm build                 # tsdown → lib/
 pnpm typecheck             # tsc --noEmit
 pnpm test                  # vitest
 pnpm run probe             # opencode 1.18.18 协议路由探针（62/62）
-pnpm run e2e               # 全量 e2e（真实 opencode TUI，约 8 分钟）
+pnpm run e2e               # 全量 e2e（真实 opencode TUI，稳定套件约 15–20 分钟）
 pnpm run e2e:api           # API e2e 子集（快速回归）
 pnpm run perf              # 会话性能压测（--sessions N --scale ...）
 pnpm run features:update   # 刷新 docs/FEATURES.md 自动追踪
