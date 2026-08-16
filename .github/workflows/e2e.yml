@@ -22,6 +22,10 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      TERM: xterm-256color
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
     steps:
       - uses: actions/checkout@v4
 
@@ -36,6 +40,12 @@ jobs:
 
       - name: System deps
         run: sudo apt-get update && sudo apt-get install -y tmux
+
+      - name: Show terminal environment
+        run: |
+          locale
+          echo "TERM=$TERM LANG=$LANG LC_ALL=$LC_ALL"
+          tmux -V
 
       - name: Install dsh CLI
         run: npm install -g @deepseek-ai/dsh@0.1.0-rc.6
