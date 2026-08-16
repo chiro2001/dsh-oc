@@ -145,6 +145,18 @@ if rg -qa 'interrupting|Interrupt' "$E2E_RUN_DIR/tui-abort.txt"; then
   echo "  TUI shows interrupt notice"
 fi
 
+echo "== spinner settles after interrupt =="
+e2e_tui_capture "$E2E_RUN_DIR/tui-abort-stop1.txt"
+sleep 2
+e2e_tui_capture "$E2E_RUN_DIR/tui-abort-stop2.txt"
+spinner1="$(grep -o '[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]' "$E2E_RUN_DIR/tui-abort-stop1.txt" 2>/dev/null | sort -u | tr -d '\n' || true)"
+spinner2="$(grep -o '[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]' "$E2E_RUN_DIR/tui-abort-stop2.txt" 2>/dev/null | sort -u | tr -d '\n' || true)"
+if [[ "$spinner1" != "$spinner2" ]]; then
+  echo "e2e: spinner still animating after interrupt (frames: $spinner1 -> $spinner2)" >&2
+  exit 1
+fi
+echo "  spinner settled after interrupt (frames: ${spinner1:-<none>})"
+
 echo "== v2 interrupt alias =="
 BEFORE_V2="$(wc -l < "$MOCK_ERR")"
 curl -sN --max-time 60 "$E2E_BRIDGE_URL/global/event" > "$E2E_RUN_DIR/v2-sse.log" 2>/dev/null &
