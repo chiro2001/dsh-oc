@@ -44,6 +44,69 @@ prompt_tool() {
     | jq -e '.info.role == "assistant"' >/dev/null
 }
 
+assistant_text_count() {
+  curl -s "$BRIDGE/session/$1/message" \
+    | jq '[.[] | select(.info.role == "assistant") | .parts[] | select(.type == "text" and ((.text // "") | length) > 0)] | length' 2>/dev/null \
+    || echo 0
+}
+
+assistant_tool_count() {
+  curl -s "$BRIDGE/session/$1/message" \
+    | jq '[.[] | select(.info.role == "assistant") | .parts[] | select(.type == "tool")] | length' 2>/dev/null \
+    || echo 0
+}
+
+# dsh emits the session-title LLM request on some prompts but not others, so
+# the mock sequence drifts and a tool prompt can occasionally receive a plain
+# text reply instead. Re-prompt until the expected dialog appears (up to N
+# tries); each failed prompt is detected by a new assistant text part.
+prompt_tool_until() {
+  local sid="$1"
+  local file="$2"
+  local want="$3"
+  local tries="${4:-6}"
+  local i
+  for ((i = 0; i < tries; i++)); do
+    local before after
+    before="$(assistant_text_count "$sid")"
+    prompt_tool "$sid"
+    local deadline=$((SECONDS + 12))
+    while (( SECONDS < deadline )); do
+      curl -s "$BRIDGE/$want" > "$file" || true
+      if jq -e 'length > 0' "$file" >/dev/null 2>&1; then return 0; fi
+      after="$(assistant_text_count "$sid")"
+      if [[ "$after" != "$before" ]]; then break; fi
+      sleep 1
+    done
+  done
+  echo "e2e: no $want after $tries tool prompts for $sid" >&2
+  cat "$file" >&2 2>/dev/null || true
+  return 1
+}
+
+prompt_tool_until_tool() {
+  local sid="$1"
+  local tries="${2:-6}"
+  local i
+  for ((i = 0; i < tries; i++)); do
+    local before after
+    before="$(assistant_tool_count "$sid")"
+    prompt_tool "$sid"
+    local deadline=$((SECONDS + 12))
+    while (( SECONDS < deadline )); do
+      after="$(assistant_tool_count "$sid")"
+      if [[ "$after" != "$before" ]]; then return 0; fi
+      if jq -e 'length > 0' <(curl -s "$BRIDGE/permission") >/dev/null 2>&1; then
+        echo "e2e: unexpected permission dialog while expecting auto-approve for $sid" >&2
+        return 1
+      fi
+      sleep 1
+    done
+  done
+  echo "e2e: no tool call after $tries prompts for $sid" >&2
+  return 1
+}
+
 wait_permission() {
   local file="$1"
   local sid="${2:-}"
@@ -123,8 +186,7 @@ open_sse "$BRIDGE" "$E2E_RUN_DIR/perm-sse.txt"
 S1="$(create_session)"
 echo "  session $S1"
 
-prompt_tool "$S1"
-wait_permission "$E2E_RUN_DIR/perm1.json" "$S1"
+prompt_tool_until "$S1" "$E2E_RUN_DIR/perm1.json" "permission"
 PID1="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm1.json")"
 jq -e --arg s "$S1" '.[0].sessionID == $s and .[0].permission == "bash"' "$E2E_RUN_DIR/perm1.json" >/dev/null
 V2_LIST="$(curl -s "$BRIDGE/api/session/$S1/permission")"
@@ -149,8 +211,7 @@ if jq -e --arg s "$S1" '.data | any(.sessionID == $s and .id == "\($s):bash")' <
 fi
 echo "  v1 once resolved; no saved grant"
 
-prompt_tool "$S1"
-wait_permission "$E2E_RUN_DIR/perm2.json" "$S1"
+prompt_tool_until "$S1" "$E2E_RUN_DIR/perm2.json" "permission"
 PID2="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm2.json")"
 CODE="$(curl -s -o "$E2E_RUN_DIR/v2-always.json" -w '%{http_code}' \
   -X POST "$BRIDGE/api/session/$S1/permission/$PID2/reply" -H 'Content-Type: application/json' \
@@ -161,8 +222,7 @@ SAVED="$(curl -s "$BRIDGE/api/permission/saved")"
 jq -e --arg s "$S1" '.data | any(.sessionID == $s and .id == "\($s):bash")' <<<"$SAVED" >/dev/null
 echo "  v2 always replied with 204; bash grant saved"
 
-prompt_tool "$S1"
-wait_assistant "$S1" 3
+prompt_tool_until_tool "$S1"
 sleep 2
 curl -s "$BRIDGE/permission" | jq -e 'length == 0' >/dev/null
 echo "  same-session third call auto-approved without a dialog"
@@ -170,8 +230,7 @@ echo "  same-session third call auto-approved without a dialog"
 wait_idle "$S1"
 S2="$(create_session)"
 echo "  new session $S2"
-prompt_tool "$S2"
-wait_permission "$E2E_RUN_DIR/perm3.json" "$S2"
+prompt_tool_until "$S2" "$E2E_RUN_DIR/perm3.json" "permission"
 PID3="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm3.json")"
 jq -e --arg s "$S2" '.[0].sessionID == $s' "$E2E_RUN_DIR/perm3.json" >/dev/null
 CODE="$(curl -s -o "$E2E_RUN_DIR/v2-alias.json" -w '%{http_code}' \
@@ -201,8 +260,7 @@ CODE="$(curl -s -o "$E2E_RUN_DIR/saved-delete-404.json" -w '%{http_code}' \
 [[ "$CODE" == "404" ]]
 echo "  DELETE /api/permission/saved/:id removed grant; second delete -> 404"
 
-prompt_tool "$S1"
-wait_permission "$E2E_RUN_DIR/perm4.json" "$S1"
+prompt_tool_until "$S1" "$E2E_RUN_DIR/perm4.json" "permission"
 PID4="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm4.json")"
 curl -s -X POST "$BRIDGE/permission/$PID4/reply" -H 'Content-Type: application/json' \
   -d '{"reply":"reject"}' | jq -e '. == true' >/dev/null
@@ -217,7 +275,7 @@ e2e_stop_dsh "$E2E_SESSION"
 e2e_stop_run
 
 echo "== run B: question reply with second option + v2 reject =="
-QUESTION_SEQ="tool_call_success,success,success,tool_call_success,success,success"
+QUESTION_SEQ="tool_call_success,success,success,tool_call_success,success,success,tool_call_success,success,success,tool_call_success,success,success,tool_call_success,success,success,tool_call_success,success,success"
 e2e_new_run "api-permission-question" "workspace-write" \
   "$QUESTION_SEQ" "0" \
   '{"questions":[{"id":"q1","question":"Pick a language?","options":[{"label":"Python"},{"label":"Node.js"}]}]}' \
@@ -231,8 +289,7 @@ open_sse "$BRIDGE" "$E2E_RUN_DIR/question-sse.txt"
 
 S3="$(create_session)"
 echo "  session $S3"
-prompt_tool "$S3"
-wait_question "$E2E_RUN_DIR/question1.json"
+prompt_tool_until "$S3" "$E2E_RUN_DIR/question1.json" "question"
 QID1="$(jq -r '.[0].id' "$E2E_RUN_DIR/question1.json")"
 jq -e --arg s "$S3" '.[0].sessionID == $s and (.[0].questions[0].options | length) == 2' "$E2E_RUN_DIR/question1.json" >/dev/null
 V2_Q="$(curl -s "$BRIDGE/api/session/$S3/question")"
@@ -247,8 +304,7 @@ wait_assistant "$S3" 1
 curl -s "$BRIDGE/question" | jq -e 'length == 0' >/dev/null
 echo "  v1 question replied with the second option; /question empty"
 
-prompt_tool "$S3"
-wait_question "$E2E_RUN_DIR/question2.json"
+prompt_tool_until "$S3" "$E2E_RUN_DIR/question2.json" "question"
 QID2="$(jq -r '.[0].id' "$E2E_RUN_DIR/question2.json")"
 CODE="$(curl -s -o "$E2E_RUN_DIR/v2-question-reject.json" -w '%{http_code}' \
   -X POST "$BRIDGE/api/session/$S3/question/$QID2/reject")"
@@ -264,7 +320,7 @@ e2e_stop_dsh "$E2E_SESSION"
 e2e_stop_run
 
 echo "== run C: error branches =="
-e2e_new_run "api-permission-errors" "workspace-write" "tool_call_success,success,success" "0"
+e2e_new_run "api-permission-errors" "workspace-write" "tool_call_success,success,success,tool_call_success,success,success,tool_call_success,success,success" "0"
 E2E_SESSION="dsh-oc-api-permission-errors"
 E2E_ACTIVE_SESSION="$E2E_SESSION"
 e2e_start_dsh "$E2E_SESSION"
@@ -274,8 +330,7 @@ open_sse "$BRIDGE" "$E2E_RUN_DIR/error-sse.txt"
 
 S4="$(create_session)"
 echo "  session $S4"
-prompt_tool "$S4"
-wait_permission "$E2E_RUN_DIR/perm4.json" "$S4"
+prompt_tool_until "$S4" "$E2E_RUN_DIR/perm4.json" "permission"
 PID4="$(jq -r '.[0].id' "$E2E_RUN_DIR/perm4.json")"
 
 CODE="$(curl -s -o "$E2E_RUN_DIR/err-empty.json" -w '%{http_code}' \
