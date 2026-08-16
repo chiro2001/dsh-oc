@@ -54,6 +54,15 @@ dsh plugin --profile oc add chiro2001/dsh-oc
 dsh --profile oc
 ```
 
+安装后可用简写命令 `dsh-oc`（等价于 `dsh --profile oc`，参数原样透传）。
+它由 npm `bin` 提供：把 profile 的 bin 目录加入 PATH 即可直接使用，例如：
+
+```bash
+export PATH="$HOME/.dsh/profiles/oc/node_modules/.bin:$PATH"
+dsh-oc                        # 等价 dsh --profile oc
+dsh-oc --mini                 # 等价 dsh --profile oc --mini
+```
+
 > `chiro2001/dsh-oc` 解析为 GitHub 源 `git+https://github.com/chiro2001/dsh-oc.git`
 > 的 `main` 分支；如需固定版本/分支，可用 `github:chiro2001/dsh-oc#develop` 等
 > pnpm git spec。pnpm 提示缺少 `@deepseek-ai/cordis` 等 peer 属于预期警告，

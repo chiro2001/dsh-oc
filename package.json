@@ -1,6 +1,9 @@
 {
   "name": "@chiro2001/dsh-oc",
   "version": "0.1.0-rc.1",
+  "bin": {
+    "dsh-oc": "bin/dsh-oc.mjs"
+  },
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "engines": {
@@ -15,6 +18,7 @@
   },
   "files": [
     "lib",
+    "bin",
     "cordis.patch.yml",
     "opencode-version.json",
     "opencode-assets.json",

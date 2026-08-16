@@ -82,6 +82,8 @@ dsh plugin --profile oc add 'github:chiro2001/dsh-oc#develop'      # 指定分�
 dsh --profile oc --help                                            # 验证版本
 ```
 
+- `bin/dsh-oc.mjs` 提供 `dsh-oc` 简写（`dsh --profile oc` 参数透传、退出码
+  透传）；安装后位于 profile 的 `node_modules/.bin`，README 提供 PATH 指引。
 - npm 包名 `@chiro2001/dsh-oc` 未发布 registry；安装/更新一律走 GitHub 源。
 - 本地开发：`dsh plugin --profile oc add .` 以 `link:` 方式链接仓库，改
   `src/` 后 `pnpm build` 立即生效；但 `lib/` 必须随提交推送，GitHub 直装才
