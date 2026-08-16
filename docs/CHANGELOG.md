@@ -8,6 +8,10 @@
 
 ### 新增
 
+- `bridge-router.spec.ts` 新增分页边界不变量测试：`limit` 切过工具回合时，
+  `after`/`next` 以已转换消息的最旧 seq 为锚点，工具事件（tool/call、
+  tool/result 不独立成消息）整体落在同一侧页，跨页合并后工具 part 恰好
+  一次且为 completed。
 - `AGENTS.md` 更新 e2e 时长表述（稳定套件已扩展到约 15–20 分钟）。
 - `docs/ROADMAP.md` 修正 LATER 说明：`/api/credential/*` 实际存在 dsh
   `credentials.describe/set/unset` RPC，但 opencode SDK 1.18.18 无消费

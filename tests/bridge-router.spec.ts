@@ -541,6 +541,73 @@ describe('bridge router: session routes', () => {
     expect(v2Assistants[0]?.content?.map((part) => part.type)).toEqual(['tool', 'text'])
   })
 
+  it('resolves tool calls across history page boundaries', async () => {
+    const withSeq = (event: SessionEvent, seq: number): SessionEvent =>
+      ({ ...event, seq }) as SessionEvent
+    const events = [
+      { event: withSeq(makeUserEvent('u1', 'm1', 1000), 1) },
+      {
+        event: withSeq(makeAssistantEvent([
+          { type: 'tool-call', id: 'c1' as never, name: 'bash', arguments: '{}' },
+        ], 'asst-tool', 1100), 2),
+      },
+      { event: withSeq(sessionEvent('tool/call', {
+        turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}',
+      }, 3, 1200), 3) },
+      { event: withSeq(sessionEvent('tool/result', {
+        turn: 1, step: 1,
+        message: {
+          source: { kind: 'tool', callId: 'c1' },
+          content: [{
+            type: 'tool-result', toolCallId: 'c1',
+            content: [{ type: 'text', text: 'out' }],
+          }],
+          role: 'assistant',
+          id: 'r1',
+        },
+      }, 4, 1300), 4) },
+      { event: withSeq(makeUserEvent('u2', 'm2', 1400), 5) },
+      { event: withSeq(makeAssistantEvent([{ type: 'text', text: 'reply2' }], 'asst-text', 1500), 6) },
+    ]
+    const api: BridgeApi = {
+      ...fakeApi(),
+      sessions: {
+        ...fakeApi().sessions,
+        history: async (request) => {
+          const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
+          let window = events
+          if (payload.beforeSeq !== undefined) {
+            window = events.filter((entry) => entry.event.seq < payload.beforeSeq)
+          }
+          const max = payload.maxMessages ?? events.length
+          const tail = window.slice(-max)
+          return okRpc({ events: tail, hasMore: window.length > tail.length })
+        },
+      },
+    }
+    const { server } = await boot(api)
+
+    // limit=4 cuts the boundary inside the tool turn: the newest page holds
+    // tool/call + tool/result + u2 + reply2, the older page holds u1 + the
+    // assistant tool-call message.
+    const newer = await request(server, 'GET', '/api/session/s1/history?limit=4')
+    expect(newer.status).toBe(200)
+    const newerBody = newer.body as { data?: Array<{ type: string; content?: Array<{ type: string }> }>; hasMore?: boolean; next?: number }
+    expect(newerBody.hasMore).toBe(true)
+
+    const older = await request(server, 'GET', `/api/session/s1/history?after=${newerBody.next}`)
+    expect(older.status).toBe(200)
+    const olderBody = older.body as { data?: Array<{ type: string; content?: Array<{ type: string }> }>; hasMore?: boolean }
+    expect(olderBody.hasMore).toBe(false)
+
+    // Combined pages must contain the tool part exactly once and completed.
+    const combined = [...(olderBody.data ?? []), ...(newerBody.data ?? [])]
+    const toolParts = combined.flatMap((m) => (m.content ?? []).filter((p) => p.type === 'tool'))
+    expect(toolParts).toHaveLength(1)
+    expect((toolParts[0] as { state?: { status?: string } }).state?.status).toBe('completed')
+    expect(combined.map((m) => m.type)).toEqual(['user', 'assistant', 'user', 'assistant'])
+  })
+
   it('remaps v1 parentIDs to surface ids in warm history', async () => {
     const base = fakeApi()
     const api: BridgeApi = {
