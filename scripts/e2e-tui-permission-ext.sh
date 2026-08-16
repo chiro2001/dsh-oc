@@ -125,10 +125,22 @@ start_tui_turn() {
   echo "$sid"
 }
 
-option_has_highlight() {
+option_fg_sig() {
   local file="$1"
   local label="$2"
-  grep -a "$label" "$file" | head -1 | grep -aq '38;2;106;145;198'
+  # Foreground ANSI color immediately before the option label; theme-agnostic
+  # so truecolor (local) and degraded 256/16-color terminals (CI) both work.
+  grep -a "$label" "$file" | head -1 | awk -v label="$label" '
+    {
+      prefix = substr($0, 1, index($0, label))
+      fg = ""
+      while (match(prefix, /\033\[[0-9;]*m/)) {
+        code = substr(prefix, RSTART, RLENGTH)
+        if (code !~ /48;/) fg = code
+        prefix = substr(prefix, RSTART + RLENGTH)
+      }
+      print fg
+    }'
 }
 
 echo "== run H: standard question navigation + Esc cancel =="
@@ -145,12 +157,10 @@ echo "  TUI ready"
 SID="$(start_tui_turn 'ask a question')"
 echo "  session $SID"
 wait_question_dialog "$E2E_RUN_DIR/nav-baseline.txt"
-if ! option_has_highlight "$E2E_RUN_DIR/nav-baseline.txt" 'Python'; then
-  echo "e2e: first option not highlighted on baseline" >&2
-  exit 1
-fi
-if option_has_highlight "$E2E_RUN_DIR/nav-baseline.txt" 'Node.js'; then
-  echo "e2e: second option unexpectedly highlighted on baseline" >&2
+BASE_PY="$(option_fg_sig "$E2E_RUN_DIR/nav-baseline.txt" 'Python')"
+BASE_NODE="$(option_fg_sig "$E2E_RUN_DIR/nav-baseline.txt" 'Node.js')"
+if [[ -z "$BASE_PY" || -z "$BASE_NODE" || "$BASE_PY" == "$BASE_NODE" ]]; then
+  echo "e2e: cannot distinguish option highlights on baseline (py=$BASE_PY node=$BASE_NODE)" >&2
   exit 1
 fi
 echo "  baseline highlight on Python"
@@ -158,12 +168,10 @@ echo "  baseline highlight on Python"
 tmux send-keys -t "$E2E_TUI_SESSION" Down
 sleep 1
 e2e_tui_capture_ansi "$E2E_RUN_DIR/nav-down.txt"
-if ! option_has_highlight "$E2E_RUN_DIR/nav-down.txt" 'Node.js'; then
-  echo "e2e: Down did not move the highlight to Node.js" >&2
-  exit 1
-fi
-if option_has_highlight "$E2E_RUN_DIR/nav-down.txt" 'Python'; then
-  echo "e2e: Python still highlighted after Down" >&2
+DOWN_PY="$(option_fg_sig "$E2E_RUN_DIR/nav-down.txt" 'Python')"
+DOWN_NODE="$(option_fg_sig "$E2E_RUN_DIR/nav-down.txt" 'Node.js')"
+if [[ "$DOWN_NODE" != "$BASE_PY" || "$DOWN_PY" != "$BASE_NODE" ]]; then
+  echo "e2e: Down did not swap the option highlights (py=$DOWN_PY node=$DOWN_NODE)" >&2
   exit 1
 fi
 echo "  Down moved highlight to Node.js"
