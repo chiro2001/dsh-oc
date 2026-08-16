@@ -8,6 +8,8 @@
 
 ### 新增
 
+- `docs/RELEASE.md` 增加“当前候选就绪状态（12ca493）”汇总：本地/CI 门禁、
+  flake/性能/真实模型/安装链路/归因实验证据一览。
 - `dsh-oc --version` 在 dsh 缺失时与其他路径一致：退出 127 并输出安装提示
   （此前以 1 退出且无提示）；新增 bin 单测。
 - `docs/PROTOCOL.md` 补齐 v2 路由表：`/api/session/{id}/history`

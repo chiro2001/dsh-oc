@@ -41,6 +41,26 @@ SHA** 为真相源，`lib/` 构建产物必须随提交且与源码零差异。
 8. **更新本地安装**：`dsh plugin --profile oc add github:chiro2001/dsh-oc#v0.1.0-rc.2`，
    `dsh-oc --version` 应输出 `dsh-oc 0.1.0-rc.2 (dsh ...)`。
 
+## 当前候选就绪状态（2026-08-17，commit `12ca493`）
+
+以下证据在提交 `12ca493`（main/develop 同步）上验证通过，rc.2 仅剩
+版本 bump + tag（需用户确认）：
+
+- 本地门禁：340 单测、probe 62/62、工件审计（lib 零差异、pack 无
+  `src/`/绝对路径、必需文件齐全）、`check-all --e2e` 全绿。
+- CI：ci + 双分片 e2e 全绿（含 permission-mini、golden-trace、
+  queued-order-repro、recovery 三件套、preset-inherit 等 stable 脚本）。
+- 稳定性：6 个最小高风险脚本 ×10 次 = 60 次首跑全绿；queued-order-repro
+  另 10 次全绿。
+- 性能：5000 会话基准记录（docs/perf/results-5000-2026-08-17.md），与
+  8-15 基线一致。
+- 真实模型：完整 e2e-real-llm PASSED（159s，含 FIFO 队列/TUI 投递/variant）；
+  queued-order wire 前提多次复现并记录。
+- 安装链路：`e2e-install-rollback.sh` 对当前 HEAD full SHA PASSED；
+  `update-local-install.sh` 可一键同步本地 profile。
+- 归因实验：fixture 回放顺序正确；raw 直放路线关闭（官方 TUI 连接限制，
+  工具保留）；协议/能力文档与实现一致。
+
 ## 回滚
 
 任何一步出现 blocker（stale/missing `lib`、版本仍为 rc.1、远端 SHA 安装
