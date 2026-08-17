@@ -2505,24 +2505,37 @@ describe('bridge router: model variants, agent presets and /preset', () => {
       },
     }
     const { server } = await boot(api)
-    for (const path of ['/session/s1/message', '/session/s1/prompt', '/api/session/s1/prompt']) {
-      const result = await request(server, 'POST', path, {
-        agent: 'standard',
-        parts: [{ type: 'text', text: 'hi' }],
-      })
-      expect(result.status).toBe(200)
-    }
-    const asyncResult = await request(server, 'POST', '/session/s1/prompt_async', {
+    const message = await request(server, 'POST', '/session/s1/message', {
       agent: 'standard',
       parts: [{ type: 'text', text: 'hi' }],
     })
+    expect(message.status).toBe(200)
+    const prompt = await request(server, 'POST', '/session/s1/prompt', {
+      agent: 'minimal',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(prompt.status).toBe(200)
+    const v2 = await request(server, 'POST', '/api/session/s1/prompt', {
+      agent: 'standard',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(v2.status).toBe(200)
+    const asyncResult = await request(server, 'POST', '/session/s1/prompt_async', {
+      agent: 'minimal',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
     expect(asyncResult.status).toBe(204)
+    // A later prompt carrying an already-effective agent must not re-select
+    // (dsh locks the preset after the first turn; re-applying only warns).
+    const repeat = await request(server, 'POST', '/session/s1/message', {
+      agent: 'minimal',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(repeat.status).toBe(200)
     const selects = calls.filter((call) => call.method === 'agentPreset.select')
     expect(selects).toHaveLength(4)
-    expect(selects[0]).toMatchObject({
-      method: 'agentPreset.select',
-      payload: { sessionId: 's1', agentPreset: 'standard' },
-    })
+    expect(selects.map((call) => (call.payload as { agentPreset?: string }).agentPreset))
+      .toEqual(['standard', 'minimal', 'standard', 'minimal'])
   })
 
   it('does not switch agents when the prompt carries the default build agent', async () => {
@@ -2599,6 +2612,140 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     }
     const locked = notices.filter((text) => text.includes('Agent switch locked'))
     expect(locked).toHaveLength(1)
+  })
+
+  it('skips re-selecting and does not warn when the prompt agent already matches the session preset', async () => {
+    // Regression: a preset switched while the session was still blank (Tab /
+    // /preset) is already the session's active preset. dsh refuses ANY
+    // agentPreset.select on a session that produced turns, so re-applying it
+    // on every later prompt only produced a spurious "Agent switch locked"
+    // warning even though the switch had already taken effect.
+    const base = fakeApi()
+    let selects = 0
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'router-standard', trust: 'user', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => {
+          selects += 1
+          // The first (blank-session) switch succeeds; any later re-select on
+          // a started session is refused by dsh.
+          if (selects === 1) return okRpc({ agentPreset: 'router-standard' })
+          return errRpc('agent-preset-locked', 'session has already produced turns')
+        },
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server, router } = await boot(api)
+
+    const switched = await request(server, 'POST', '/api/session/s1/agent', {
+      agent: 'router-standard',
+    })
+    expect(switched.status).toBe(204)
+
+    const hub = router.ctx.hub
+    const originalBroadcast = hub.broadcast.bind(hub)
+    const notices: string[] = []
+    ;(hub as unknown as {
+      broadcast(events: Array<{ payload: { type?: string; properties?: { part?: { text?: string } } } }>): void
+    }).broadcast = (events) => {
+      for (const event of events) {
+        if (event.payload.type === 'message.part.updated') {
+          const text = event.payload.properties?.part?.text
+          if (typeof text === 'string') notices.push(text)
+        }
+      }
+      originalBroadcast(events as never)
+    }
+
+    for (let index = 0; index < 2; index++) {
+      const result = await request(server, 'POST', '/session/s1/message', {
+        agent: 'router-standard',
+        parts: [{ type: 'text', text: 'continue' }],
+      })
+      expect(result.status).toBe(200)
+    }
+
+    expect(selects).toBe(1)
+    expect(notices.filter((text) => text.includes('Agent switch locked'))).toHaveLength(0)
+  })
+
+  it('does not warn when the session list already reports the requested preset (out-of-band adoption)', async () => {
+    // A routing plugin can adopt a preset for a session without the bridge
+    // switching it (e.g. the session was created with that preset). The
+    // session list then reports the real preset; re-selecting the same one
+    // on every prompt must not warn.
+    const base = fakeApi()
+    let selects = 0
+    const item = {
+      sessionId: 's1' as never,
+      updatedAt: 2000,
+      running: false,
+      blank: false,
+      cwd: '/work',
+      agentPreset: 'router-standard',
+      projections: { asOfSeq: 0, values: { title: 'Session One' } as never },
+    }
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'router-standard', trust: 'user', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => {
+          selects += 1
+          return errRpc('agent-preset-locked', 'session has already produced turns')
+        },
+      },
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [item] }),
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server, router } = await boot(api)
+
+    const listed = await request(server, 'GET', '/session')
+    expect(listed.status).toBe(200)
+
+    const hub = router.ctx.hub
+    const originalBroadcast = hub.broadcast.bind(hub)
+    const notices: string[] = []
+    ;(hub as unknown as {
+      broadcast(events: Array<{ payload: { type?: string; properties?: { part?: { text?: string } } } }>): void
+    }).broadcast = (events) => {
+      for (const event of events) {
+        if (event.payload.type === 'message.part.updated') {
+          const text = event.payload.properties?.part?.text
+          if (typeof text === 'string') notices.push(text)
+        }
+      }
+      originalBroadcast(events as never)
+    }
+
+    const result = await request(server, 'POST', '/session/s1/message', {
+      agent: 'router-standard',
+      parts: [{ type: 'text', text: 'continue' }],
+    })
+    expect(result.status).toBe(200)
+
+    expect(selects).toBe(0)
+    expect(notices.filter((text) => text.includes('Agent switch locked'))).toHaveLength(0)
   })
 
   it('switches blank-session agents and maps agent-preset-locked to 409', async () => {

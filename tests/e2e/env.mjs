@@ -17,6 +17,7 @@
 //   - one running mock LLM on an OS-assigned port
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
@@ -86,6 +87,16 @@ async function newRun(argv) {
 
   run('dsh', ['plugin', '--profile', 'oc', 'add', addSpec], { env: dshEnv })
   run('dsh', ['plugin', '--profile', 'oc', 'add', '@deepseek-ai/dsh-llm-mock-server@0.1.0-rc.6'], { env: dshEnv })
+  // The local dsh install may carry a customization that references the
+  // `dsh-minimal-restrict` package from the shipped minimal preset (minimal
+  // restricted to the RL two-tool surface). Isolated e2e profiles must
+  // resolve that package too, or any session defaulting to minimal fails to
+  // mount. CI uses a pristine dsh install where the preset file is
+  // untouched, so the plugin is only added when the customization exists.
+  const localMinimalRestrict = join(homedir(), '.dsh', 'presets-plugins', 'dsh-minimal-restrict')
+  if (existsSync(join(localMinimalRestrict, 'package.json'))) {
+    run('dsh', ['plugin', '--profile', 'oc', 'add', localMinimalRestrict], { env: dshEnv })
+  }
 
   const profileDir = join(dshHome, 'profiles', 'oc')
   const dump = run('dsh', ['--profile', 'oc', '--dump-config'], { env: dshEnv })

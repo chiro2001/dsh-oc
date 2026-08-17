@@ -135,6 +135,35 @@ if [[ "$REPLY_COUNT" != "1" ]]; then
 fi
 echo "  sidebar and first-reply badge show '$SESSION_AGENT ·'; reply rendered once"
 
+echo "== second prompt keeps the switched agent and never warns 'Agent switch locked' =="
+tmux send-keys -t "$E2E_TUI_SESSION" "e2e agent tab second prompt" Enter
+
+SECOND_COUNT=""
+deadline=$((SECONDS + 60))
+while (( SECONDS < deadline )); do
+  e2e_tui_capture "$E2E_RUN_DIR/tui-agent-tab-second.txt"
+  SECOND_COUNT="$(grep 'mock response recovered' "$E2E_RUN_DIR/tui-agent-tab-second.txt" | grep -vc '┃' || true)"
+  if [[ "$SECOND_COUNT" == "2" ]]; then
+    break
+  fi
+  if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+    echo "e2e: dsh exited while waiting for the second reply: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if [[ "$SECOND_COUNT" != "2" ]]; then
+  echo "e2e: second reply never settled (last count: ${SECOND_COUNT:-0})" >&2
+  tail -30 "$E2E_RUN_DIR/tui-agent-tab-second.txt" >&2 || true
+  exit 1
+fi
+if grep -qa 'Agent switch locked' "$E2E_RUN_DIR/tui-agent-tab-second.txt"; then
+  echo "e2e: spurious Agent switch locked warning after the preset was already switched" >&2
+  tail -30 "$E2E_RUN_DIR/tui-agent-tab-second.txt" >&2 || true
+  exit 1
+fi
+echo "  second prompt completed without an Agent switch locked warning"
+
 echo "== exit through prompt submit =="
 e2e_tui_exit
 e2e_tui_after_checks

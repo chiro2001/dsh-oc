@@ -17,6 +17,7 @@
 
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { generateSessionHome } from './perf-session-gen.mjs'
@@ -219,6 +220,13 @@ async function main() {
   // Install the dsh-oc profile from this checkout plus the mock LLM server.
   run('dsh', ['plugin', '--profile', 'oc', 'add', repoRoot], { env: dshEnv })
   run('dsh', ['plugin', '--profile', 'oc', 'add', '@deepseek-ai/dsh-llm-mock-server@0.1.0-rc.6'], { env: dshEnv })
+  // Mirror local dsh preset customizations (see tests/e2e/env.mjs): a
+  // machine that edits the shipped minimal preset to reference
+  // `dsh-minimal-restrict` must expose the package to isolated profiles too.
+  const localMinimalRestrict = join(homedir(), '.dsh', 'presets-plugins', 'dsh-minimal-restrict')
+  if (existsSync(join(localMinimalRestrict, 'package.json'))) {
+    run('dsh', ['plugin', '--profile', 'oc', 'add', localMinimalRestrict], { env: dshEnv })
+  }
 
   const profileDir = join(home, 'profiles', 'oc')
   const overlay = join(home, 'agent-model.patch.yml')

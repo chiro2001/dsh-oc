@@ -223,6 +223,10 @@ describe('bridge events: session event mapping', () => {
     ])
     expect(events).toEqual([])
     expect(state.lastAgentPreset).toBe('standard')
+    // The committed preset must also fold into the per-session agent so a
+    // later prompt carrying the same agent is treated as already effective
+    // (routing-plugin out-of-band switches) instead of re-selecting.
+    expect(state.sessionAgentFor('s1')).toBe('standard')
   })
 
   it('handles the flat durable session row without a data envelope', () => {

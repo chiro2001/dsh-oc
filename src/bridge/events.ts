@@ -1204,7 +1204,14 @@ export class MuxEventTranslator {
         return []
       case 'agent-preset/selected' as SessionEvent['type']: {
         const preset = (event.data as { agentPreset?: unknown }).agentPreset
-        if (typeof preset === 'string') this.deps.state.lastAgentPreset = preset
+        if (typeof preset === 'string') {
+          this.deps.state.lastAgentPreset = preset
+          // Fold the committed preset into the per-session agent too, so
+          // later prompts carrying the same agent are recognized as already
+          // effective (out-of-band plugin switches) instead of re-selecting
+          // and tripping the agent-preset-locked warning.
+          this.deps.state.setSessionAgent(sessionId, preset)
+        }
         return []
       }
       case 'goal/change' as SessionEvent['type']: {

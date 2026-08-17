@@ -1316,6 +1316,15 @@ export async function applyAgentFromBody(
   const record = bodyAsRecord(body)
   const agent = typeof record.agent === 'string' && record.agent.length > 0 ? record.agent : undefined
   if (agent === undefined || agent === DEFAULT_AGENT_NAME) return
+  // A session's preset is fixed at creation: dsh rejects ANY
+  // agentPreset.select on a session that already produced turns, even when
+  // re-selecting the preset it already runs. Presets adopted while the
+  // session was still blank (Tab /preset) or out-of-band by a routing
+  // plugin are already effective; re-applying them on every later prompt
+  // only produced a spurious "Agent switch locked" warning. Treat the
+  // already-effective preset as a no-op so the TUI keeps its label without
+  // the lock noise.
+  if (ctx.state.sessionAgentFor(sessionId) === agent) return
   try {
     await switchAgentPreset(ctx, sessionId, agent)
     broadcastSessionAgent(ctx, sessionId, agent)
