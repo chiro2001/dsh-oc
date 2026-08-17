@@ -1,6 +1,6 @@
 {
   "name": "@chiro2001/dsh-oc",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0",
   "bin": {
     "dsh-oc": "bin/dsh-oc.mjs"
   },

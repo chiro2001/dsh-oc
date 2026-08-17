@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const binPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'dsh-oc.mjs')
 const tempDirs: string[] = []
+const pkgVersion = JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8')).version as string
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -70,7 +71,7 @@ describe('dsh-oc bin', () => {
       },
     })
     expect(result.status).toBe(0)
-    expect(String(result.stdout).trim()).toBe('dsh-oc 0.1.0-rc.1 (dsh 0.1.0-rc.6)')
+    expect(String(result.stdout).trim()).toBe(`dsh-oc ${pkgVersion} (dsh 0.1.0-rc.6)`)
   })
 
   it('exits 127 with a hint when dsh is missing for --version', () => {
