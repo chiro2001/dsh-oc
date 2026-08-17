@@ -111,7 +111,10 @@ deadline=$((SECONDS + 90))
 while (( SECONDS < deadline )); do
   text="$(curl -s "$E2E_BRIDGE_URL/session/$SID/message" | jq -r '[.. | objects | select(has("text")) | .text] | join(" ")' 2>/dev/null || true)"
   count="$(curl -s "$E2E_BRIDGE_URL/session/$SID/message" | jq '[.[] | select(.info.role == "user")] | length' 2>/dev/null || true)"
-  if [[ "$text" == *"e2e second queued prompt"* && "$text" == *"mock response recovered"* && "${count:-0}" -ge 3 ]]; then
+  # The queued second prompt must appear exactly once in history (the
+  # duplicate-user-card regression made it appear twice); the first prompt is
+  # the other user message.
+  if [[ "$text" == *"e2e second queued prompt"* && "$text" == *"mock response recovered"* && "${count:-0}" == 2 ]]; then
     SECOND_HINT="second turn completed ($count user messages)"
     break
   fi

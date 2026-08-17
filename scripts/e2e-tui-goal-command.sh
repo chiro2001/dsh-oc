@@ -134,11 +134,12 @@ if grep -qx '/goal' <<<"$USER_TEXTS"; then
   echo "e2e: /goal was sent as a bare line (split input regression)" >&2
   exit 1
 fi
-if ! grep -q "Objective: \"$GOAL_OBJECTIVE\"" <<<"$USER_TEXTS"; then
-  echo "e2e: no goal round carried the full objective" >&2
+if grep -q 'Objective:' <<<"$USER_TEXTS"; then
+  echo "e2e: goal round leaked into the user transcript as a phantom card" >&2
+  echo "$USER_TEXTS" >&2
   exit 1
 fi
-echo "  no split /goal line; previous prompt not re-sent; goal rounds carry the full objective"
+echo "  no split /goal line; previous prompt not re-sent; goal rounds stay off the user transcript"
 
 echo "== exit through prompt submit =="
 e2e_tui_exit

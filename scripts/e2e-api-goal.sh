@@ -44,7 +44,9 @@ curl -sN --max-time 120 "$BRIDGE/global/event" > "$SSE_FILE" &
 SSE_PID=$!
 sleep 2
 
-SESSION="$(curl -s -X POST "$BRIDGE/session" -H 'Content-Type: application/json' -d '{}' | jq -er .id)"
+# Run the goal surface on the standard preset: the goal tool must be in the
+# session's catalog, which a deployment may restrict away from minimal.
+SESSION="$(curl -s -X POST "$BRIDGE/session" -H 'Content-Type: application/json' -d '{"agent":"standard"}' | jq -er .id)"
 echo "  goal session: $SESSION"
 curl -s -X POST "$BRIDGE/session/$SESSION/message" -H 'Content-Type: application/json' \
   -d '{"parts":[{"type":"text","text":"e2e: create a goal"}]}' | jq -e '.info.role == "assistant"' >/dev/null

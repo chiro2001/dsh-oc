@@ -47,7 +47,9 @@ e2e_start_dsh "$E2E_ACTIVE_SESSION"
 e2e_wait_bridge_url
 SEED_BRIDGE="$E2E_BRIDGE_URL"
 
-GOAL_SESSION="$(curl -s -X POST "$SEED_BRIDGE/session" -H 'Content-Type: application/json' -d '{}' | jq -er .id)"
+# Run the goal surface on the standard preset: the goal tool must be in the
+# session's catalog, which a deployment may restrict away from minimal.
+GOAL_SESSION="$(curl -s -X POST "$SEED_BRIDGE/session" -H 'Content-Type: application/json' -d '{"agent":"standard"}' | jq -er .id)"
 echo "  goal session: $GOAL_SESSION"
 curl -s -X POST "$SEED_BRIDGE/session/$GOAL_SESSION/message" -H 'Content-Type: application/json' \
   -d '{"parts":[{"type":"text","text":"e2e: create a goal"}]}' | jq -e '.info.role == "assistant"' >/dev/null
