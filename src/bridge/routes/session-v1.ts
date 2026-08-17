@@ -35,6 +35,9 @@ function remapV1Messages(
       ...(surfaceId === undefined ? {} : { id: surfaceId }),
       ...(remappedParent === undefined ? {} : { parentID: remappedParent }),
       ...(sessionAgent !== undefined && entry.info.role === 'assistant'
+        ? { agent: sessionAgent, mode: sessionAgent }
+        : {}),
+      ...(sessionAgent !== undefined && entry.info.role === 'user'
         ? { agent: sessionAgent }
         : {}),
     }

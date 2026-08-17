@@ -458,6 +458,15 @@ export function convertMessagesV1(
         const data = event.data
         const id = String(data.id)
         const compact = isCompactCheckpoint(event)
+        const sourceKind = (data.source as { kind?: string } | undefined)?.kind
+        if (sourceKind !== 'user' && !compact) {
+          // Plugin/system rows (dcp boundary markers, runtime-context
+          // snapshots, subagent-settled notices, goal rounds) are not part of
+          // the user transcript surface. The live SSE stream already hides
+          // them; history must stay consistent so a resume does not render
+          // phantom user cards.
+          break
+        }
         entries.push({
           info: userMessageInfo(id, event.time, opts),
           parts: compact
@@ -897,6 +906,11 @@ export function convertMessagesV2(
       case 'user/message': {
         const data = event.data
         const compact = isCompactCheckpoint(event)
+        const sourceKind = (data.source as { kind?: string } | undefined)?.kind
+        if (sourceKind !== 'user' && !compact) {
+          // See convertMessagesV1: plugin/system rows stay off the surface.
+          break
+        }
         const message: SessionMessageUser = {
           id: String(data.id),
           time: { created: event.time },

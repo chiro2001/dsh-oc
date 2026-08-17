@@ -76,6 +76,23 @@ describe('convert/message (v1)', () => {
     })
   })
 
+  it('keeps plugin/system user rows off the history surface (dcp boundaries)', () => {
+    const boundary = sessionEvent('user/message', {
+      id: 'boundary-1' as never,
+      content: [{ type: 'text', text: '<dcp-boundary ref="m0001" turn="1" step="1" />' }],
+      source: { kind: 'plugin', plugin: 'dsh-dcp' },
+    }, 4, 1000)
+    const prompt = sessionEvent('user/message', {
+      id: 'real-1' as never,
+      content: [{ type: 'text', text: '列出你的工具列表' }],
+      source: { kind: 'user' },
+    }, 5, 1100)
+    const entries = convertMessagesV1([boundary, prompt], opts)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]?.info.id).toBe('real-1')
+    expect(convertMessagesV2([boundary, prompt], opts)).toHaveLength(1)
+  })
+
   it('folds assistant content into text/reasoning/tool parts', () => {
     const event = makeAssistantEvent([
       { type: 'reasoning', text: 'think' },

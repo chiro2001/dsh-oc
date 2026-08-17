@@ -163,7 +163,7 @@ export function provisionalAssistantMessage(
     parentID,
     modelID: model.modelID,
     providerID: model.providerID,
-    mode: 'build',
+    mode: deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
     path: { cwd: deps.cwd, root: deps.cwd },
     cost: 0,
     tokens: zeroTokens(),
@@ -216,6 +216,7 @@ export function commandResultEvents(
   const partId = `prt_cmd:${randomUUID()}`
   const created = Date.now()
   const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  const agent = deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
   events.push(
     makeEvent(directory, 'message.updated', {
       sessionID: sessionId,
@@ -223,12 +224,12 @@ export function commandResultEvents(
         id,
         sessionID: sessionId,
         role: 'assistant',
-        agent: DEFAULT_AGENT,
+        agent,
         time: { created },
         parentID: options.parentID ?? `pending:${sessionId}:user`,
         modelID: model.modelID,
         providerID: model.providerID,
-        mode: DEFAULT_AGENT,
+        mode: agent,
         path: { cwd: directory, root: directory },
         cost: 0,
         tokens: zeroTokens(),

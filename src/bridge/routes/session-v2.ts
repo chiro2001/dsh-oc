@@ -24,6 +24,7 @@ function remapV2Messages(
       : undefined
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
+    const messageType = 'type' in message ? message.type : undefined
     if (surfaceId === undefined && sessionAgent === undefined) {
       remapped.push(message)
       continue
@@ -33,7 +34,7 @@ function remapV2Messages(
       result = {
         ...message,
         ...(surfaceId === undefined ? {} : { id: surfaceId }),
-        ...(sessionAgent !== undefined && message.type === 'assistant'
+        ...(sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
           ? { agent: sessionAgent }
           : {}),
       } as SessionMessagesResponse['data'][number]
@@ -48,7 +49,7 @@ function remapV2Messages(
       result = {
         ...message,
         ...(surfaceId === undefined ? {} : { id: surfaceId }),
-        ...(sessionAgent !== undefined && message.type === 'assistant'
+        ...(sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
           ? { agent: sessionAgent }
           : {}),
         content,

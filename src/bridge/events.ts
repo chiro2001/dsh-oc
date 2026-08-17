@@ -802,6 +802,7 @@ export class MuxEventTranslator {
           splice.removedCount ?? 0,
           splice.inserted,
           event.time,
+          splice.outcome,
         )
         const events = this.queuedMessageEvents(sessionId, added, directory, project)
         if (splice.outcome === 'canceled') {
@@ -822,32 +823,38 @@ export class MuxEventTranslator {
         const dshId = String(event.data.id)
         const sourceKind = (event.data.source as { kind?: string } | undefined)?.kind
         const isUserPrompt = sourceKind === 'user'
-        const surfaceId = this.deps.state.takePromptMessageId(sessionId, dshId)
-        if (surfaceId !== dshId) {
+        const surfaceId = isUserPrompt
+          ? this.deps.state.takePromptMessageId(sessionId, dshId)
+          : dshId
+        if (isUserPrompt && surfaceId !== dshId) {
           // The prompt route already echoed this user message (with the
           // bridge-generated id) so the TUI could render its queued card
           // immediately; re-emitting it here would duplicate the card.
           this.deps.state.markBroadcastDshId(sessionId, dshId)
-          if (isUserPrompt) this.streamState(sessionId).lastUserMessageId = surfaceId
+          this.streamState(sessionId).lastUserMessageId = surfaceId
           return []
         }
-        if (this.deps.state.isBroadcastDshId(sessionId, dshId)) {
+        if (isUserPrompt && this.deps.state.isBroadcastDshId(sessionId, dshId)) {
           // dsh re-broadcasts the durable user/message after the route echo;
           // keep the bridge id as the parent anchor and stay silent.
-          if (isUserPrompt) {
-            this.streamState(sessionId).lastUserMessageId = this.deps.state.promptIdForDshId(sessionId, dshId) ?? dshId
-          }
+          this.streamState(sessionId).lastUserMessageId = this.deps.state.promptIdForDshId(sessionId, dshId) ?? dshId
           return []
         }
-        if (this.deps.state.hasPresentedQueued(sessionId, dshId)) {
+        if (isUserPrompt && this.deps.state.hasPresentedQueued(sessionId, dshId)) {
           // The queued card for this id is already on screen (surfaced from
           // `agent/inbox/spliced`); re-emitting the same user message would
           // render a second card. Keep the durable id in the stream state so
           // the assistant message still parents to it.
           this.deps.state.clearPresentedQueued(sessionId, dshId)
-          if (isUserPrompt) this.streamState(sessionId).lastUserMessageId = dshId
+          this.streamState(sessionId).lastUserMessageId = dshId
           return []
         }
+        // Plugin/system rows (dcp boundary markers, subagent-settled notices,
+        // goal rounds) are not transcript user cards. They also must never
+        // consume the pending TUI prompt id: the durable user message that
+        // follows owns that id and its route echo. Compaction checkpoints
+        // keep their existing visible card.
+        if (!isUserPrompt && !isCompactCheckpoint(event)) return []
         const events = messageEvents(sessionId, this.deps, () => {
           const entry = userMessageFromEvent(event, messageOptions(sessionId, this.deps))
           return {
@@ -1009,6 +1016,10 @@ export class MuxEventTranslator {
             ...entry.info,
             id: messageID,
             agent: this.deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
+            // The TUI badge renders `message.mode`, so it must follow the
+            // session's actual preset (the hardcoded build fallback made a
+            // Tab-switched first reply still read "Build").
+            mode: this.deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
           } as unknown as Record<string, unknown>
           if (event.data.message.content.some((block) => block.type === 'tool-call')) {
             // The message is not complete until its tool calls finish; leaving

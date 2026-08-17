@@ -2103,6 +2103,95 @@ describe('bridge events: projection and control frames', () => {
     expect(claimed).toEqual([])
   })
 
+  it('does not duplicate a routed user message when a dcp boundary row arrives first', () => {
+    const { state, translate } = translator()
+    // The prompt route already registered its bridge id and rendered the
+    // user card; the mux stream then replays the exact dsh sequence seen
+    // with dsh-dcp installed: queue insert -> claim -> plugin boundary
+    // marker -> durable user row.
+    state.registerPromptMessageId('s1', 'prompt-user-1')
+    const splice = (target: 'next-turn' | 'next-step', start: number, removedCount: number, inserted: unknown[], outcome?: 'canceled') =>
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent/inbox/spliced', {
+          target,
+          start,
+          ...(removedCount === 0 ? {} : { removedCount }),
+          inserted,
+          ...(outcome === undefined ? {} : { outcome }),
+        }, 5, 1000),
+      })
+    const userRow = (id: string, text: string, source: { kind: string; plugin?: string }, seq: number) =>
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('user/message', {
+          id: id as never,
+          content: [{ type: 'text', text }],
+          source,
+        }, seq, 1100),
+      })
+    const events = translate([
+      splice('next-turn', 0, 0, [{
+        id: 'real-1',
+        role: 'user',
+        content: [{ type: 'text', text: '列出你的工具列表' }],
+        source: { kind: 'user' },
+      }]),
+      splice('next-turn', 0, 1, []),
+      userRow('boundary-1', '<dcp-boundary ref="m0001" turn="1" step="1" />', { kind: 'plugin', plugin: 'dsh-dcp' }, 8),
+      userRow('real-1', '列出你的工具列表', { kind: 'user' }, 9),
+    ])
+    const userCards = events.filter((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'user')
+    // The durable row is the same message the prompt route echoed; emitting
+    // it again would render a second user card.
+    expect(userCards).toEqual([])
+    // The bridge id stays the parent anchor for the reply.
+    expect(state.promptIdForDshId('s1', 'real-1')).toBe('prompt-user-1')
+  })
+
+  it('keeps a queued user card canonical across claim and durable echo', () => {
+    const { translate } = translator()
+    const splice = (removedCount: number, inserted: unknown[], outcome?: 'canceled') =>
+      frame({
+        type: 'session/event',
+        sessionId: 's1' as never,
+        event: sessionEvent('agent/inbox/spliced', {
+          target: 'next-turn',
+          start: 0,
+          ...(removedCount === 0 ? {} : { removedCount }),
+          inserted,
+          ...(outcome === undefined ? {} : { outcome }),
+        }, 10, 2000),
+      })
+    const durable = () => frame({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: sessionEvent('user/message', {
+        id: 'queued-1' as never,
+        content: [{ type: 'text', text: 'hello' }],
+        source: { kind: 'user' },
+      }, 11, 3000),
+    })
+    const events = translate([
+      splice(0, [{
+        id: 'queued-1',
+        role: 'user',
+        content: [{ type: 'text', text: 'hello' }],
+        source: { kind: 'user' },
+      }]),
+      splice(1, []),
+      durable(),
+    ])
+    const userCards = events.filter((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'user')
+    expect(userCards).toHaveLength(1)
+  })
+
   it('hides cancelled inbox messages and ignores non-user insertions', () => {
     const { translate } = translator()
     translate([

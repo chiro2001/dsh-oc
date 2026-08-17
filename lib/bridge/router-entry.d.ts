@@ -3829,7 +3829,7 @@ declare class InteractionState {
     source: {
       kind: string;
     };
-  }>, enqueuedAt: number): InboxSpliceOutcome;
+  }>, enqueuedAt: number, outcome?: 'canceled'): InboxSpliceOutcome;
   /**
    * Initialize the inbox projection from the `session/queue` snapshot dsh
    * broadcasts when an SSE mux subscription starts. Later queue snapshots are

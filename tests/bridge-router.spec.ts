@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { createBridgeRouter, type BridgeRouter } from '../src/bridge/router.js'
+import { createBridgeRouter, hostSessionAddedEvents, type BridgeRouter } from '../src/bridge/router.js'
 import { extractParams, matchPattern, seedProjectionState } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import type { BridgeApi } from '../src/bridge/rpc.js'
@@ -1230,6 +1230,135 @@ describe('bridge router: session routes', () => {
       { id: 'child-1', parentID: 'parent-1', metadata: { origin: 'subagent' } },
       { id: 'parent-1' },
     ])
+  })
+
+  it('labels messages with the dsh agentPreset learned from the session list', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({
+          items: [{
+            sessionId: 's1' as never,
+            updatedAt: 2000,
+            running: false,
+            blank: false,
+            cwd: '/work',
+            agentPreset: 'minimal',
+          }],
+        }),
+        history: async () => okRpc({
+          events: [
+            { event: makeUserEvent('hi', 'u1', 1100) },
+            { event: makeAssistantEvent([{ type: 'text', text: 'hello' }], 'a1', 1200) },
+          ],
+          hasMore: false,
+        }),
+      },
+    }
+    const { server, router } = await boot(api)
+    // dsh summaries carry `agentPreset`, not a TUI `agent` name; the list
+    // must seed the per-session label so first replies do not fall back to
+    // the hardcoded build agent.
+    await request(server, 'GET', '/session')
+    expect(router.ctx.state.sessionAgentFor('s1')).toBe('minimal')
+    const messages = await request(server, 'GET', '/session/s1/message')
+    const entries = messages.body as Array<{ info: { role: string; agent: string; mode?: string } }>
+    const assistant = entries.find((entry) => entry.info.role === 'assistant')
+    expect(assistant?.info.agent).toBe('minimal')
+    // The TUI badge renders message.mode, so it must follow the preset too.
+    expect(assistant?.info.mode).toBe('minimal')
+    expect(entries.find((entry) => entry.info.role === 'user')?.info.agent).toBe('minimal')
+  })
+
+  it('tags a created session with its resolved agent before the first reply', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => okRpc({ agentPreset: 'minimal' }),
+      },
+      sessions: {
+        ...base.sessions,
+        create: async () => okRpc({ sessionId: 'fresh-1' as never }),
+      },
+    }
+    const { server, router } = await boot(api)
+    await request(server, 'POST', '/session', { agent: 'minimal', directory: '/work' })
+    expect(router.ctx.state.sessionAgentFor('fresh-1')).toBe('minimal')
+  })
+
+  it('surfaces live subagent children with parentID for the TUI subagent panel', async () => {
+    const { router } = await boot(fakeApi())
+    const events = hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-1',
+      blank: true,
+      cwd: '/work',
+      origin: 'subagent',
+      parentSessionId: 'parent-1',
+      agentPreset: 'minimal',
+    })
+    expect(events).toHaveLength(1)
+    expect(events[0]?.payload.type).toBe('session.updated')
+    expect(events[0]?.payload.properties.info).toMatchObject({
+      id: 'child-1',
+      parentID: 'parent-1',
+      metadata: { origin: 'subagent' },
+      agent: 'minimal',
+    })
+    expect(router.ctx.state.sessionParents.get('child-1')).toBe('parent-1')
+    expect(router.ctx.state.sessionDirectories.get('child-1')).toBe('/work')
+  })
+
+  it('pushes host/session-added subagent children over the SSE stream', async () => {
+    const api = fakeApi({
+      events: {
+        mux: async function* () {
+          return
+        },
+        host: async function* () {
+          yield {
+            rpcId: 'host-1' as never,
+            payload: {
+              type: 'host/session-added',
+              sessionId: 'child-1' as never,
+              blank: true,
+              cwd: '/work',
+              origin: 'subagent',
+              parentSessionId: 'parent-1' as never,
+              agentPreset: 'minimal',
+            },
+          } as never
+          return
+        },
+      },
+    })
+    const { server } = await boot(api)
+    const controller = new AbortController()
+    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+      if (text.includes('session.updated')) break
+    }
+    controller.abort()
+    expect(text).toContain('"type":"session.updated"')
+    expect(text).toContain('"parentID":"parent-1"')
+    expect(text).toContain('"metadata":{"origin":"subagent"}')
   })
 
   it('gets a session and its messages for v1 and v2', async () => {

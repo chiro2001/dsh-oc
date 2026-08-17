@@ -94,11 +94,18 @@ echo "  agent switched: $FIRST -> $SESSION_AGENT"
 
 echo "== sidebar keeps the switched agent and the reply renders once =="
 LABEL_SEEN=""
+REPLY_BADGE_SEEN=""
 REPLY_COUNT=""
+REPLY_BADGE_AGENT="${SESSION_AGENT^}"
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   e2e_tui_capture "$E2E_RUN_DIR/tui-agent-tab-final.txt"
   if [[ -z "$LABEL_SEEN" ]] && grep -qai "$SESSION_AGENT ·" "$E2E_RUN_DIR/tui-agent-tab-final.txt"; then
     LABEL_SEEN="1"
+  fi
+  # The per-message badge renders message.mode, not the agent name; it must
+  # follow the Tab-switched preset or the first reply still reads "Build".
+  if [[ -z "$REPLY_BADGE_SEEN" ]] && grep -qai "▣  *${REPLY_BADGE_AGENT} ·" "$E2E_RUN_DIR/tui-agent-tab-final.txt"; then
+    REPLY_BADGE_SEEN="1"
   fi
   count="$(grep 'mock response recovered' "$E2E_RUN_DIR/tui-agent-tab-final.txt" | grep -vc '┃' || true)"
   if [[ "$count" == "1" ]]; then
@@ -116,12 +123,17 @@ if [[ -z "$LABEL_SEEN" ]]; then
   tail -30 "$E2E_RUN_DIR/tui-agent-tab-final.txt" >&2 || true
   exit 1
 fi
+if [[ -z "$REPLY_BADGE_SEEN" ]]; then
+  echo "e2e: first reply badge did not follow the switch (want '▣ ${REPLY_BADGE_AGENT} ·')" >&2
+  tail -30 "$E2E_RUN_DIR/tui-agent-tab-final.txt" >&2 || true
+  exit 1
+fi
 if [[ "$REPLY_COUNT" != "1" ]]; then
   echo "e2e: reply never settled to a single render (last count: ${REPLY_COUNT:-0})" >&2
   tail -30 "$E2E_RUN_DIR/tui-agent-tab-final.txt" >&2 || true
   exit 1
 fi
-echo "  sidebar shows '$SESSION_AGENT ·'; reply rendered once"
+echo "  sidebar and first-reply badge show '$SESSION_AGENT ·'; reply rendered once"
 
 echo "== exit through prompt submit =="
 e2e_tui_exit

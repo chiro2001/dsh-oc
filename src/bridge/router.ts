@@ -212,7 +212,12 @@ export function recordSessionSummaries(
   for (const item of items) {
     const id = String(item.sessionId)
     ctx.state.sessionDirectories.set(id, directories.get(id) ?? ctx.cwd)
-    const agent = (item as { agent?: unknown }).agent
+    // dsh `SessionSummary` carries the composed preset as `agentPreset`
+    // (header passthrough), not a TUI-facing `agent` name. Reading the wrong
+    // field left the per-session label unset, so every message fell back to
+    // the hardcoded "build" agent even after a Tab switch to another preset.
+    const agent = (item as { agentPreset?: unknown; agent?: unknown }).agentPreset
+      ?? (item as { agent?: unknown }).agent
     if (typeof agent === 'string' && agent.length > 0) {
       ctx.state.setSessionAgent(id, agent)
     }
@@ -1534,10 +1539,70 @@ export async function createSession(
   if (agentName !== undefined) {
     ctx.state.lastAgentPreset = agentName
   }
+  // The new session runs the resolved preset (a Tab-selected name, or the
+  // deployment default when the TUI carried "build"); record it immediately
+  // so the first reply is labeled with the preset the model actually ran.
+  if (agentPreset !== undefined) {
+    ctx.state.setSessionAgent(id, agentPreset)
+  } else if (agentName !== undefined) {
+    ctx.state.setSessionAgent(id, agentName)
+  }
   ctx.state.setCurrentSession(id)
   ctx.state.invalidateSession()
   const view = await sessionView(ctx, id)
   return json(200, v2 ? { data: toV2Session(view, id, ctx) } : toV1Session(view, id, ctx))
+}
+
+/**
+ * Translate one dsh `host/session-added` frame into the opencode
+ * `session.updated` the TUI needs to learn about a session born mid-run.
+ *
+ * Subagent children are spawned inside dsh while the TUI's session list is
+ * already loaded; without a live push the child never reaches
+ * `sync.data.session`, so the TUI subagent panel (Ctrl+x ↓) stays empty.
+ * The frame carries the full lineage fields, so the push also seeds the
+ * bridge state (parent map, directory, agent) for later event translation.
+ */
+export function hostSessionAddedEvents(
+  ctx: BridgeRouteContext,
+  payload: {
+    sessionId?: unknown
+    blank?: unknown
+    parentSessionId?: unknown
+    origin?: unknown
+    cwd?: unknown
+    agentPreset?: unknown
+  },
+): BridgeGlobalEvent[] {
+  const sessionId = String(payload.sessionId ?? '')
+  if (sessionId === '') return []
+  const summary: SessionSummary = {
+    sessionId: sessionId as never,
+    updatedAt: Date.now(),
+    running: false,
+    blank: payload.blank !== false,
+    ...(payload.parentSessionId === undefined ? {} : { parentSessionId: String(payload.parentSessionId) as never }),
+    ...(payload.origin === 'subagent' ? { origin: 'subagent' as const } : {}),
+    ...(payload.cwd === undefined ? {} : { cwd: String(payload.cwd) }),
+    ...(payload.agentPreset === undefined ? {} : { agentPreset: String(payload.agentPreset) }),
+  }
+  recordSessionSummaries(ctx, [summary])
+  const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
+  const project = projectIdFor(directory)
+  const parentID = ctx.state.sessionParents.get(sessionId)
+  const agent = ctx.state.sessionAgentFor(sessionId)
+  return [
+    makeEvent(directory, 'session.updated', {
+      sessionID: sessionId,
+      info: minimalSession(sessionId, {
+        cwd: directory,
+        createdAt: Date.now(),
+        ...(agent === undefined ? {} : { agent }),
+        ...(parentID === undefined ? {} : { parentID }),
+        ...(payload.origin === 'subagent' ? { metadata: { origin: 'subagent' } } : {}),
+      }),
+    }, project),
+  ]
 }
 
 export async function permissionReply(
@@ -1806,6 +1871,12 @@ export function createBridgeRouter(
             if (payload.type === 'host/session-added' || payload.type === 'host/session-removed') {
               ctx.state.invalidateSession()
               scheduleListRefresh()
+              if (payload.type === 'host/session-added') {
+                // The TUI session list is loaded once at bootstrap; a session
+                // born mid-run (including subagent children) must be pushed
+                // live or the subagent panel never sees it.
+                for (const event of hostSessionAddedEvents(ctx, payload)) sendToClient(event)
+              }
             }
           }
         }

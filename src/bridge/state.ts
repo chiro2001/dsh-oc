@@ -338,6 +338,7 @@ export class InteractionState {
     removedCount: number,
     inserted: Array<{ id: string; content: readonly unknown[]; source: { kind: string } }>,
     enqueuedAt: number,
+    outcome?: 'canceled',
   ): InboxSpliceOutcome {
     const projection = this.inboxProjectionFor(sessionId)
     const list = target === 'next-step' ? projection.nextStep : projection.nextTurn
@@ -359,7 +360,13 @@ export class InteractionState {
       list.splice(actualStart + added.length - 1, 0, entry)
     }
     for (const message of removed) {
-      this.presentQueuedIds.delete(this.queuedKey(sessionId, message.id))
+      // Only a canceled message truly left the queue without being claimed
+      // for execution. A claim moves the same prompt into the active turn,
+      // and the queued/echoed surface marker must survive so the later
+      // durable `user/message` echo cannot render a second card.
+      if (outcome === 'canceled') {
+        this.presentQueuedIds.delete(this.queuedKey(sessionId, message.id))
+      }
     }
     return { added, removed }
   }
