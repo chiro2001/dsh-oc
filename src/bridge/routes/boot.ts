@@ -46,10 +46,7 @@ export function registerBootRoutes(register: RouteRegistrar): void {
 
   register('GET', '/provider/auth', 'json', async () => R.json(200, {}))
 
-  register('GET', '/agent', 'json', async (_req, ctx) => R.json(200, [
-    await R.v1DefaultAgent(ctx),
-    ...(await R.dshPresetAgents(ctx)),
-  ]))
+  register('GET', '/agent', 'json', async (_req, ctx) => R.json(200, await R.v1AgentList(ctx)))
   // `/preset` stays advertised as a server command: the 1.18.18 TUI opens a
   // slash popup for any `/` input, so the first Enter completes to `/preset `
   // and the second Enter executes through `POST /session/:id/command`. The
@@ -71,7 +68,7 @@ export function registerBootRoutes(register: RouteRegistrar): void {
 
   register('GET', '/api/agent', 'json', async (_req, ctx) => R.json(200, {
     location: R.locationInfo(ctx),
-    data: [await R.v2DefaultAgent(ctx), ...(await R.dshPresetAgentsV2(ctx))],
+    data: await R.v2AgentList(ctx),
   }))
 
   register('GET', '/api/command', 'json', async (_req, ctx) => R.json(200, {

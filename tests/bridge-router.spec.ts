@@ -222,6 +222,35 @@ describe('bridge router: startup GET routes', () => {
       data: [{ id: 'build', mode: 'primary', hidden: false, model: { id: 'mock-model', providerID: 'deepseek' } }],
     })
   })
+
+  it('advertises the configured default preset first so the fresh TUI shows it', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async () => okRpc({ agentPreset: 'minimal' }),
+      },
+    }
+    const { server } = await boot(api)
+    const v1 = await request(server, 'GET', '/agent')
+    const names = (v1.body as Array<{ name: string }>).map((agent) => agent.name)
+    expect(names[0]).toBe('minimal')
+    expect(names).not.toContain('build')
+    expect(names).toEqual(['minimal', 'standard'])
+    const v2 = await request(server, 'GET', '/api/agent')
+    expect((v2.body as { data: Array<{ id: string }> }).data.map((agent) => agent.id)).toEqual([
+      'minimal',
+      'standard',
+    ])
+  })
 })
 
 describe('bridge router: wildcard pattern and workspace fs routes', () => {
@@ -2222,13 +2251,11 @@ describe('bridge router: model variants, agent presets and /preset', () => {
 
     const v1Agents = await request(server, 'GET', '/agent')
     expect((v1Agents.body as Array<{ name: string }>).map((agent) => agent.name)).toEqual([
-      'build',
       'minimal',
       'standard',
     ])
     const v2Agents = await request(server, 'GET', '/api/agent')
     expect((v2Agents.body as { data: Array<{ id: string }> }).data.map((agent) => agent.id)).toEqual([
-      'build',
       'minimal',
       'standard',
     ])

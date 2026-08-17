@@ -833,29 +833,68 @@ export async function defaultModelRef(ctx: BridgeRouteContext): Promise<{ provid
   return defaultAgents(ctx)
 }
 
-export async function v1DefaultAgent(ctx: BridgeRouteContext): Promise<V2Agent> {
+/**
+ * The agent list the TUI cycles with Tab and shows on a fresh prompt. The
+ * first entry is the TUI's default selection, so it must be the deployment's
+ * configured default preset — not the hardcoded "build" placeholder — or a
+ * fresh session claims a preset the harness never runs.
+ */
+export async function v1AgentList(ctx: BridgeRouteContext): Promise<V2Agent[]> {
   const { providerID, modelID } = await defaultAgents(ctx)
-  return {
-    name: DEFAULT_AGENT_NAME,
-    description: 'dsh-oc default build agent',
-    mode: 'primary',
-    permission: [],
-    options: {},
-    model: { providerID, modelID },
-  }
+  const presets = await presetRoster(ctx)
+  const defaultId = presets.find((preset) => preset.isDefault)?.id
+  const defaultName = defaultId ?? DEFAULT_AGENT_NAME
+  return [
+    {
+      name: defaultName,
+      description: defaultName === DEFAULT_AGENT_NAME
+        ? 'dsh-oc default build agent'
+        : 'dsh-oc default agent (dsh default preset)',
+      mode: 'primary',
+      permission: [],
+      options: {},
+      model: { providerID, modelID },
+    },
+    ...presets
+      .filter((preset) => preset.id !== DEFAULT_AGENT_NAME && preset.id !== defaultId)
+      .map((preset) => ({
+        name: preset.id,
+        description: preset.name ?? preset.description,
+        mode: 'primary' as const,
+        permission: [],
+        options: {},
+      })),
+  ]
 }
 
-export async function v2DefaultAgent(ctx: BridgeRouteContext): Promise<AgentV2Info> {
+export async function v2AgentList(ctx: BridgeRouteContext): Promise<AgentV2Info[]> {
   const { providerID, modelID } = await defaultAgents(ctx)
-  return {
-    id: DEFAULT_AGENT_NAME,
-    mode: 'primary',
-    hidden: false,
-    request: { headers: {}, body: {} },
-    permissions: [],
-    model: { id: modelID, providerID },
-    description: 'dsh-oc default build agent',
-  }
+  const presets = await presetRoster(ctx)
+  const defaultId = presets.find((preset) => preset.isDefault)?.id
+  const defaultName = defaultId ?? DEFAULT_AGENT_NAME
+  return [
+    {
+      id: defaultName,
+      mode: 'primary',
+      hidden: false,
+      request: { headers: {}, body: {} },
+      permissions: [],
+      model: { id: modelID, providerID },
+      description: defaultName === DEFAULT_AGENT_NAME
+        ? 'dsh-oc default build agent'
+        : 'dsh-oc default agent (dsh default preset)',
+    },
+    ...presets
+      .filter((preset) => preset.id !== DEFAULT_AGENT_NAME && preset.id !== defaultId)
+      .map((preset) => ({
+        id: preset.id,
+        description: preset.name ?? preset.description,
+        mode: 'primary' as const,
+        hidden: false,
+        request: { headers: {}, body: {} },
+        permissions: [],
+      })),
+  ]
 }
 
 export async function presetRoster(ctx: BridgeRouteContext) {
@@ -1184,41 +1223,6 @@ export async function runSlashCommand(
     outcome = { ...outcome, text: slashOutcomeText(ctx, sessionId, outcome.text) }
   }
   return outcome
-}
-
-export async function dshPresetAgents(ctx: BridgeRouteContext): Promise<V2Agent[]> {
-  try {
-    return (await presetRoster(ctx))
-      .filter((preset) => preset.id !== DEFAULT_AGENT_NAME)
-      .map((preset) => ({
-        name: preset.id,
-        description: preset.name ?? preset.description,
-        mode: 'primary' as const,
-        permission: [],
-        options: {},
-      }))
-  } catch (error) {
-    ctx.log(`[bridge] agent preset roster unavailable: ${error instanceof Error ? error.message : String(error)}`)
-    return []
-  }
-}
-
-export async function dshPresetAgentsV2(ctx: BridgeRouteContext): Promise<AgentV2Info[]> {
-  try {
-    return (await presetRoster(ctx))
-      .filter((preset) => preset.id !== DEFAULT_AGENT_NAME)
-      .map((preset) => ({
-        id: preset.id,
-        description: preset.name ?? preset.description,
-        mode: 'primary' as const,
-        hidden: false,
-        request: { headers: {}, body: {} },
-        permissions: [],
-      }))
-  } catch (error) {
-    ctx.log(`[bridge] agent preset roster unavailable: ${error instanceof Error ? error.message : String(error)}`)
-    return []
-  }
 }
 
 interface ModelInput {
