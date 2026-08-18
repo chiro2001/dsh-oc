@@ -187,7 +187,14 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const assistantID = `msg_${randomUUID()}`
     ctx.state.registerAssistantIdForUser(id, promptUserID, assistantID)
     await R.applyAgentFromBody(ctx, id, req.body)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
+    await R.broadcastPromptUserMessage(
+      ctx,
+      id,
+      promptUserID,
+      promptText(content),
+      Date.now(),
+      R.bodyModelRef(req.body),
+    )
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
@@ -245,7 +252,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const cursorRaw = req.query.get('cursor')
     const beforeSeq = cursorRaw === null ? undefined : R.decodeMessageCursor(cursorRaw)
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: limit, beforeSeq })
-    const defaultModel = await R.defaultModelRef(ctx)
+    const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const oldest = R.oldestSurfaceSeq(entries)
     const data = convertMessagesV2(
@@ -285,7 +292,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       maxMessages: limit,
       ...(after === undefined ? {} : { beforeSeq: after }),
     })
-    const defaultModel = await R.defaultModelRef(ctx)
+    const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const anchorSeqs: number[] = []
     const data = convertMessagesV2(
@@ -314,7 +321,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
   register('GET', '/api/session/:sessionID/context', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
-    const defaultModel = await R.defaultModelRef(ctx)
+    const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const data = convertMessagesV2(
       entries.map((entry) => entry.event),
@@ -333,7 +340,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const id = req.params.sessionID as string
     const messageID = req.params.messageID as string
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
-    const defaultModel = await R.defaultModelRef(ctx)
+    const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const data = convertMessagesV2(
       entries.map((entry) => entry.event),

@@ -1507,6 +1507,107 @@ describe('bridge router: session routes', () => {
     })
   })
 
+  it('stamps message history with the session model, not the catalog-first default', async () => {
+    // Regression: the TUI restores its prompt model from the last user
+    // message when the session changes. The bridge stamped every user
+    // message with the FIRST catalog model (deepseek-v4-flash), so after the
+    // first turn the TUI draft reverted to flash even though the session was
+    // explicitly running deepseek-v4-pro.
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      llm: {
+        ...base.llm,
+        models: async () => okRpc({
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [
+              { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+              { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
+            ],
+          }],
+          failures: [],
+        }),
+      },
+      sessions: {
+        ...base.sessions,
+        list: async () => okRpc({ items: [item] }),
+        history: async () => okRpc({ events: [{ event: makeUserEvent('hello') }], hasMore: false }),
+        models: async () => okRpc({
+          current: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
+          routable: true,
+          groups: [],
+          failures: [],
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const v1 = await request(server, 'GET', '/session/s1/message')
+    expect(v1.status).toBe(200)
+    expect((v1.body as Array<{ info: { role: string; model?: unknown } }>)[0]?.info).toMatchObject({
+      role: 'user',
+      model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' },
+    })
+  })
+
+  it('stamps the queued prompt echo with the model carried in the prompt body', async () => {
+    // Regression: the TUI reads the last user message's model to restore its
+    // draft. The queued user card broadcast for a prompt must name the model
+    // the user actually submitted (deepseek-v4-pro), never the catalog-first
+    // default (deepseek-v4-flash), or the next prompt reverts to flash.
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      llm: {
+        ...base.llm,
+        models: async () => okRpc({
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [
+              { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+              { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
+            ],
+          }],
+          failures: [],
+        }),
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server, router } = await boot(api)
+    const hub = router.ctx.hub
+    const originalBroadcast = hub.broadcast.bind(hub)
+    const userCards: Array<{ role?: string; model?: unknown }> = []
+    ;(hub as unknown as {
+      broadcast(events: Array<{
+        payload: { type?: string; properties?: { info?: { role?: string; model?: unknown } } }
+      }>): void
+    }).broadcast = (events) => {
+      for (const event of events) {
+        if (event.payload.type === 'message.updated') {
+          const info = event.payload.properties?.info
+          if (info?.role === 'user') userCards.push(info)
+        }
+      }
+      originalBroadcast(events as never)
+    }
+
+    const prompted = await request(server, 'POST', '/session/s1/message', {
+      model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' },
+      parts: [{ type: 'text', text: 'hello' }],
+    })
+    expect(prompted.status).toBe(200)
+    expect(userCards).toHaveLength(1)
+    expect(userCards[0]).toMatchObject({
+      role: 'user',
+      model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' },
+    })
+  })
+
   it('creates sessions (v1), forks from parentID, and creates v2 sessions', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []

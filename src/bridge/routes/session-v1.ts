@@ -163,7 +163,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     const limitRaw = req.query.get('limit')
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: limit })
-    const defaultModel = await R.defaultModelRef(ctx)
+    const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = convertMessagesV1(
       history.events.map((entry) => entry.event),
       {
@@ -181,7 +181,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     const id = req.params.id as string
     const messageID = req.params.messageID as string
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
-    const defaultModel = await R.defaultModelRef(ctx)
+    const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = convertMessagesV1(
       history.events.map((entry) => entry.event),
       {
@@ -210,7 +210,14 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     }
     const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, req.body)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
+    await R.broadcastPromptUserMessage(
+      ctx,
+      id,
+      promptUserID,
+      promptText(content),
+      Date.now(),
+      R.bodyModelRef(req.body),
+    )
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
@@ -237,7 +244,14 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     }
     const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, req.body)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
+    await R.broadcastPromptUserMessage(
+      ctx,
+      id,
+      promptUserID,
+      promptText(content),
+      Date.now(),
+      R.bodyModelRef(req.body),
+    )
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
@@ -263,7 +277,14 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     }
     const { promptUserID } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, body)
-    await R.broadcastPromptUserMessage(ctx, id, promptUserID, promptText(content), Date.now())
+    await R.broadcastPromptUserMessage(
+      ctx,
+      id,
+      promptUserID,
+      promptText(content),
+      Date.now(),
+      R.bodyModelRef(body),
+    )
     if (!(await R.applyModelSelection(ctx, id, body))) {
       await R.reconcileModelSelection(ctx, id)
     }

@@ -834,6 +834,38 @@ export async function defaultModelRef(ctx: BridgeRouteContext): Promise<{ provid
 }
 
 /**
+ * The opencode-facing model ref a session is actually running. The TUI
+ * restores its prompt model from the last user message when the session
+ * changes, so user cards and history must name the session's real selection
+ * (e.g. deepseek-v4-pro), not the first catalog model (deepseek-v4-flash) —
+ * stamping the catalog default made the next prompt silently revert to flash.
+ */
+export async function sessionModelRef(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+): Promise<{ providerID: string; modelID: string }> {
+  try {
+    const selection = await rpc(ctx, 'session.models', { sessionId: sid(sessionId) })
+    return {
+      providerID: externalProviderId(selection.current.provider),
+      modelID: selection.current.model,
+    }
+  } catch (error) {
+    ctx.log(`[bridge] session model selection unavailable for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+    return defaultAgents(ctx)
+  }
+}
+
+/** The model ref carried by a prompt body, if any (for prompt echo cards). */
+export function bodyModelRef(
+  body: unknown,
+): { providerID: string; modelID: string } | undefined {
+  const input = modelInputFromBody(body)
+  if (input === undefined) return undefined
+  return { providerID: input.providerID, modelID: input.modelID }
+}
+
+/**
  * The agent list the TUI cycles with Tab and shows on a fresh prompt. The
  * first entry is the TUI's default selection, so it must be the deployment's
  * configured default preset — not the hardcoded "build" placeholder — or a
@@ -1043,10 +1075,11 @@ export async function broadcastPromptUserMessage(
   userId: string,
   text: string,
   created: number,
+  model?: { providerID: string; modelID: string },
 ): Promise<void> {
   const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
   const project = projectIdFor(directory)
-  const model = await defaultModelRef(ctx)
+  const resolved = model ?? await sessionModelRef(ctx, sessionId)
   ctx.hub.broadcast([
     makeEvent(directory, 'message.updated', {
       sessionID: sessionId,
@@ -1056,7 +1089,7 @@ export async function broadcastPromptUserMessage(
         role: 'user',
         time: { created },
         agent: ctx.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
-        model,
+        model: resolved,
       },
     }, project),
     makeEvent(directory, 'message.part.updated', {
