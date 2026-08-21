@@ -1089,7 +1089,7 @@ describe('bridge router: session routes', () => {
       method: 'session.prompt',
       payload: {
         sessionId: 's1',
-        mode: 'queue',
+        mode: 'steer',
         content: [{ type: 'text', text: '/code-review strict' }],
       },
     })
@@ -1873,7 +1873,7 @@ describe('bridge router: session routes', () => {
     expect(prompt.status).toBe(200)
     expect(calls[1]).toMatchObject({
       method: 'session.prompt',
-      payload: { sessionId: 's1', mode: 'queue', content: [{ type: 'text', text: 'hi' }] },
+      payload: { sessionId: 's1', mode: 'steer', content: [{ type: 'text', text: 'hi' }] },
     })
     expect(prompt.body).toMatchObject({ info: { role: 'assistant' }, parts: [] })
 
@@ -1883,7 +1883,7 @@ describe('bridge router: session routes', () => {
     expect(promptAlias.status).toBe(200)
     expect(calls[2]).toMatchObject({
       method: 'session.prompt',
-      payload: { sessionId: 's1', mode: 'queue', content: [{ type: 'text', text: 'via alias' }] },
+      payload: { sessionId: 's1', mode: 'steer', content: [{ type: 'text', text: 'via alias' }] },
     })
 
     const promptV2 = await request(server, 'POST', '/api/session/s1/prompt', {
@@ -1895,7 +1895,7 @@ describe('bridge router: session routes', () => {
     })
     expect(calls[3]).toMatchObject({
       method: 'session.prompt',
-      payload: { sessionId: 's1', mode: 'queue', content: [{ type: 'text', text: 'via v2' }] },
+      payload: { sessionId: 's1', mode: 'steer', content: [{ type: 'text', text: 'via v2' }] },
     })
 
     const slashPrompt = await request(server, 'POST', '/session/s1/message', {
@@ -1906,7 +1906,7 @@ describe('bridge router: session routes', () => {
       method: 'session.prompt',
       payload: {
         sessionId: 's1',
-        mode: 'queue',
+        mode: 'steer',
         content: [{ type: 'text', text: '/compact' }],
       },
     })
@@ -1953,7 +1953,7 @@ describe('bridge router: session routes', () => {
       method: 'session.prompt',
       payload: {
         sessionId: 's1',
-        mode: 'queue',
+        mode: 'steer',
         content: [{ type: 'text', text: 'mini hello' }],
       },
     })
@@ -2577,7 +2577,7 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     })
     expect(calls[1]).toMatchObject({
       method: 'session.prompt',
-      payload: { sessionId: 's1', mode: 'queue' },
+      payload: { sessionId: 's1', mode: 'steer' },
     })
   })
 
@@ -3725,5 +3725,30 @@ describe('bridge router: prompt queue delivery', () => {
     expect(calls).toEqual(['same', 'same'])
     await submit('different')
     expect(calls).toEqual(['same', 'same', 'different'])
+  })
+
+  it('submits prompts with steer mode so a running turn sees an inserted message at the next step', async () => {
+    // Regression (real session e0336d8b): a mid-turn insertion ("标题是…")
+    // sat in dsh's next-turn queue for minutes while the model kept
+    // searching, because the bridge hardcoded mode 'queue'. The official
+    // opencode server appends the message to the running session and the
+    // loop picks it up at the next step; dsh's equivalent is mode 'steer'
+    // (next-step inbox), not 'queue' (next-turn).
+    const calls: Array<{ mode?: string }> = []
+    const api = fakeApi({
+      sessions: {
+        ...fakeApi().sessions,
+        prompt: async (request) => {
+          calls.push({ mode: String((request.payload as { mode?: unknown }).mode ?? '') })
+          return okRpc({ accepted: true })
+        },
+      },
+    })
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: 'inserted while busy' }],
+    })
+    expect(result.status).toBe(200)
+    expect(calls).toEqual([{ mode: 'steer' }])
   })
 })

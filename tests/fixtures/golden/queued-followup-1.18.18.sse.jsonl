@@ -1,6 +1,6 @@
-{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-1","sessionID":"id-0","role":"user","time":{},"agent":"build","model":{"providerID":"deepseek","modelID":"mock-model"}}}}
+{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-1","sessionID":"id-0","role":"user","time":{},"agent":"minimal","model":{"providerID":"deepseek","modelID":"mock-model"}}}}
 {"type":"message.part.updated","props":{"sessionID":"id-0","part":{"id":"id-2","sessionID":"id-0","messageID":"id-1","type":"text","text":"order repro queued prompt","time":{}}}}
-{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-3","sessionID":"id-0","role":"assistant","agent":"build","time":{},"parentID":"id-4","modelID":"mock-model","providerID":"deepseek","mode":"build","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}}}
+{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-3","sessionID":"id-0","role":"assistant","agent":"minimal","time":{},"parentID":"id-4","modelID":"mock-model","providerID":"deepseek","mode":"minimal","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}}}
 {"type":"message.part.updated","props":{"sessionID":"id-0","part":{"id":"id-5","sessionID":"id-0","messageID":"id-3","type":"text","text":"","time":{}}}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"orde"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"r-re"}}
@@ -33,9 +33,9 @@
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"epro"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"-fol"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"lowu"}}
+{"type":"session.updated","props":{"sessionID":"id-0","info":{"id":"id-0","slug":"id-0","projectID":"id-6","directory":"/workspace","title":"order-repro-followup order-repro-followup order-repro-followup order-repro-follo","agent":"minimal","version":"1.18.18","time":{}}}}
+{"type":"session.updated","props":{"sessionID":"id-0","info":{"id":"id-0","slug":"id-0","projectID":"id-6","directory":"/workspace","title":"order-repro-followup order-repro-followup order-repro-followup order-repro-follo","agent":"minimal","version":"1.18.18","time":{}}}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"p or"}}
-{"type":"session.updated","props":{"sessionID":"id-0","info":{"id":"id-0","slug":"id-0","projectID":"id-6","directory":"/workspace","title":"order-repro-followup order-repro-followup order-repro-followup order-repro-follo","agent":"build","version":"1.18.18","time":{}}}}
-{"type":"session.updated","props":{"sessionID":"id-0","info":{"id":"id-0","slug":"id-0","projectID":"id-6","directory":"/workspace","title":"order-repro-followup order-repro-followup order-repro-followup order-repro-follo","agent":"build","version":"1.18.18","time":{}}}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"der-"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"repr"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"o-fo"}}
@@ -84,14 +84,14 @@
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"llow"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-3","partID":"id-5","field":"text","delta":"up"}}
 {"type":"message.part.updated","props":{"sessionID":"id-0","part":{"id":"id-5","sessionID":"id-0","messageID":"id-3","type":"text","text":"order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup","time":{}}}}
-{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-3","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-7","agent":"build","modelID":"mock-model","providerID":"deepseek","mode":"build","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
-{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-3","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-7","agent":"build","modelID":"mock-model","providerID":"deepseek","mode":"build","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
+{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-3","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-7","agent":"minimal","modelID":"mock-model","providerID":"deepseek","mode":"minimal","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
+{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-3","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-7","agent":"minimal","modelID":"mock-model","providerID":"deepseek","mode":"minimal","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
 {"type":"session.status","props":{"sessionID":"id-0","status":{"type":"idle"}}}
 {"type":"session.idle","props":{"sessionID":"id-0"}}
 {"type":"turn.idle","props":{"sessionID":"id-0"}}
 {"type":"session.status","props":{"sessionID":"id-0","status":{"type":"busy"}}}
 {"type":"turn.wait","props":{"sessionID":"id-0"}}
-{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-8","sessionID":"id-0","role":"assistant","agent":"build","time":{},"parentID":"id-1","modelID":"mock-model","providerID":"deepseek","mode":"build","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}}}
+{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-8","sessionID":"id-0","role":"assistant","agent":"minimal","time":{},"parentID":"id-1","modelID":"mock-model","providerID":"deepseek","mode":"minimal","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}}}}}
 {"type":"message.part.updated","props":{"sessionID":"id-0","part":{"id":"id-9","sessionID":"id-0","messageID":"id-8","type":"text","text":"","time":{}}}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-8","partID":"id-9","field":"text","delta":"orde"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-8","partID":"id-9","field":"text","delta":"r-re"}}
@@ -173,8 +173,8 @@
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-8","partID":"id-9","field":"text","delta":"llow"}}
 {"type":"message.part.delta","props":{"sessionID":"id-0","messageID":"id-8","partID":"id-9","field":"text","delta":"up"}}
 {"type":"message.part.updated","props":{"sessionID":"id-0","part":{"id":"id-9","sessionID":"id-0","messageID":"id-8","type":"text","text":"order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup order-repro-followup","time":{}}}}
-{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-8","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-1","agent":"build","modelID":"mock-model","providerID":"deepseek","mode":"build","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
-{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-8","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-1","agent":"build","modelID":"mock-model","providerID":"deepseek","mode":"build","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
+{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-8","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-1","agent":"minimal","modelID":"mock-model","providerID":"deepseek","mode":"minimal","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
+{"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-8","sessionID":"id-0","role":"assistant","time":{},"parentID":"id-1","agent":"minimal","modelID":"mock-model","providerID":"deepseek","mode":"minimal","path":{"cwd":"/workspace","root":"/workspace"},"cost":0,"tokens":{"input":3,"output":314,"reasoning":0,"cache":{"read":0,"write":0}},"finish":"stop"}}}
 {"type":"session.status","props":{"sessionID":"id-0","status":{"type":"idle"}}}
 {"type":"session.idle","props":{"sessionID":"id-0"}}
 {"type":"turn.idle","props":{"sessionID":"id-0"}}

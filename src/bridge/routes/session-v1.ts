@@ -221,7 +221,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'steer', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
@@ -255,7 +255,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'steer', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
@@ -288,7 +288,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'steer', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return R.json(204)
@@ -325,7 +325,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       const promptText = argumentsRaw.trim() === '' ? `/${name}` : `/${name} ${argumentsRaw.trim()}`
       await R.rpc(ctx, 'session.prompt', {
         sessionId: R.sid(id),
-        mode: 'queue',
+        mode: 'steer',
         content: [{ type: 'text', text: promptText }],
       })
       ctx.state.invalidateSession(id)

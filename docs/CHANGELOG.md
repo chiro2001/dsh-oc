@@ -8,6 +8,12 @@
 
 ### 修复
 
+- 用户 prompt 改为以 dsh `mode: 'steer'` 提交：运行中的 turn 在下一个 step
+  边界就能看到插入的消息，与官方 opencode“追加进会话流、loop 下一步即处理”
+  的语义一致。此前一律 `mode: 'queue'`（next-turn），插入的消息要等整轮结束
+  （或 abort）才被模型看到——真实会话 e0336d8b 中，用户给出论文确切标题后
+  模型继续搜索约 4 分钟才看到；新回归单测锁定 busy 时 prompt 以 steer 送达，
+  队列相关 e2e（QUEUED 徽标、FIFO、golden trace）全部通过。
 - 模型选择不再在首轮后回退到默认模型：TUI 会在会话切换时用“最后一条用户
   消息”恢复 prompt 的模型，而 bridge 此前把用户消息（历史与排队回显卡片）
   一律标成模型目录首个条目（deepseek-v4-flash），导致第二次提问悄悄切回

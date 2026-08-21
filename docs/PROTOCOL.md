@@ -254,6 +254,14 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 > `time.completed`，`step/end`/`turn/end` 时再补，让官方 TUI 的 QUEUED 判定
 > （最后一个未完成 assistant 之后的用户消息）生效。
 
+> **prompt 送达语义（steer）**：用户 prompt 一律以 dsh `session.prompt`
+> `mode: 'steer'` 提交（等价官方 opencode“追加进会话流、运行中 loop 下一步
+> 即处理”的语义）。运行中的 turn 在下一个 step 边界就能看到插入的消息，
+> 而不是像 `mode: 'queue'` 那样要等整轮结束（曾导致用户在长搜索轮中插入
+> 标题/纠正信息后，模型继续空转数分钟才看到，见 session e0336d8b）。
+> 多条排队消息会在下一个 step 按序合并进同一次请求；QUEUED 徽标仍由 TUI
+> 按时间线自行判定。
+
 > **已知行为（文本 delta 成对重复）**：dsh 0.1.0-rc.6 对同一段流式文本同时下发
 > `assistant/chunk`（text-delta）与 packed `text-chunks` 两种编码，且新 mux 订阅
 > 会先重放历史再进入实时，因此 bridge 的 `message.part.delta` 可能把同一字符发送

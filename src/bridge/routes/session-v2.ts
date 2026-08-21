@@ -198,7 +198,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'queue', content })
+    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'steer', content })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return R.json(200, {
