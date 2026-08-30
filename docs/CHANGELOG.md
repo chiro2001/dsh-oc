@@ -19,6 +19,12 @@
   一律标成模型目录首个条目（deepseek-v4-flash），导致第二次提问悄悄切回
   flash。现在历史与回显使用会话当前模型（`session.models`）或 prompt body
   携带的模型；新增两条回归单测固化“Pro 首轮后不回落 flash”。
+- `/preset` 切换后不再被首条 prompt 悄悄切回：TUI 的编辑器 agent 标签只在
+  Tab 或会话切换时刷新，不响应 `session.updated`，因此 `/preset standard`
+  之后编辑器仍显示切换前的 preset；从该 stale 标签提交的首条 prompt 携带旧
+  agent，而会话仍处于 blank 状态，`applyAgentFromBody` 会再次 `agentPreset.select`
+  把会话切回旧 preset。现在 `/preset` 命令切换过的会话会记住该显式选择，
+  跳过后续 prompt body 里的 stale agent；新增回归单测固化。
 
 ## [0.1.0] - 2026-08-18
 

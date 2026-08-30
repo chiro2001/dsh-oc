@@ -1116,6 +1116,9 @@ export async function runPresetCommand(
   const outcome = await presetCommandOutcome(ctx, sessionId, argument)
   if (outcome.kind === 'success' && argument.trim() !== '') {
     broadcastSessionAgent(ctx, sessionId, argument.trim())
+    // Remember the explicit /preset switch so a later prompt submitted from
+    // the TUI's stale editor label does not switch the blank session back.
+    ctx.state.markSessionPresetSwitched(sessionId)
   }
   ctx.state.invalidateSession(sessionId)
   broadcastCommandResult(ctx, sessionId, outcome.text, 'idle')
@@ -1358,6 +1361,14 @@ export async function applyAgentFromBody(
   // already-effective preset as a no-op so the TUI keeps its label without
   // the lock noise.
   if (ctx.state.sessionAgentFor(sessionId) === agent) return
+  // The TUI's editor label only refreshes on Tab or a session change, not on
+  // `session.updated`. After `/preset standard` the session already runs the
+  // new preset but the editor still shows the pre-switch label; a prompt
+  // submitted from that stale label carries the OLD agent and, because the
+  // session is still blank, would switch it straight back. When the /preset
+  // command switched this session earlier in the run, trust that explicit
+  // choice over the stale body agent.
+  if (ctx.state.sessionPresetSwitched(sessionId)) return
   try {
     await switchAgentPreset(ctx, sessionId, agent)
     broadcastSessionAgent(ctx, sessionId, agent)

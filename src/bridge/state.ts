@@ -61,6 +61,15 @@ export class InteractionState {
   readonly sessionTitles = new Map<string, string>()
   /** Last known agent preset per session (survives title/projection updates). */
   private readonly sessionAgents = new Map<string, string>()
+  /**
+   * Sessions whose preset was explicitly switched by the `/preset` command
+   * this run. The TUI's editor label only refreshes on Tab or session change,
+   * so after `/preset standard` it still shows the pre-switch label; a prompt
+   * submitted from that stale label would otherwise switch the blank session
+   * straight back. A marked session skips the body-agent re-select while it
+   * is still blank.
+   */
+  private readonly sessionPresetSwitchedIds = new Set<string>()
   /** Mirror of each session's dsh pending inbox (next-turn / next-step). */
   readonly inboxProjections = new Map<string, InboxProjection>()
   /** Message ids already surfaced to the TUI as queued user messages. */
@@ -422,6 +431,16 @@ export class InteractionState {
 
   sessionAgentFor(sessionId: string): string | undefined {
     return this.sessionAgents.get(sessionId)
+  }
+
+  /** Mark that the `/preset` command switched this session's preset this run. */
+  markSessionPresetSwitched(sessionId: string): void {
+    this.sessionPresetSwitchedIds.add(sessionId)
+  }
+
+  /** Whether the `/preset` command switched this session this run. */
+  sessionPresetSwitched(sessionId: string): boolean {
+    return this.sessionPresetSwitchedIds.has(sessionId)
   }
 
   /** Record that the user submitted new input during this run. */

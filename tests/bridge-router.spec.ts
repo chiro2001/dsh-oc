@@ -3009,6 +3009,59 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     expect(broadcasts).toContainEqual({ type: 'session.updated', agent: 'standard' })
   })
 
+  it('does not re-switch a blank session from a stale editor label after /preset', async () => {
+    // Regression: after `/preset standard` the session runs the new preset, but
+    // the TUI's editor label still shows the pre-switch preset (it only
+    // refreshes on Tab or session change). A prompt submitted from that stale
+    // label carries the OLD agent, and because the session is still blank,
+    // re-applying it switched the session straight back. The bridge must trust
+    // the explicit /preset choice over the stale body agent.
+    const base = fakeApi()
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        list: async () => okRpc({
+          presets: [
+            { id: 'minimal', trust: 'system', isDefault: true },
+            { id: 'standard', trust: 'system', isDefault: false },
+          ],
+          authorable: false,
+          hasDocument: false,
+        }),
+        select: async (request) => {
+          calls.push({ method: 'agentPreset.select', payload: request.payload })
+          return okRpc({ agentPreset: 'standard' })
+        },
+      },
+      sessions: {
+        ...base.sessions,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server } = await boot(api)
+    // The explicit /preset switch selects standard.
+    const switched = await request(server, 'POST', '/session/s1/command', {
+      command: 'preset',
+      arguments: 'standard',
+    })
+    expect(switched.status).toBe(200)
+    expect(calls).toHaveLength(1)
+
+    // The first prompt carries the stale editor label (minimal). It must not
+    // trigger another agentPreset.select.
+    const prompted = await request(server, 'POST', '/session/s1/message', {
+      agent: 'minimal',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(prompted.status).toBe(200)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      method: 'agentPreset.select',
+      payload: { sessionId: 's1', agentPreset: 'standard' },
+    })
+  })
+
   it('captures /preset from prompt routes without triggering a model turn', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []
