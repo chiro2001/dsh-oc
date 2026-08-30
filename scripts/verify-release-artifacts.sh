@@ -31,7 +31,7 @@ echo "-- clean rebuild --"
 # uses repo-relative paths. Normalize the region prefix before diffing.
 for side in pristine build; do
   while IFS= read -r -d '' file; do
-    sed -i -E 's|(//#region )[^ ]*node_modules/|\1node_modules/|' "$file"
+    sed -i.bak -E 's|//#region [^ ]*node_modules/|//#region node_modules/|' "$file" && rm -f "$file.bak"
   done < <(find "$TMP/$side/lib" -name '*.d.ts' -print0)
 done
 if ! diff -r "$TMP/pristine/lib" "$TMP/build/lib" > "$TMP/lib.diff" 2>&1; then
