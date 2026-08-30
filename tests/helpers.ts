@@ -57,6 +57,9 @@ export function fakeApi(overrides: Partial<BridgeApi> = {}): BridgeApi {
       describe: async () =>
         okRpc({ version: '0.1.0-rc.6', cwd: '/work', attachedSessions: 0, canOpenPath: false }),
     },
+    settings: {
+      describe: async () => okRpc({ writable: false, hasDocument: false, namespaces: [] }),
+    },
     agentPresets: {
       list: async () => okRpc({ presets: [], authorable: false, hasDocument: false }),
       select: async () => okRpc({ agentPreset: 'minimal' }),

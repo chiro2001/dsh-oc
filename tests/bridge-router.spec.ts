@@ -251,6 +251,90 @@ describe('bridge router: startup GET routes', () => {
       'standard',
     ])
   })
+
+  it('advertises the configured agent-default-model ahead of the catalog first', async () => {
+    // Regression: the fresh TUI's prompt defaults to the first agent's model.
+    // The catalog orders deepseek-v4-flash first, but the deployment's
+    // `agent-default-model` settings namespace names deepseek-v4-pro; the
+    // bridge must prefer the configured default, not the catalog-first entry.
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      settings: {
+        describe: async () => okRpc({
+          writable: true,
+          hasDocument: false,
+          namespaces: [{
+            ns: 'agent-default-model',
+            schema: {},
+            value: { provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'high' },
+            applies: 'live',
+            secrets: [],
+            revision: 1,
+          }],
+        }),
+      },
+      llm: {
+        ...base.llm,
+        models: async () => okRpc({
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [
+              { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+              { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
+            ],
+          }],
+          failures: [],
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const v1 = await request(server, 'GET', '/agent')
+    expect(v1.status).toBe(200)
+    expect(v1.body).toMatchObject([
+      {
+        name: 'build',
+        mode: 'primary',
+        permission: [],
+        model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' },
+      },
+    ])
+    const v2 = await request(server, 'GET', '/api/agent')
+    expect(v2.status).toBe(200)
+    expect(v2.body).toMatchObject({
+      data: [{ id: 'build', mode: 'primary', hidden: false, model: { id: 'deepseek-v4-pro', providerID: 'deepseek' } }],
+    })
+  })
+
+  it('falls back to the catalog first model when no agent-default-model is configured', async () => {
+    // No settings namespace configured: the catalog's first entry is the
+    // only source, so the advertised default stays the flash model.
+    const base = fakeApi()
+    const api = {
+      ...base,
+      llm: {
+        ...base.llm,
+        models: async () => okRpc({
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [
+              { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+              { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
+            ],
+          }],
+          failures: [],
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const v1 = await request(server, 'GET', '/agent')
+    expect((v1.body as Array<{ model: { providerID: string; modelID: string } }>)[0]?.model).toMatchObject({
+      providerID: 'deepseek',
+      modelID: 'deepseek-v4-flash',
+    })
+  })
 })
 
 describe('bridge router: wildcard pattern and workspace fs routes', () => {
@@ -2578,6 +2662,80 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     expect(calls[1]).toMatchObject({
       method: 'session.prompt',
       payload: { sessionId: 's1', mode: 'steer' },
+    })
+  })
+
+  it('re-applies a lost default-tier model selection (no variant) before the next prompt', async () => {
+    // Regression: the default-tier pick (deepseek-v4-pro, no variant) must be
+    // remembered. Previously setSessionModelSelection dropped selections
+    // without a variant, so after dsh drifted the session model the next
+    // prompt silently stayed on the catalog-first model.
+    const calls: Array<{ method: string; payload: unknown }> = []
+    let currentModel = 'deepseek-v4-pro'
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      llm: {
+        ...base.llm,
+        models: async () => okRpc({
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [
+              { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+              { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro' },
+            ],
+          }],
+          failures: [],
+        }),
+      },
+      sessions: {
+        ...base.sessions,
+        models: async () => okRpc({
+          current: { provider: 'deepseek-official', model: currentModel },
+          routable: true,
+          groups: [],
+          failures: [],
+        }),
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request.payload })
+          currentModel = (request.payload as { model: string }).model
+          return okRpc({
+            selected: { provider: 'deepseek-official', model: currentModel },
+          })
+        },
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server } = await boot(api)
+    // First prompt explicitly selects the default-tier pro model (no variant).
+    await request(server, 'POST', '/session/s1/message', {
+      model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' },
+      parts: [{ type: 'text', text: 'first' }],
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      method: 'session.selectModel',
+      payload: {
+        sessionId: 's1',
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+      },
+    })
+
+    // dsh drifts the session model back to the catalog-first flash.
+    currentModel = 'deepseek-v4-flash'
+    await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: 'second' }],
+    })
+    expect(calls).toHaveLength(2)
+    expect(calls[1]).toMatchObject({
+      method: 'session.selectModel',
+      payload: {
+        sessionId: 's1',
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+      },
     })
   })
 

@@ -95,6 +95,9 @@ const api = {
       canOpenPath: false,
     }),
   },
+  settings: {
+    describe: async () => ok({ writable: false, hasDocument: false, namespaces: [] }),
+  },
   agentPresets: {
     list: async () => ok({ presets: [], authorable: false, hasDocument: false }),
     select: async () => ok({ agentPreset: 'standard' }),

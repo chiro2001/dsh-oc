@@ -19,6 +19,16 @@
   一律标成模型目录首个条目（deepseek-v4-flash），导致第二次提问悄悄切回
   flash。现在历史与回显使用会话当前模型（`session.models`）或 prompt body
   携带的模型；新增两条回归单测固化“Pro 首轮后不回落 flash”。
+- 默认模型解析优先读 dsh `agent-default-model` settings：此前 `defaultAgents`
+  固定取模型目录首个条目，而部署实际配置的默认模型存在 settings 里、
+  `llm.models` 读不到，导致新 TUI 首屏显示的默认模型与实际配置不一致。
+  现在 `defaultAgents` 先经 `settings.describe` 读
+  `agent-default-model` 命名空间的 `{ provider, model, reasoningEffort? }`，
+  拿不到时回退到目录首个；`/agent` 与 `/api/agent` 首个 agent 携带该解析结果。
+- 会话模型选择缓存完整化：`setSessionModelSelection` 不再丢弃不带 variant 的
+  默认档选择，provider/model 始终记住；`reconcileModelSelection` 从只恢复
+  variant 扩展为 provider/model 或 variant 任一项与会话当前值不一致都重新
+  `session.selectModel`，覆盖 dsh 侧模型漂移回目录首条的场景。
 
 ## [0.1.0] - 2026-08-18
 

@@ -51,7 +51,10 @@ export class InteractionState {
   readonly sessionDirectories = new Map<string, string>()
   readonly sessionParents = new Map<string, string>()
   readonly savedPermissions = new Map<string, SavedPermission>()
-  /** Last explicit model selection (with variant) per session, for self-heal. */
+  /** Last explicit model selection per session, for self-heal of the model
+   *  ref itself. The variant is optional: a default-tier pick (variant
+   *  undefined) must still be remembered, or a later prompt would silently
+   *  fall back to the catalog-first model. */
   readonly sessionModelSelections = new Map<string, {
     providerID: string
     modelID: string
@@ -205,11 +208,7 @@ export class InteractionState {
     sessionId: string,
     selection: { providerID: string; modelID: string; variant?: string },
   ): void {
-    if (selection.variant === undefined) {
-      this.sessionModelSelections.delete(sessionId)
-    } else {
-      this.sessionModelSelections.set(sessionId, selection)
-    }
+    this.sessionModelSelections.set(sessionId, selection)
   }
 
   sessionModelSelectionFor(sessionId: string): { providerID: string; modelID: string; variant?: string } | undefined {

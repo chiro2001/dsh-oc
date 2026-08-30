@@ -811,10 +811,43 @@ export const HELP_COMMAND_V2: CommandV2Info = {
   description: 'Show the dsh-oc capability summary and documentation entry points',
 }
 
+/**
+ * The deployment's configured default model (`agent-default-model` settings
+ * namespace), which dsh routes a fresh agent to. The catalog's first entry is
+ * not authoritative: `llm.models` only lists the model directory, whose default
+ * order does not necessarily match the operator-configured default. Read the
+ * resolved settings value and map the provider back to its opencode-facing id.
+ */
+export async function configuredDefaultModel(ctx: BridgeRouteContext): Promise<{
+  providerID: string
+  modelID: string
+  variant?: string
+} | undefined> {
+  try {
+    const describe = await rpc(ctx, 'settings.describe', {})
+    const ns = describe.namespaces?.find((entry) => entry.ns === 'agent-default-model')
+    const value = ns?.value as { provider?: unknown; model?: unknown; reasoningEffort?: unknown } | undefined
+    if (typeof value?.provider !== 'string' || typeof value?.model !== 'string') {
+      return undefined
+    }
+    const reasoningEffort = typeof value.reasoningEffort === 'string' ? value.reasoningEffort : undefined
+    return {
+      providerID: externalProviderId(value.provider),
+      modelID: value.model,
+      ...(reasoningEffort === undefined || reasoningEffort === 'default' ? {} : { variant: reasoningEffort }),
+    }
+  } catch (error) {
+    ctx.log(`[bridge] configured default model unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    return undefined
+  }
+}
+
 export async function defaultAgents(ctx: BridgeRouteContext): Promise<{
   providerID: string
   modelID: string
 }> {
+  const configured = await configuredDefaultModel(ctx)
+  if (configured !== undefined) return { providerID: configured.providerID, modelID: configured.modelID }
   let providerID = 'deepseek'
   let modelID = 'deepseek-chat'
   try {
@@ -1301,17 +1334,18 @@ export async function applyModelSelection(
 }
 
 /**
- * Self-heal an explicit variant selection: dsh can lose the reasoning effort
- * after some operations (model re-selection, preset switches). Before the next
- * prompt we compare the cached explicit selection with `session.models` and
- * re-apply it when the variant went missing.
+ * Self-heal the session's model selection before the next prompt. dsh can lose
+ * the reasoning effort after some operations (model re-selection, preset
+ * switches), or drift the model ref itself. We compare the cached explicit
+ * selection (provider/model and, when cached, variant) against `session.models`
+ * and re-apply it whenever any part disagrees.
  */
 export async function reconcileModelSelection(
   ctx: BridgeRouteContext,
   sessionId: string,
 ): Promise<void> {
   const cached = ctx.state.sessionModelSelectionFor(sessionId)
-  if (cached === undefined || cached.variant === undefined) return
+  if (cached === undefined) return
   let current
   try {
     current = await rpc(ctx, 'session.models', { sessionId: sid(sessionId) })
@@ -1320,11 +1354,10 @@ export async function reconcileModelSelection(
     return
   }
   const currentVariant = current.current.reasoningEffort
-  if (
-    current.current.provider === dshProviderId(cached.providerID)
-    && current.current.model === cached.modelID
-    && currentVariant === cached.variant
-  ) {
+  const providerMatches = current.current.provider === dshProviderId(cached.providerID)
+  const modelMatches = current.current.model === cached.modelID
+  const variantMatches = cached.variant === undefined || currentVariant === cached.variant
+  if (providerMatches && modelMatches && variantMatches) {
     return
   }
   try {
@@ -1332,11 +1365,11 @@ export async function reconcileModelSelection(
       sessionId: sid(sessionId),
       provider: dshProviderId(cached.providerID),
       model: cached.modelID,
-      reasoningEffort: cached.variant,
+      ...(cached.variant === undefined ? {} : { reasoningEffort: cached.variant }),
     })
-    ctx.log(`[bridge] restored variant ${cached.variant} for session ${sessionId}`)
+    ctx.log(`[bridge] restored model selection for session ${sessionId}`)
   } catch (error) {
-    ctx.log(`[bridge] variant restore failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+    ctx.log(`[bridge] model restore failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 

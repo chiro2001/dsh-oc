@@ -30,6 +30,7 @@ export interface BridgeApi {
     | 'selectModel'
   >
   host: Pick<ApiProxy['host'], 'describe'>
+  settings: Pick<ApiProxy['settings'], 'describe'>
   llm: Pick<ApiProxy['llm'], 'models'>
   agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>
   goals: Pick<ApiProxy['goals'], 'create' | 'edit' | 'pause' | 'resume' | 'complete' | 'clear'>

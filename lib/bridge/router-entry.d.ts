@@ -3611,6 +3611,7 @@ interface ApiProxy {
 interface BridgeApi {
   sessions: Pick<ApiProxy['sessions'], 'list' | 'search' | 'create' | 'fork' | 'history' | 'models' | 'rename' | 'prompt' | 'cancel' | 'selectModel'>;
   host: Pick<ApiProxy['host'], 'describe'>;
+  settings: Pick<ApiProxy['settings'], 'describe'>;
   llm: Pick<ApiProxy['llm'], 'models'>;
   agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>;
   goals: Pick<ApiProxy['goals'], 'create' | 'edit' | 'pause' | 'resume' | 'complete' | 'clear'>;
@@ -3706,7 +3707,10 @@ declare class InteractionState {
   readonly sessionDirectories: Map<string, string>;
   readonly sessionParents: Map<string, string>;
   readonly savedPermissions: Map<string, SavedPermission>;
-  /** Last explicit model selection (with variant) per session, for self-heal. */
+  /** Last explicit model selection per session, for self-heal of the model
+   *  ref itself. The variant is optional: a default-tier pick (variant
+   *  undefined) must still be remembered, or a later prompt would silently
+   *  fall back to the catalog-first model. */
   readonly sessionModelSelections: Map<string, {
     providerID: string;
     modelID: string;
