@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ModelProviderGroup } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { ModelProviderGroup } from '@deepseek-ai/dsh-api-session-controller/types'
 import {
   convertToProviderCatalog,
   convertToV1Providers,

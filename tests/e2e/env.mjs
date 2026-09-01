@@ -103,20 +103,22 @@ async function newRun(argv) {
   const ocBlock = dump.split('# == @chiro2001/dsh-oc')[1]
   if (!ocBlock) fail('dump-config: missing @chiro2001/dsh-oc bundle block')
   for (const id of [
-    'storage',
-    'storage-json',
-    'storage-domain',
     'webserver',
     'agent-presets',
     'workspace',
     'directory-picker',
-    'api-proxy',
+    'session-controller',
     'oc-bridge',
     'oc-tui',
   ]) {
     if (!ocBlock.includes(`- id: ${id}`)) fail(`dump-config: missing id ${id}`)
   }
-  if (!ocBlock.includes('inject:\n    - apiProxy')) fail('dump-config: oc-bridge must inject apiProxy')
+  const ocBridgeInject = /id: oc-bridge[\s\S]*?inject:\n((?:    - \S+\n)+)/.exec(ocBlock)?.[1] ?? ''
+  for (const service of ['sessionController', 'agentPresets', 'goals', 'sessionSkillCatalog']) {
+    if (!ocBridgeInject.includes(`- ${service}`)) {
+      fail(`dump-config: oc-bridge must inject ${service}`)
+    }
+  }
   if (!ocBlock.includes('inject:\n    - ocBridge')) fail('dump-config: oc-tui must inject ocBridge')
 
   const overlay = join(runDir, 'agent-model.patch.yml')

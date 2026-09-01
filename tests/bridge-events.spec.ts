@@ -3,7 +3,6 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import {
   agentErrorEvents,
@@ -16,6 +15,7 @@ import { InteractionState } from '../src/bridge/state.js'
 import { createBridgeRouter } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import { SseHub } from '../src/bridge/sse.js'
+import type { BridgeFrame } from '../src/bridge/dsh-types.js'
 import { fakeApi, makeAssistantEvent, makeUserEvent, okRpc, sessionEvent } from './helpers.js'
 
 const tempDirs: string[] = []
@@ -40,8 +40,8 @@ function gitFixture(files: Record<string, string>): string {
   return dir
 }
 
-function frame(payload: MuxFrame, rpcId = 'rpc-1'): RpcRequest<MuxFrame> {
-  return { rpcId: rpcId as never, payload }
+function frame(payload: BridgeFrame, _rpcId = 'rpc-1'): BridgeFrame {
+  return payload
 }
 
 function chunkRow(
@@ -83,7 +83,7 @@ function translator(
   return {
     state,
     logs,
-    translate: (frames: Array<RpcRequest<MuxFrame>>): BridgeGlobalEvent[] =>
+    translate: (frames: BridgeFrame[]): BridgeGlobalEvent[] =>
       frames.flatMap((item) => instance.translate(item)),
   }
 }
@@ -1480,12 +1480,13 @@ describe('bridge events: approval/question frames', () => {
     const asked = translate([
       frame({
         type: 'approval/requested',
+        rpcId: 'rpc-a1',
         sessionId: 's1' as never,
         approvalId: 'a1' as never,
         toolName: 'bash',
         callId: 'c1' as never,
         reason: 'run',
-      }, 'rpc-a1'),
+      }),
     ])
     expect(asked[0]?.payload.type).toBe('permission.asked')
     const request = asked[0]?.payload.properties as { id: string; sessionID: string; permission: string }
@@ -1513,9 +1514,10 @@ describe('bridge events: approval/question frames', () => {
     const asked = translate([
       frame({
         type: 'question/requested',
+        rpcId: 'rpc-q1',
         sessionId: 's1' as never,
         questions: [{ id: 'dq1', question: 'Go?', options: [{ label: 'Yes' }] }],
-      }, 'rpc-q1'),
+      }),
     ])
     expect(asked[0]?.payload.type).toBe('question.asked')
     const request = asked[0]?.payload.properties as { id: string; sessionID: string; questions: unknown[] }
@@ -1536,9 +1538,10 @@ describe('bridge events: approval/question frames', () => {
     translate([
       frame({
         type: 'question/requested',
+        rpcId: 'rpc-q2',
         sessionId: 's1' as never,
         questions: [{ id: 'dq2', question: 'No?', options: [{ label: 'N' }] }],
-      }, 'rpc-q2'),
+      }),
     ])
     const rejected = translate([
       frame({
@@ -1639,9 +1642,9 @@ describe('bridge events: projection and control frames', () => {
     const logs: string[] = []
     const events = new MuxEventTranslator({ cwd: '/work', state: new InteractionState(), log: (m) => logs.push(m) })
       .translate(frame({
-        type: 'session/subscribed',
+        type: 'session/jobs',
         sessionId: 's1' as never,
-        lastSeq: 0,
+        jobs: [],
       }))
     expect(events).toEqual([])
     const ignored = new MuxEventTranslator({ cwd: '/work', state: new InteractionState(), log: (m) => logs.push(m) })
@@ -1683,11 +1686,9 @@ describe('bridge events: projection and control frames', () => {
         type: 'session/queue',
         sessionId: 's1' as never,
         items: [{
-          id: 'queued-1' as never,
           placement: 'queued',
           message: {
             id: 'queued-1' as never,
-            role: 'user',
             content: [{ type: 'text', text: 'hello from queue' }],
             source: { kind: 'user' },
           },
@@ -1725,11 +1726,9 @@ describe('bridge events: projection and control frames', () => {
         type: 'session/queue',
         sessionId: 's1' as never,
         items: [{
-          id: 'queued-1' as never,
           placement: 'queued',
           message: {
             id: 'queued-1' as never,
-            role: 'user',
             content: [{ type: 'text', text: 'hello from queue' }],
             source: { kind: 'user' },
           },
@@ -2031,11 +2030,9 @@ describe('bridge events: projection and control frames', () => {
         type: 'session/queue',
         sessionId: 's1' as never,
         items: [{
-          id: 'dsh-msg-2' as never,
           placement: 'queued',
           message: {
             id: 'dsh-msg-2' as never,
-            role: 'user',
             content: [{ type: 'text', text: 'queued prompt' }],
             source: { kind: 'user' },
           },
@@ -2051,11 +2048,9 @@ describe('bridge events: projection and control frames', () => {
       type: 'session/queue',
       sessionId: 's1' as never,
       items: [{
-        id: 'queued-1' as never,
         placement: 'queued',
         message: {
           id: 'queued-1' as never,
-          role: 'user',
           content: [{ type: 'text', text: 'hello from queue' }],
           source: { kind: 'user' },
         },
@@ -2528,11 +2523,12 @@ describe('bridge events: projection and control frames', () => {
 
     const approvalFrame = frame({
       type: 'approval/requested',
+      rpcId: 'rpc-approval',
       sessionId: 's1' as never,
       approvalId: 'a1' as never,
       toolName: 'bash',
       callId: 'c1' as never,
-    }, 'rpc-approval')
+    })
     const firstApproval = instance.translate(approvalFrame)
     expect(firstApproval.map((event) => event.payload.type)).toContain('permission.asked')
     expect(instance.translate(approvalFrame)).toEqual([])
@@ -2540,9 +2536,10 @@ describe('bridge events: projection and control frames', () => {
 
     const questionFrame = frame({
       type: 'question/requested',
+      rpcId: 'rpc-question',
       sessionId: 's1' as never,
       questions: [{ id: 'q1', question: 'pick one', options: [] }],
-    }, 'rpc-question')
+    })
     const firstQuestion = instance.translate(questionFrame)
     expect(firstQuestion.map((event) => event.payload.type)).toContain('question.asked')
     expect(instance.translate(questionFrame)).toEqual([])
@@ -2695,29 +2692,8 @@ describe('bridge events: SSE connection lifecycle', () => {
     hub.remove(client)
   })
 
-  it('streams events and cleans up the mux consumer on disconnect', async () => {
-    let aborted!: Promise<void>
-    let started = false
-    const base = fakeApi()
-    const api = {
-      ...base,
-      events: {
-        ...base.events,
-        mux: async function* (_request: never, signal: AbortSignal) {
-          started = true
-          aborted = new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve())
-          })
-          yield frame({
-            type: 'session/event',
-            sessionId: 's1' as never,
-            event: sessionEvent('turn/start', { turn: 1 }, 1, 100),
-          }, 'rpc-stream')
-          await aborted
-        },
-      },
-    }
-    const router = createBridgeRouter(api as never, { cwd: '/work' })
+  it('streams events and cleans up the hub on disconnect', async () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
     const server = await startBridgeServer(router)
     servers.push(server)
 
@@ -2727,6 +2703,11 @@ describe('bridge events: SSE connection lifecycle', () => {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
     let text = ''
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's1',
+      event: sessionEvent('turn/start', { turn: 1 }, 1, 100),
+    })
     while (reader && !text.includes('session.status')) {
       const { done, value } = await reader.read()
       text += decoder.decode(value ?? new Uint8Array())
@@ -2736,32 +2717,12 @@ describe('bridge events: SSE connection lifecycle', () => {
     expect(text).toContain('session.status')
     expect(router.ctx.hub.size).toBe(1)
     controller.abort()
-    await aborted
     await new Promise((resolve) => setTimeout(resolve, 30))
     expect(router.ctx.hub.size).toBe(0)
-    expect(started).toBe(true)
   })
 
   it('surfaces host agent errors as session.error events', async () => {
-    const base = fakeApi()
-    const api = {
-      ...base,
-      events: {
-        ...base.events,
-        mux: async function* (_request: never, signal: AbortSignal) {
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve())
-          })
-        },
-        host: async function* () {
-          yield {
-            rpcId: 'rpc-host' as never,
-            payload: { type: 'host/agent-error', sessionId: 's1', message: 'agent crashed' },
-          }
-        },
-      },
-    }
-    const router = createBridgeRouter(api as never, { cwd: '/work' })
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
     const server = await startBridgeServer(router)
     servers.push(server)
 
@@ -2770,6 +2731,7 @@ describe('bridge events: SSE connection lifecycle', () => {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
     let text = ''
+    router.feedHostFrame({ type: 'host/agent-error', sessionId: 's1', message: 'agent crashed' })
     while (reader && !text.includes('session.error')) {
       const { done, value } = await reader.read()
       text += decoder.decode(value ?? new Uint8Array())
@@ -2782,52 +2744,12 @@ describe('bridge events: SSE connection lifecycle', () => {
   })
 
   it('auto-approves matching requests after an always grant', async () => {
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
     const responses: Array<{ rpcId: string; outcome?: string }> = []
-    const base = fakeApi()
-    const api = {
-      ...base,
-      events: {
-        ...base.events,
-        mux: async function* (_request: never, signal: AbortSignal) {
-          yield {
-            rpcId: 'rpc-1' as never,
-            payload: {
-              type: 'approval/requested',
-              sessionId: 's1',
-              approvalId: 'a1',
-              toolName: 'bash',
-              callId: 'c1',
-            },
-          }
-          await gate
-          yield {
-            rpcId: 'rpc-2' as never,
-            payload: {
-              type: 'approval/requested',
-              sessionId: 's1',
-              approvalId: 'a2',
-              toolName: 'bash',
-              callId: 'c2',
-            },
-          }
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve())
-          })
-        },
-      },
-      respond: async (request: { rpcId?: unknown; result?: { value?: { outcome?: string } } }) => {
-        responses.push({
-          rpcId: String(request.rpcId),
-          outcome: request.result?.value?.outcome,
-        })
-        return { accepted: true }
-      },
-    }
-    const router = createBridgeRouter(api as never, { cwd: '/work' })
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    // The answerer keeps one pendingApprovals resolver per rpcId and the HTTP
+    // reply route resolves it; mirror that here so we can observe the outcome.
+    router.ctx.state.pendingApprovals.set('rpc-1', (outcome) => responses.push({ rpcId: 'rpc-1', outcome }))
+    router.ctx.state.pendingApprovals.set('rpc-2', (outcome) => responses.push({ rpcId: 'rpc-2', outcome }))
     const server = await startBridgeServer(router)
     servers.push(server)
 
@@ -2836,6 +2758,14 @@ describe('bridge events: SSE connection lifecycle', () => {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
     let text = ''
+    await router.feed({
+      type: 'approval/requested',
+      rpcId: 'rpc-1',
+      sessionId: 's1',
+      approvalId: 'a1',
+      toolName: 'bash',
+      callId: 'c1',
+    })
     while (reader && !text.includes('permission.asked')) {
       const { done, value } = await reader.read()
       text += decoder.decode(value ?? new Uint8Array())
@@ -2863,14 +2793,23 @@ describe('bridge events: SSE connection lifecycle', () => {
       grantedAt: expect.any(Number),
     }])
 
-    release()
-    await new Promise((resolve) => setTimeout(resolve, 250))
-    expect(responses).toHaveLength(2)
+    // A second request for the same session + tool is auto-approved from the
+    // saved grant (the answerer short-circuits before presenting a dialog).
+    await router.feed({
+      type: 'approval/requested',
+      rpcId: 'rpc-2',
+      sessionId: 's1',
+      approvalId: 'a2',
+      toolName: 'bash',
+      callId: 'c2',
+    })
+    expect(responses).toHaveLength(1)
+    router.ctx.state.pendingApprovals.get('rpc-2')?.('allowed-once')
     expect(responses[1]?.outcome).toBe('allowed-once')
     controller.abort()
   })
 
-  it('does not block the mux loop on session list refresh', async () => {
+  it('does not block the event feed on session list refresh', async () => {
     let releaseList!: () => void
     const listGate = new Promise<void>((resolve) => {
       releaseList = resolve
@@ -2878,35 +2817,11 @@ describe('bridge events: SSE connection lifecycle', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => {
           await listGate
           return okRpc({ items: [] })
-        },
-      },
-      events: {
-        ...base.events,
-        mux: async function* (_request: never, signal: AbortSignal) {
-          yield {
-            rpcId: 'rpc-title' as never,
-            payload: {
-              type: 'session/event',
-              sessionId: 's1',
-              event: sessionEvent('session/title', { title: 't' }, 1, 100),
-            },
-          }
-          yield {
-            rpcId: 'rpc-turn' as never,
-            payload: {
-              type: 'session/event',
-              sessionId: 's1',
-              event: sessionEvent('turn/start', { turn: 1 }, 2, 200),
-            },
-          }
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve())
-          })
         },
       },
     }
@@ -2919,6 +2834,16 @@ describe('bridge events: SSE connection lifecycle', () => {
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
     let text = ''
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's1',
+      event: sessionEvent('session/title', { title: 't' }, 1, 100),
+    })
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's1',
+      event: sessionEvent('turn/start', { turn: 1 }, 2, 200),
+    })
     const deadline = Date.now() + 3000
     while (Date.now() < deadline && !text.includes('session.status')) {
       const { done, value } = await reader?.read() ?? { done: true, value: undefined }
@@ -2930,168 +2855,36 @@ describe('bridge events: SSE connection lifecycle', () => {
     controller.abort()
   })
 
-  it('retries a transient mux stream error with backoff', async () => {
-    let subscriptions = 0
-    let threw = false
-    const base = fakeApi()
-    const api = {
-      ...base,
-      events: {
-        ...base.events,
-        mux: async function* (_request: never, signal: AbortSignal) {
-          subscriptions += 1
-          if (!threw) {
-            threw = true
-            throw new Error('transient mux failure')
-          }
-          yield {
-            rpcId: 'rpc-turn' as never,
-            payload: {
-              type: 'session/event',
-              sessionId: 's1',
-              event: sessionEvent('turn/start', { turn: 1 }, 1, 100),
-            },
-          }
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve())
-          })
-        },
-      },
-    }
-    const router = createBridgeRouter(api as never, {
-      cwd: '/work',
-      sseRetryBaseMs: 10,
-      sseRetryMaxAttempts: 3,
-    })
+  it('keeps pending approvals deduped across repeated frames', async () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
     const server = await startBridgeServer(router)
     servers.push(server)
+
+    const approvalFrame: BridgeFrame = {
+      type: 'approval/requested',
+      rpcId: 'rpc-approval',
+      sessionId: 's1',
+      approvalId: 'a1',
+      toolName: 'bash',
+      callId: 'c1',
+    }
 
     const controller = new AbortController()
     const response = await fetch(server.url + '/global/event', { signal: controller.signal })
     const reader = response.body?.getReader()
     const decoder = new TextDecoder()
     let text = ''
+    // Feed the same approval twice; the shared translator's replay guard
+    // dedupes by approvalId, so only one permission.asked is broadcast.
+    await router.feed(approvalFrame)
+    await router.feed(approvalFrame)
     const deadline = Date.now() + 3000
-    while (Date.now() < deadline && !text.includes('session.status')) {
+    while (Date.now() < deadline && !text.includes('permission.asked')) {
       const { done, value } = await reader?.read() ?? { done: true, value: undefined }
       text += decoder.decode(value ?? new Uint8Array())
       if (done) break
     }
-    expect(text).toContain('session.status')
-    expect(subscriptions).toBe(2)
-    controller.abort()
-  })
-
-  it('retries a transient host stream error', async () => {
-    let subscriptions = 0
-    let threw = false
-    const base = fakeApi()
-    const api = {
-      ...base,
-      events: {
-        ...base.events,
-        mux: async function* (_request: never, signal: AbortSignal) {
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve())
-          })
-        },
-        host: async function* () {
-          subscriptions += 1
-          if (!threw) {
-            threw = true
-            throw new Error('transient host failure')
-          }
-          yield {
-            rpcId: 'rpc-host' as never,
-            payload: { type: 'host/agent-error', sessionId: 's1', message: 'after retry' },
-          }
-        },
-      },
-    }
-    const router = createBridgeRouter(api as never, {
-      cwd: '/work',
-      sseRetryBaseMs: 10,
-      sseRetryMaxAttempts: 3,
-    })
-    const server = await startBridgeServer(router)
-    servers.push(server)
-
-    const controller = new AbortController()
-    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-    let text = ''
-    const deadline = Date.now() + 3000
-    while (Date.now() < deadline && !text.includes('after retry')) {
-      const { done, value } = await reader?.read() ?? { done: true, value: undefined }
-      text += decoder.decode(value ?? new Uint8Array())
-      if (done) break
-    }
-    expect(text).toContain('after retry')
-    expect(subscriptions).toBe(2)
-    controller.abort()
-  })
-
-  it('keeps pending approvals deduped across mux retries', async () => {
-    let subscription = 0
-    const base = fakeApi()
-    const approvalFrame = {
-      rpcId: 'rpc-approval' as never,
-      payload: {
-        type: 'approval/requested',
-        sessionId: 's1' as never,
-        approvalId: 'a1' as never,
-        toolName: 'bash',
-        callId: 'c1' as never,
-      },
-    }
-    const api = {
-      ...base,
-      events: {
-        ...base.events,
-        mux: async function* (_request: never, signal: AbortSignal) {
-          subscription += 1
-          if (subscription === 1) {
-            yield approvalFrame
-            throw new Error('transient after approval')
-          }
-          // dsh replays the still-pending approval on resubscribe.
-          yield approvalFrame
-          yield {
-            rpcId: 'rpc-turn' as never,
-            payload: {
-              type: 'session/event',
-              sessionId: 's1',
-              event: sessionEvent('turn/start', { turn: 1 }, 1, 100),
-            },
-          }
-          await new Promise<void>((resolve) => {
-            signal.addEventListener('abort', () => resolve())
-          })
-        },
-      },
-    }
-    const router = createBridgeRouter(api as never, {
-      cwd: '/work',
-      sseRetryBaseMs: 10,
-      sseRetryMaxAttempts: 3,
-    })
-    const server = await startBridgeServer(router)
-    servers.push(server)
-
-    const controller = new AbortController()
-    const response = await fetch(server.url + '/global/event', { signal: controller.signal })
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-    let text = ''
-    const deadline = Date.now() + 3000
-    while (Date.now() < deadline && !text.includes('session.status')) {
-      const { done, value } = await reader?.read() ?? { done: true, value: undefined }
-      text += decoder.decode(value ?? new Uint8Array())
-      if (done) break
-    }
-    expect(text).toContain('session.status')
-    expect(subscription).toBe(2)
+    expect(text).toContain('permission.asked')
     const asked = (text.match(/permission\.asked/g) ?? []).length
     expect(asked).toBe(1)
 

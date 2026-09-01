@@ -80,28 +80,27 @@ describe('opencode-assets.json', () => {
 })
 
 describe('cordis.patch.yml', () => {
-  it('contains the ten bundle plugins in order', () => {
+  it('contains the disabled title-llm override and the eight bundle plugins in order', () => {
     const yaml = read('cordis.patch.yml')
     const ids = [...yaml.matchAll(/^\s*- id:\s*(\S+)/gm)].map(
       (match) => match[1],
     )
     expect(ids).toEqual([
-      'storage',
-      'storage-json',
-      'storage-domain',
+      'session-title-llm',
       'webserver',
       'agent-presets',
+      'subagent-model-selection-settings',
       'workspace',
       'directory-picker',
-      'api-proxy',
+      'session-controller',
       'oc-bridge',
       'oc-tui',
     ])
   })
 
-  it('wires oc-tui to oc-bridge and oc-bridge to api-proxy', () => {
+  it('wires oc-tui to oc-bridge and oc-bridge to the dsh 0.1.2 host services', () => {
     const yaml = read('cordis.patch.yml')
-    expect(yaml).toMatch(/id: oc-bridge[\s\S]*?inject: \[apiProxy\]/)
+    expect(yaml).toMatch(/id: oc-bridge[\s\S]*?inject: \[sessionController, agentPresets, goals, sessionSkillCatalog\]/)
     expect(yaml).toMatch(/id: oc-tui[\s\S]*?inject: \[ocBridge\]/)
   })
 })
