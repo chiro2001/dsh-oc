@@ -228,12 +228,17 @@ export function commandResultMessage(
   const created = Date.now()
   const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
   const agent = deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
+  // A final command result is complete; the TUI treats an assistant message
+  // without `time.completed` as a still-pending turn and badges every later
+  // user message QUEUED. The transient "Running …" busy marker keeps no
+  // `completed` so it reads as in-flight.
+  const finished = options.status !== 'busy'
   const info = {
     id,
     sessionID: sessionId,
     role: 'assistant' as const,
     agent,
-    time: { created },
+    time: finished ? { created, completed: created } : { created },
     parentID: options.parentID ?? `pending:${sessionId}:user`,
     modelID: model.modelID,
     providerID: model.providerID,
@@ -248,7 +253,7 @@ export function commandResultMessage(
     messageID: id,
     type: 'text',
     text,
-    time: { start: created },
+    time: finished ? { start: created, end: created } : { start: created },
   }
   events.push(
     makeEvent(directory, 'message.updated', {
