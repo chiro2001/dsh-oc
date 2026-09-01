@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
-import type { MessageConvertOptions } from './convert/message.js'
+import type { Message, TextPart } from '@opencode-ai/sdk/client'
+import type { MessageConvertOptions, V1MessageEntry } from './convert/message.js'
 import { DEFAULT_AGENT, projectIdFor, safeJsonParse } from './convert/common.js'
 import { opencodeToolName, type ToolCallInfo } from './convert/tool.js'
 import type { InteractionState } from './state.js'
@@ -201,6 +202,16 @@ export function commandResultEvents(
   text: string,
   options: { status?: 'busy' | 'idle'; parentID?: string } = {},
 ): BridgeGlobalEvent[] {
+  return commandResultMessage(deps, sessionId, text, options).events
+}
+
+/** Build one synthetic command-result message as both SSE events and a v1 entry. */
+export function commandResultMessage(
+  deps: TranslateDeps,
+  sessionId: string,
+  text: string,
+  options: { status?: 'busy' | 'idle'; parentID?: string } = {},
+): { events: BridgeGlobalEvent[]; entry: V1MessageEntry } {
   const directory = directoryFor(sessionId, deps)
   const project = projectIdFor(directory)
   const events: BridgeGlobalEvent[] = []
@@ -217,40 +228,42 @@ export function commandResultEvents(
   const created = Date.now()
   const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
   const agent = deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
+  const info = {
+    id,
+    sessionID: sessionId,
+    role: 'assistant' as const,
+    agent,
+    time: { created },
+    parentID: options.parentID ?? `pending:${sessionId}:user`,
+    modelID: model.modelID,
+    providerID: model.providerID,
+    mode: agent,
+    path: { cwd: directory, root: directory },
+    cost: 0,
+    tokens: zeroTokens(),
+  } as unknown as Message
+  const part: TextPart = {
+    id: partId,
+    sessionID: sessionId,
+    messageID: id,
+    type: 'text',
+    text,
+    time: { start: created },
+  }
   events.push(
     makeEvent(directory, 'message.updated', {
       sessionID: sessionId,
-      info: {
-        id,
-        sessionID: sessionId,
-        role: 'assistant',
-        agent,
-        time: { created },
-        parentID: options.parentID ?? `pending:${sessionId}:user`,
-        modelID: model.modelID,
-        providerID: model.providerID,
-        mode: agent,
-        path: { cwd: directory, root: directory },
-        cost: 0,
-        tokens: zeroTokens(),
-      },
+      info,
     }, project),
   )
   events.push(
     makeEvent(directory, 'message.part.updated', {
       sessionID: sessionId,
-      part: {
-        id: partId,
-        sessionID: sessionId,
-        messageID: id,
-        type: 'text',
-        text,
-        time: { start: created },
-      },
+      part,
       time: created,
     }, project),
   )
-  return events
+  return { events, entry: { info, parts: [part] } }
 }
 
 /** Visible agent-error message used by the host-level error path. */

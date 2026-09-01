@@ -6,7 +6,7 @@ import type { SessionStatus } from '@opencode-ai/sdk/v2/types'
 import { badRequest, notFound } from '../errors.js'
 import { call } from '../rpc.js'
 import { convertGoalTodos } from '../convert/goal.js'
-import { convertMessagesV1 } from '../convert/message.js'
+import { convertMessagesV1, type V1MessageEntry } from '../convert/message.js'
 import { convertSessionSummary } from '../convert/session.js'
 import { filterGitTrackedDiffs } from '../git.js'
 import type { RouteRegistrar } from '../routes.js'
@@ -28,16 +28,21 @@ function remapV1Messages(
       : undefined
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
+    // Synthetic command-result messages (msg_cmd: / msg_preset:) carry their
+    // own agent already (e.g. the /preset switch echo stamps agent=standard).
+    // Overriding them with sessionAgent would undo the switch label the TUI
+    // reads from lastUserMessage, so keep the recorded agent for those.
+    const synthetic = dshId.startsWith('msg_cmd:') || dshId.startsWith('msg_preset:')
     const parentDshId = typeof entry.info.parentID === 'string' ? entry.info.parentID : undefined
     const remappedParent = parentDshId === undefined ? undefined : surfaceIdForDshId(parentDshId)
     const info = {
       ...entry.info,
       ...(surfaceId === undefined ? {} : { id: surfaceId }),
       ...(remappedParent === undefined ? {} : { parentID: remappedParent }),
-      ...(sessionAgent !== undefined && entry.info.role === 'assistant'
+      ...(!synthetic && sessionAgent !== undefined && entry.info.role === 'assistant'
         ? { agent: sessionAgent, mode: sessionAgent }
         : {}),
-      ...(sessionAgent !== undefined && entry.info.role === 'user'
+      ...(!synthetic && sessionAgent !== undefined && entry.info.role === 'user'
         ? { agent: sessionAgent }
         : {}),
     }
@@ -64,6 +69,28 @@ function remapV1Messages(
     remapped.push(mapped)
   }
   return remapped
+}
+
+/**
+ * Append recent synthetic command-result messages (e.g. the `/preset` roster)
+ * to a history-derived entry list. dsh history does not contain these bridge
+ * messages, so without this the TUI's fresh-session sync would drop them.
+ */
+function mergeCommandResults(
+  entries: V1MessageEntry[],
+  commandResults: readonly V1MessageEntry[],
+): void {
+  const seen = new Set(entries.map((entry) => String(entry.info.id)))
+  for (const entry of commandResults) {
+    if (seen.has(String(entry.info.id))) continue
+    seen.add(String(entry.info.id))
+    entries.push(entry)
+  }
+  entries.sort((a, b) => {
+    const aCreated = (a.info.time as { created?: number } | undefined)?.created ?? 0
+    const bCreated = (b.info.time as { created?: number } | undefined)?.created ?? 0
+    return aCreated - bCreated
+  })
 }
 
 function registerPromptIds(
@@ -174,6 +201,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       },
       history.events.map((entry) => entry.view),
     )
+    // dsh history carries no bridge-only command results (e.g. the `/preset`
+    // roster); re-serve the recent ones so a fresh-session sync keeps them.
+    mergeCommandResults(entries, ctx.state.commandResultsFor(id))
     return R.json(200, remapV1Messages(ctx, id, entries))
   })
 
@@ -192,6 +222,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       },
       history.events.map((entry) => entry.view),
     )
+    mergeCommandResults(entries, ctx.state.commandResultsFor(id))
     const remapped = remapV1Messages(ctx, id, entries)
     const found = remapped.find((entry) => entry.info.id === messageID)
     if (found === undefined) throw notFound('message not found', { messageID })

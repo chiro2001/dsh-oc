@@ -40,6 +40,7 @@ import type { InteractionState, NewApprovalEntry, NewQuestionEntry } from './sta
 import {
   agentErrorEvents,
   commandResultEvents,
+  commandResultMessage,
   directoryFor,
   earliestBlockStart,
   makeEvent,
@@ -59,6 +60,7 @@ import {
 export {
   agentErrorEvents,
   commandResultEvents,
+  commandResultMessage,
   makeEvent,
   opencodeError,
   toolCallId,

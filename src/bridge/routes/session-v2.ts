@@ -3,11 +3,36 @@ import * as R from '../router.js'
 import type { SessionMessagesResponse } from '@opencode-ai/sdk/v2/types'
 import type { SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { badRequest, notFound } from '../errors.js'
-import { convertMessagesV2 } from '../convert/message.js'
+import { convertMessagesV2, type V1MessageEntry } from '../convert/message.js'
 import { convertSessionSummary, convertSessionSummaryV2 } from '../convert/session.js'
 import { filterGitTrackedDiffs } from '../git.js'
 import { randomUUID } from 'node:crypto'
 import { toPermissionV2 } from '../convert/permission.js'
+
+/** Convert one synthetic command-result v1 entry into the v2 message shape. */
+function commandResultToV2(entry: V1MessageEntry): SessionMessagesResponse['data'][number] {
+  const info = entry.info as Record<string, unknown>
+  const created = typeof info.time === 'object' && info.time !== null && 'created' in info.time
+    ? Number((info.time as { created: unknown }).created)
+    : 0
+  const text = entry.parts
+    .map((part) => (part.type === 'text' && 'text' in part ? String((part as { text: unknown }).text) : ''))
+    .join('')
+  const agent = typeof info.agent === 'string' ? info.agent : 'build'
+  const modelID = typeof info.modelID === 'string' ? info.modelID : 'deepseek-chat'
+  const providerID = typeof info.providerID === 'string' ? info.providerID : 'deepseek'
+  if (info.role === 'user') {
+    return { id: String(info.id), time: { created }, text, type: 'user' }
+  }
+  return {
+    id: String(info.id),
+    time: { created },
+    type: 'assistant',
+    agent,
+    model: { id: modelID, providerID, variant: '' },
+    content: text === '' ? [] : [{ type: 'text', id: `${String(info.id)}:0`, text }],
+  }
+}
 import { toQuestionV2 } from '../convert/question.js'
 import type { RouteRegistrar } from '../routes.js'
 
@@ -25,6 +50,11 @@ function remapV2Messages(
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
     const messageType = 'type' in message ? message.type : undefined
+    // Synthetic command-result messages (msg_cmd: / msg_preset:) already carry
+    // their own agent (e.g. the /preset switch echo stamps agent=standard);
+    // keep it instead of overriding with sessionAgent.
+    const synthetic = String(message.id).startsWith('msg_cmd:')
+      || String(message.id).startsWith('msg_preset:')
     if (surfaceId === undefined && sessionAgent === undefined) {
       remapped.push(message)
       continue
@@ -34,7 +64,7 @@ function remapV2Messages(
       result = {
         ...message,
         ...(surfaceId === undefined ? {} : { id: surfaceId }),
-        ...(sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
+        ...(!synthetic && sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
           ? { agent: sessionAgent }
           : {}),
       } as SessionMessagesResponse['data'][number]
@@ -49,7 +79,7 @@ function remapV2Messages(
       result = {
         ...message,
         ...(surfaceId === undefined ? {} : { id: surfaceId }),
-        ...(sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
+        ...(!synthetic && sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
           ? { agent: sessionAgent }
           : {}),
         content,
@@ -266,6 +296,20 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       entries.map((entry) => entry.view),
     )
     const remapped = remapV2Messages(ctx, id, data)
+    const commandResults = ctx.state.commandResultsFor(id)
+    if (commandResults.length > 0) {
+      const existing = new Set(remapped.map((message) => String(message.id)))
+      for (const entry of commandResults) {
+        if (existing.has(String(entry.info.id))) continue
+        existing.add(String(entry.info.id))
+        remapped.push(commandResultToV2(entry))
+      }
+      remapped.sort((a, b) => {
+        const aCreated = (a.time as { created?: number } | undefined)?.created ?? 0
+        const bCreated = (b.time as { created?: number } | undefined)?.created ?? 0
+        return aCreated - bCreated
+      })
+    }
     const response: SessionMessagesResponse = {
       data: req.query.get('order') === 'desc' ? remapped.reverse() : remapped,
       cursor: {

@@ -59,7 +59,7 @@ import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertGoalTodos } from './convert/goal.js'
 import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
-import { agentErrorEvents, commandResultEvents, convertProducedFiles, makeEvent, toSnapshotFileDiffs } from './events.js'
+import { agentErrorEvents, commandResultMessage, convertProducedFiles, makeEvent, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
 import { DEFAULT_AGENT, dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
 import { ocHelp } from '../help.js'
@@ -1039,12 +1039,20 @@ export function broadcastCommandResult(
   text: string,
   status?: 'busy' | 'idle',
 ): void {
-  ctx.hub.broadcast(commandResultEvents(
+  const { events, entry } = commandResultMessage(
     { cwd: ctx.cwd, state: ctx.state, log: ctx.log },
     sessionId,
     text,
     status === undefined ? {} : { status },
-  ))
+  )
+  ctx.hub.broadcast(events)
+  // Persist the final result (not the transient "Running …" busy marker) so
+  // a fresh-session history sync can re-serve it (the TUI rebuilds a new
+  // session's message list from GET /session/:id/message, which does not
+  // include bridge-only command results).
+  if (status !== 'busy') {
+    ctx.state.recordCommandResult(sessionId, entry)
+  }
 }
 
 /** Push a `session.updated` carrying the new agent so the TUI label refreshes. */
@@ -1106,6 +1114,59 @@ export async function broadcastPromptUserMessage(
   ])
 }
 
+/** Broadcast a synthetic user message naming the newly switched preset. */
+export function broadcastPresetSwitchEcho(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  agent: string,
+): void {
+  const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
+  const project = projectIdFor(directory)
+  const id = `msg_preset:${randomUUID()}`
+  const partId = `prt_preset:${randomUUID()}`
+  const created = Date.now()
+  ctx.hub.broadcast([
+    makeEvent(directory, 'message.updated', {
+      sessionID: sessionId,
+      info: {
+        id,
+        sessionID: sessionId,
+        role: 'user',
+        agent,
+        time: { created },
+      },
+    }, project),
+    makeEvent(directory, 'message.part.updated', {
+      sessionID: sessionId,
+      part: {
+        id: partId,
+        sessionID: sessionId,
+        messageID: id,
+        type: 'text',
+        text: `preset switched to ${agent}`,
+        time: { start: created, end: created },
+      },
+    }, project),
+  ])
+  ctx.state.recordCommandResult(sessionId, {
+    info: {
+      id,
+      sessionID: sessionId,
+      role: 'user',
+      agent,
+      time: { created },
+    } as unknown as V1MessageEntry['info'],
+    parts: [{
+      id: partId,
+      sessionID: sessionId,
+      messageID: id,
+      type: 'text',
+      text: `preset switched to ${agent}`,
+      time: { start: created, end: created },
+    } as V1MessageEntry['parts'][number]],
+  })
+}
+
 /** Run a `/preset` list/switch with visible TUI progress and result. */
 export async function runPresetCommand(
   ctx: BridgeRouteContext,
@@ -1116,6 +1177,12 @@ export async function runPresetCommand(
   const outcome = await presetCommandOutcome(ctx, sessionId, argument)
   if (outcome.kind === 'success' && argument.trim() !== '') {
     broadcastSessionAgent(ctx, sessionId, argument.trim())
+    // The TUI's editor label only refreshes from the last user message on a
+    // session change (syncedSessionID guard) or Tab. Broadcasting a synthetic
+    // user message carrying the new agent makes lastUserMessage() pick it up
+    // immediately on a blank session, so the editor shows the switched preset
+    // right away instead of after the next real interaction.
+    broadcastPresetSwitchEcho(ctx, sessionId, argument.trim())
     // Remember the explicit /preset switch so a later prompt submitted from
     // the TUI's stale editor label does not switch the blank session back.
     ctx.state.markSessionPresetSwitched(sessionId)

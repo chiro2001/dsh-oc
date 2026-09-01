@@ -2,6 +2,7 @@ import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
 import type { HistoryEntry, SessionProjectionsBlock, SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { PermissionEntry } from './convert/permission.js'
 import type { QuestionEntry } from './convert/question.js'
+import type { V1MessageEntry } from './convert/message.js'
 
 /** A memory-scoped "always" grant for one session + tool. */
 export interface SavedPermission {
@@ -97,6 +98,29 @@ export class InteractionState {
   readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
   private readonly historyLoading = new Map<string, Promise<CachedHistory>>()
   private readonly historyGenerations = new Map<string, number>()
+
+  /**
+   * Recent synthetic command-result messages per session. The TUI rebuilds a
+   * fresh session's message list from `GET /session/:id/message`; command
+   * results are broadcast on SSE only and are absent from dsh history, so a
+   * fresh-session sync would drop them (the `/preset` roster flashes away).
+   * Persist the last few here so the message endpoints can re-serve them.
+   */
+  private readonly recentCommandResults = new Map<string, V1MessageEntry[]>()
+
+  /** Record one synthetic command-result message for a session (bounded). */
+  recordCommandResult(sessionId: string, entry: V1MessageEntry): void {
+    const list = this.recentCommandResults.get(sessionId) ?? []
+    if (list.some((existing) => existing.info.id === entry.info.id)) return
+    list.push(entry)
+    if (list.length > 20) list.shift()
+    this.recentCommandResults.set(sessionId, list)
+  }
+
+  /** Recent command-result messages for a session, oldest first. */
+  commandResultsFor(sessionId: string): readonly V1MessageEntry[] {
+    return this.recentCommandResults.get(sessionId) ?? []
+  }
 
   getSessionListCache(ttlMs: number): SessionSummary[] | undefined {
     const cached = this.sessionListCache

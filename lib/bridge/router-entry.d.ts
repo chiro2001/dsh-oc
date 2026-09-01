@@ -227,7 +227,7 @@ interface MessageSourceMap {
 /** Any known message source, derived from {@link MessageSourceMap}; switch on `kind` and fall through unknowns (merge-extensible). */
 type MessageSource = MessageSourceMap[keyof MessageSourceMap];
 /** One immutable message representation shared by delivery, durable history, and model requests. */
-interface Message {
+interface Message$1 {
   /** Stable identity preserved across every representation boundary. */
   readonly id: MessageId;
   /** Provider-neutral conversation role. */
@@ -238,16 +238,16 @@ interface Message {
   readonly source: MessageSource;
 }
 /** A user-role specialization of the one shared message representation. */
-interface UserMessage extends Message {
+interface UserMessage$1 extends Message$1 {
   readonly role: 'user';
 }
 /** A model-produced assistant specialization of the shared message representation. */
-interface AssistantMessage extends Message {
+interface AssistantMessage$1 extends Message$1 {
   readonly role: 'assistant';
   readonly source: ModelMessageSource;
 }
 /** A tool-result specialization whose model-facing block retains call correlation. */
-interface ToolResultMessage extends Message {
+interface ToolResultMessage extends Message$1 {
   readonly role: 'user';
   readonly content: [ToolResultBlock];
   readonly source: ToolMessageSource;
@@ -566,7 +566,7 @@ interface GenerateOptions {
    * the `system` slot). A loop-built request assembles them as
    * the derived history (dsh-agent-loop); a hand-built one-shot passes any list.
    */
-  messages: Message[];
+  messages: Message$1[];
   /** System prompt text (adapters map to the provider's system slot). */
   system?: string;
   /** Tool schemas (adapters map to the provider's `tools` field). */
@@ -1371,7 +1371,7 @@ interface SessionEventMap {
    * notifications, …), or an entered goal continuation round. All three
    * project their `content` verbatim; `source` tells them apart.
    */
-  'user/message': UserMessage;
+  'user/message': UserMessage$1;
   /** Raw stream chunk — token-level replay fidelity. */
   'assistant/chunk': {
     turn: number;
@@ -1387,7 +1387,7 @@ interface SessionEventMap {
   'assistant/message': {
     turn: number;
     step: number;
-    message: AssistantMessage;
+    message: AssistantMessage$1;
     usage?: TokenUsage;
   };
   /**
@@ -1867,7 +1867,7 @@ interface FileLocation {
  * an overwrite also uses `null`, because a call-time presenter has no access to
  * the file's prior content.
  */
-interface FileDiff {
+interface FileDiff$1 {
   path: string;
   /** Prior content, or `null` for a new file / an overwrite (no prior content available at call time). */
   oldText: string | null;
@@ -1944,7 +1944,7 @@ interface DiffCallView {
   /** Card header (e.g. `Write foo.txt`). */
   title: string;
   /** One entry per file the call changes. */
-  diffs: FileDiff[];
+  diffs: FileDiff$1[];
   /** Files this call modifies, for editor follow-along (usually the diffs' paths). */
   locations?: FileLocation[];
 }
@@ -2013,7 +2013,7 @@ interface DiffResultView {
   /** Replacement title for the completed call. Omit to keep the pending-state title. */
   title?: string;
   /** The change to show, in file order — applied contextual hunks, or a whole-file diff when there is no before-image. */
-  diffs: FileDiff[];
+  diffs: FileDiff$1[];
 }
 /** One matched line inside a {@link SearchFileMatches} group: its 1-based line number and text. */
 interface SearchLineMatch {
@@ -2384,7 +2384,7 @@ interface QueuedInboxItem {
   /** Agent-resolved FIFO placement; queued and steering items render on different surfaces, context items stay invisible until claimed. */
   placement: 'queued' | 'steering' | 'context';
   /** Complete pending message; it is not durable until the Agent claims it. */
-  message: Message;
+  message: Message$1;
 }
 /** Streaming face of the contract: the two logical stream openers (mux + host). */
 interface EventsApi {
@@ -3606,6 +3606,317 @@ interface ApiProxy {
   respond(message: ClientResponse): Promise<RpcReceipt>;
 }
 //#endregion
+//#region node_modules/.pnpm/@opencode-ai+sdk@1.18.18/node_modules/@opencode-ai/sdk/dist/gen/types.gen.d.ts
+type FileDiff = {
+  file: string;
+  before: string;
+  after: string;
+  additions: number;
+  deletions: number;
+};
+type UserMessage = {
+  id: string;
+  sessionID: string;
+  role: "user";
+  time: {
+    created: number;
+  };
+  summary?: {
+    title?: string;
+    body?: string;
+    diffs: Array<FileDiff>;
+  };
+  agent: string;
+  model: {
+    providerID: string;
+    modelID: string;
+  };
+  system?: string;
+  tools?: {
+    [key: string]: boolean;
+  };
+};
+type ProviderAuthError = {
+  name: "ProviderAuthError";
+  data: {
+    providerID: string;
+    message: string;
+  };
+};
+type UnknownError = {
+  name: "UnknownError";
+  data: {
+    message: string;
+  };
+};
+type MessageOutputLengthError = {
+  name: "MessageOutputLengthError";
+  data: {
+    [key: string]: unknown;
+  };
+};
+type MessageAbortedError = {
+  name: "MessageAbortedError";
+  data: {
+    message: string;
+  };
+};
+type ApiError = {
+  name: "APIError";
+  data: {
+    message: string;
+    statusCode?: number;
+    isRetryable: boolean;
+    responseHeaders?: {
+      [key: string]: string;
+    };
+    responseBody?: string;
+  };
+};
+type AssistantMessage = {
+  id: string;
+  sessionID: string;
+  role: "assistant";
+  time: {
+    created: number;
+    completed?: number;
+  };
+  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError;
+  parentID: string;
+  modelID: string;
+  providerID: string;
+  mode: string;
+  path: {
+    cwd: string;
+    root: string;
+  };
+  summary?: boolean;
+  cost: number;
+  tokens: {
+    input: number;
+    output: number;
+    reasoning: number;
+    cache: {
+      read: number;
+      write: number;
+    };
+  };
+  finish?: string;
+};
+type Message = UserMessage | AssistantMessage;
+type TextPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "text";
+  text: string;
+  synthetic?: boolean;
+  ignored?: boolean;
+  time?: {
+    start: number;
+    end?: number;
+  };
+  metadata?: {
+    [key: string]: unknown;
+  };
+};
+type ReasoningPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "reasoning";
+  text: string;
+  metadata?: {
+    [key: string]: unknown;
+  };
+  time: {
+    start: number;
+    end?: number;
+  };
+};
+type FilePartSourceText = {
+  value: string;
+  start: number;
+  end: number;
+};
+type FileSource = {
+  text: FilePartSourceText;
+  type: "file";
+  path: string;
+};
+type Range = {
+  start: {
+    line: number;
+    character: number;
+  };
+  end: {
+    line: number;
+    character: number;
+  };
+};
+type SymbolSource = {
+  text: FilePartSourceText;
+  type: "symbol";
+  path: string;
+  range: Range;
+  name: string;
+  kind: number;
+};
+type FilePartSource = FileSource | SymbolSource;
+type FilePart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "file";
+  mime: string;
+  filename?: string;
+  url: string;
+  source?: FilePartSource;
+};
+type ToolStatePending = {
+  status: "pending";
+  input: {
+    [key: string]: unknown;
+  };
+  raw: string;
+};
+type ToolStateRunning = {
+  status: "running";
+  input: {
+    [key: string]: unknown;
+  };
+  title?: string;
+  metadata?: {
+    [key: string]: unknown;
+  };
+  time: {
+    start: number;
+  };
+};
+type ToolStateCompleted = {
+  status: "completed";
+  input: {
+    [key: string]: unknown;
+  };
+  output: string;
+  title: string;
+  metadata: {
+    [key: string]: unknown;
+  };
+  time: {
+    start: number;
+    end: number;
+    compacted?: number;
+  };
+  attachments?: Array<FilePart>;
+};
+type ToolStateError = {
+  status: "error";
+  input: {
+    [key: string]: unknown;
+  };
+  error: string;
+  metadata?: {
+    [key: string]: unknown;
+  };
+  time: {
+    start: number;
+    end: number;
+  };
+};
+type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError;
+type ToolPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "tool";
+  callID: string;
+  tool: string;
+  state: ToolState;
+  metadata?: {
+    [key: string]: unknown;
+  };
+};
+type StepStartPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "step-start";
+  snapshot?: string;
+};
+type StepFinishPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "step-finish";
+  reason: string;
+  snapshot?: string;
+  cost: number;
+  tokens: {
+    input: number;
+    output: number;
+    reasoning: number;
+    cache: {
+      read: number;
+      write: number;
+    };
+  };
+};
+type SnapshotPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "snapshot";
+  snapshot: string;
+};
+type PatchPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "patch";
+  hash: string;
+  files: Array<string>;
+};
+type AgentPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "agent";
+  name: string;
+  source?: {
+    value: string;
+    start: number;
+    end: number;
+  };
+};
+type RetryPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "retry";
+  attempt: number;
+  error: ApiError;
+  time: {
+    created: number;
+  };
+};
+type CompactionPart = {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "compaction";
+  auto: boolean;
+};
+type Part = TextPart | {
+  id: string;
+  sessionID: string;
+  messageID: string;
+  type: "subtask";
+  prompt: string;
+  description: string;
+  agent: string;
+} | ReasoningPart | FilePart | ToolPart | StepStartPart | StepFinishPart | SnapshotPart | PatchPart | AgentPart | RetryPart | CompactionPart;
+//#endregion
 //#region src/bridge/rpc.d.ts
 /** The dsh api surface the bridge actually consumes. */
 interface BridgeApi {
@@ -3639,6 +3950,12 @@ interface BridgeCommands {
 }
 interface BridgeAgents {
   get(sessionId: string): unknown;
+}
+//#endregion
+//#region src/bridge/convert/message.d.ts
+interface V1MessageEntry {
+  info: Message;
+  parts: Part[];
 }
 //#endregion
 //#region src/bridge/convert/permission.d.ts
@@ -3758,6 +4075,18 @@ declare class InteractionState {
   }>;
   private readonly historyLoading;
   private readonly historyGenerations;
+  /**
+   * Recent synthetic command-result messages per session. The TUI rebuilds a
+   * fresh session's message list from `GET /session/:id/message`; command
+   * results are broadcast on SSE only and are absent from dsh history, so a
+   * fresh-session sync would drop them (the `/preset` roster flashes away).
+   * Persist the last few here so the message endpoints can re-serve them.
+   */
+  private readonly recentCommandResults;
+  /** Record one synthetic command-result message for a session (bounded). */
+  recordCommandResult(sessionId: string, entry: V1MessageEntry): void;
+  /** Recent command-result messages for a session, oldest first. */
+  commandResultsFor(sessionId: string): readonly V1MessageEntry[];
   getSessionListCache(ttlMs: number): SessionSummary[] | undefined;
   setSessionListCache(items: SessionSummary[]): void;
   getHistoryCache(key: string, ttlMs: number): CachedHistory | undefined;
