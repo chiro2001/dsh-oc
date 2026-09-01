@@ -52,8 +52,8 @@ CODE="$(curl -s -o "$E2E_RUN_DIR/image.json" -w '%{http_code}' \
   -X POST "$BRIDGE/session/$SID/message" -H 'Content-Type: application/json' \
   -d "{\"parts\":[{\"type\":\"file\",\"mime\":\"image/png\",\"filename\":\"pic.png\",\"url\":\"data:image/png;base64,$PNG\"}]}")"
 [[ "$CODE" == "400" ]]
-jq -e '.data.code == "attachment-error" and .data.details.reason == "MODEL_DOES_NOT_SUPPORT_IMAGES"' "$E2E_RUN_DIR/image.json" >/dev/null
-echo "  image rejected with readable attachment-error (400)"
+jq -e '.data.code == "session/attachment-invalid" and .data.details.reason == "MODEL_DOES_NOT_SUPPORT_IMAGES"' "$E2E_RUN_DIR/image.json" >/dev/null
+echo "  image rejected with readable attachment-invalid (400)"
 
 echo "== file outside the session cwd =="
 OUTSIDE="$(mktemp -d)"

@@ -110,13 +110,16 @@ if [[ -n "$GOLDEN_OUT" ]]; then
   cp "$E2E_RUN_DIR/golden.sse.jsonl" "$GOLDEN_OUT"
   echo "  candidate trace written: $GOLDEN_OUT"
 elif [[ -f "$GOLDEN_FILE" ]]; then
-  if ! diff -q "$GOLDEN_FILE" "$E2E_RUN_DIR/golden.sse.jsonl" >/dev/null; then
+  # Event ordering is timing-sensitive (observer SSE connect vs. broadcast
+  # races, tool streaming flush jitter), so compare as a sorted multiset: the
+  # golden asserts the same event SET, not a fragile emission order.
+  if ! diff -q <(sort "$GOLDEN_FILE") <(sort "$E2E_RUN_DIR/golden.sse.jsonl") >/dev/null; then
     if [[ "${DSH_OC_GOLDEN_OVERWRITE:-0}" == "1" ]]; then
       cp "$E2E_RUN_DIR/golden.sse.jsonl" "$GOLDEN_FILE"
       echo "  golden updated (overwrite)"
     else
       echo "e2e: golden trace differs from committed baseline (structural ABI change?)" >&2
-      diff "$GOLDEN_FILE" "$E2E_RUN_DIR/golden.sse.jsonl" | sed -n '1,40p' >&2 || true
+      diff <(sort "$GOLDEN_FILE") <(sort "$E2E_RUN_DIR/golden.sse.jsonl") | sed -n '1,40p' >&2 || true
       exit 1
     fi
   else

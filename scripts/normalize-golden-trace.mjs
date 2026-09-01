@@ -89,13 +89,81 @@ const events = lines
   })
   .filter((event) => event !== null)
 
-const normalized = events.map((event) => {
-  const payload = event.payload ?? event
-  return {
-    type: payload.type ?? 'unknown',
-    props: normalize(payload.properties ?? payload.data ?? {}),
+const filtered = events
+  // Tool streaming is timing-sensitive: the coalescing flush timer races with
+  // fast tool results, so intermediate `session.next.tool.*` frames and the
+  // pending tool `message.part.updated` rows appear in some runs and not
+  // others. Drop them so the golden trace compares the stable message graph
+  // (message.updated + text parts + the final completed tool part), not
+  // scheduler jitter.
+  .filter((event) => {
+    const payload = event.payload ?? event
+    const type = payload.type ?? 'unknown'
+    if (typeof type !== 'string') return true
+    if (type.startsWith('session.next.tool.')) return false
+    if (type === 'session.updated') return false
+    // `finish:"tool-calls"` assistant rows mark the moment the tool-call step
+    // committed, which the tool streaming flush can duplicate across runs.
+    if (type === 'message.updated') {
+      const info = (payload.properties ?? {}).info
+      if (info && info.finish === 'tool-calls') return false
+      // Provisional assistant placeholder rows (all-zero tokens, no finish)
+      // are emitted at turn start and can be dropped by a fast first chunk,
+      // so their presence is timing-dependent. Filter them out.
+      if (info && info.role === 'assistant' && info.finish === undefined) {
+        const tokens = info.tokens
+        const zeroTokens = tokens === undefined
+          || (tokens.input === 0 && tokens.output === 0 && tokens.reasoning === 0)
+        if (zeroTokens) return false
+      }
+    }
+    if (type === 'message.part.updated') {
+      const props = payload.properties ?? {}
+      const part = props.part
+      if (part && part.type === 'tool') return false
+    }
+    return true
+  })
+
+// Sort before tokenizing: `normalize` assigns ids by first-seen order, so a
+// nondeterministic arrival order would give the same semantic events
+// different ids across runs. Sorting first makes the assignment (and thus the
+// golden comparison) order-independent.
+// Structural sort key: type + content with all random-id values blanked, so
+// two runs of the same scenario sort identically and `token()` (which assigns
+// ids by first-seen order) yields the same mapping regardless of the raw ids
+// that arrived first.
+function structuralKey(value) {
+  if (Array.isArray(value)) return value.map(structuralKey).join('\u0001')
+  if (value !== null && typeof value === 'object') {
+    return Object.keys(value).sort().map((k) => `${k}=${structuralKey(value[k])}`).join('\u0001')
   }
-})
+  if (typeof value === 'string') {
+    if (ID_PATTERNS.some((pattern) => pattern.test(value))) return ''
+    if (/\/home\/|\/Users\/|C:\\/.test(value)) {
+      return value.replace(/\/home\/[^\s"]*|\/Users\/[^\s"]*|C:\\[^\s"]*/g, '/workspace')
+    }
+    return value
+  }
+  return String(value)
+}
+
+const normalized = [...filtered]
+  .sort((a, b) => {
+    const at = (a.payload ?? a).type ?? ''
+    const bt = (b.payload ?? b).type ?? ''
+    if (at !== bt) return at < bt ? -1 : 1
+    const ak = structuralKey(a)
+    const bk = structuralKey(b)
+    return ak < bk ? -1 : ak > bk ? 1 : 0
+  })
+  .map((event) => {
+    const payload = event.payload ?? event
+    return {
+      type: payload.type ?? 'unknown',
+      props: normalize(payload.properties ?? payload.data ?? {}),
+    }
+  })
 
 writeFileSync(resolve(outPath), `${normalized.map((event) => JSON.stringify(event)).join('\n')}\n`)
 const serialized = JSON.stringify(normalized)

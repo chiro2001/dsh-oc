@@ -26,10 +26,10 @@ if [[ ! -d .e2e ]]; then
   exit 0
 fi
 
+# BSD find lacks `-printf`; `ls -dt` lists directories newest-first by mtime.
 mapfile -t runs < <(
-  find .e2e -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-    | sort -nr \
-    | awk '{ print $2 }'
+  ls -dt .e2e/*/ 2>/dev/null \
+    | sed 's:^\.e2e/::; s:/$::'
 )
 TOTAL="${#runs[@]}"
 if [[ "$TOTAL" -le "$KEEP" ]]; then

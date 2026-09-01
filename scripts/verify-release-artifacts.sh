@@ -20,18 +20,21 @@ mkdir -p "$TMP/pristine" "$TMP/build" "$TMP/unpack" "$TMP/pack"
 
 git archive --format=tar HEAD | tar -x -C "$TMP/pristine"
 git archive --format=tar HEAD | tar -x -C "$TMP/build"
-# Reuse the current install so the audit does not re-resolve dependencies;
-# the archive's own node_modules is excluded from the tarball by `files`.
-ln -s "$REPO_ROOT/node_modules" "$TMP/build/node_modules"
+# Install the archive's own node_modules (offline, from the pnpm store) so
+# the audit never symlinks the working tree's store into a temp dir: tsdown
+# resolves store paths relative to the cwd it runs in, and through a symlink
+# it rewrites the working tree's node_modules links to point at the (deleted)
+# temp build. The archive's node_modules is excluded from the tarball by `files`.
 
 echo "-- clean rebuild --"
-(cd "$TMP/build" && pnpm build >/dev/null)
+(cd "$TMP/build" && CI=true pnpm install --frozen-lockfile --offline >/dev/null)
+(cd "$TMP/build" && CI=true pnpm build >/dev/null)
 # tsdown emits `//#region <path>` comments in .d.ts files; the temp build
 # resolves node_modules through an absolute symlink while the committed lib
 # uses repo-relative paths. Normalize the region prefix before diffing.
 for side in pristine build; do
   while IFS= read -r -d '' file; do
-    sed -i -E 's|(//#region )[^ ]*node_modules/|\1node_modules/|' "$file"
+    perl -i -pe 's|(//#region )[^ ]*node_modules/|$1node_modules/|' "$file"
   done < <(find "$TMP/$side/lib" -name '*.d.ts' -print0)
 done
 if ! diff -r "$TMP/pristine/lib" "$TMP/build/lib" > "$TMP/lib.diff" 2>&1; then
