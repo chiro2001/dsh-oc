@@ -72,7 +72,7 @@ if [[ -z "$PORT" ]]; then
 fi
 echo "  long mock on 127.0.0.1:$PORT"
 
-sed -i "s|baseURL: http://127.0.0.1:[0-9]*|baseURL: http://127.0.0.1:${PORT}|" \
+perl -pi -e "s{baseURL: http://127\.0\.0\.1:\d+}{baseURL: http://127.0.0.1:${PORT}}" \
   "$E2E_DSH_HOME/settings.yaml"
 
 echo "== boot real opencode TUI =="

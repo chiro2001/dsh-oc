@@ -76,7 +76,7 @@ fi
 echo "  long mock on 127.0.0.1:$PORT"
 
 # Point the run's LLM settings at the long mock.
-sed -i "s|baseURL: http://127.0.0.1:[0-9]*|baseURL: http://127.0.0.1:${PORT}|" \
+perl -pi -e "s{baseURL: http://127\.0\.0\.1:\d+}{baseURL: http://127.0.0.1:${PORT}}" \
   "$E2E_DSH_HOME/settings.yaml"
 
 echo "== boot real opencode TUI and prompt =="
@@ -248,6 +248,12 @@ if ! rg -q 'message.part.delta' "$E2E_RUN_DIR/mini-sse.log" 2>/dev/null; then
   kill "$SSE_PID" 2>/dev/null || true
   exit 1
 fi
+sleep 1
+# opencode's prompt component arms "again to interrupt" on the first Escape
+# and only calls session.abort on the second (store.interrupt >= 2, 5s window),
+# so a single Escape is by design a no-op. Drive the same double-Escape the
+# main phase uses.
+tmux send-keys -t "$E2E_TUI_SESSION" Escape
 sleep 1
 tmux send-keys -t "$E2E_TUI_SESSION" Escape
 sleep 5

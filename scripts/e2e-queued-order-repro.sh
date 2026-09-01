@@ -80,22 +80,38 @@ echo "  tool part visible; sending queued prompt"
 tmux send-keys -t "$E2E_TUI_SESSION" 'order repro queued prompt' Enter
 
 QUEUED_SEEN=""
+QUEUED_GRACE=10
+# The bridge submits prompts with dsh steer semantics (08af26c), so a prompt
+# sent while the turn is busy is inserted into the active turn and answered
+# immediately -- the opencode QUEUED badge only renders for a message with no
+# active reply (`pending !== undefined && index > pending`), which steer never
+# produces. The queued prompt must still appear in the pane; the badge itself
+# is recorded as evidence, not gated.
 deadline=$((SECONDS + 30))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-queued.txt"
-  if grep -qa 'order repro queued prompt' "$E2E_RUN_DIR/tui-queued.txt" \
-    && grep -qa 'QUEUED' "$E2E_RUN_DIR/tui-queued.txt"; then
-    QUEUED_SEEN="1"
-    break
+  if grep -qa 'order repro queued prompt' "$E2E_RUN_DIR/tui-queued.txt"; then
+    if grep -qa 'QUEUED' "$E2E_RUN_DIR/tui-queued.txt"; then
+      QUEUED_SEEN="1"
+    else
+      QUEUED_GRACE=$((QUEUED_GRACE - 1))
+      # Give the badge a short window to appear before classifying as steer-inserted.
+      if (( QUEUED_GRACE <= 0 )); then break; fi
+    fi
   fi
   sleep 1
 done
-if [[ -z "$QUEUED_SEEN" ]]; then
-  echo "e2e: queued prompt not shown with QUEUED badge" >&2
+if grep -qa 'order repro queued prompt' "$E2E_RUN_DIR/tui-queued.txt"; then
+  if [[ -z "$QUEUED_SEEN" ]]; then
+    echo "  queued prompt visible in pane (no QUEUED badge: steer-inserted into active turn)"
+  else
+    echo "  QUEUED badge observed"
+  fi
+else
+  echo "e2e: queued prompt not shown in pane" >&2
   tail -30 "$E2E_RUN_DIR/tui-queued.txt" >&2 || true
   exit 1
 fi
-echo "  QUEUED badge observed"
 
 echo "== capture streaming frames and detect transient order =="
 TRANSIENT="not-observed"
