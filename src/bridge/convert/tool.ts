@@ -1,5 +1,5 @@
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
-import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { ToolEventView } from '../dsh-types.js'
 import type { Part, ToolPart } from '@opencode-ai/sdk/client'
 import { safeJsonParse, textFromBlocks } from './common.js'
 
@@ -273,8 +273,11 @@ function statusForDiffs(diffs: readonly DshFileDiff[]): 'added' | 'deleted' | 'm
 
 function insertDiffFromArgs(args: RecordValue): DshFileDiff[] {
   const path = pathFromArgs(args)
-  if (!path || args.command !== 'insert') return []
-  return [{ path, oldText: '', newText: stringValue(args.new_str) ?? '' }]
+  if (!path || (args.command !== 'insert' && args.command !== 'create')) return []
+  const newText = args.command === 'insert'
+    ? stringValue(args.new_str) ?? ''
+    : stringValue(args.file_text) ?? stringValue(args.content) ?? ''
+  return [{ path, oldText: '', newText }]
 }
 
 /**

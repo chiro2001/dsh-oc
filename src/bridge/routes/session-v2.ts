@@ -1,7 +1,7 @@
 // session-v2 routes for the dsh-oc bridge.
 import * as R from '../router.js'
 import type { SessionMessagesResponse } from '@opencode-ai/sdk/v2/types'
-import type { SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { SessionSummary } from '../dsh-types.js'
 import { badRequest, notFound } from '../errors.js'
 import { convertMessagesV2 } from '../convert/message.js'
 import { convertSessionSummary, convertSessionSummaryV2 } from '../convert/session.js'
@@ -80,7 +80,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const search = req.query.get('search')
     let all: SessionSummary[]
     if (search !== null && search.length > 0) {
-      const results = await R.rpc(ctx, 'session.search', { query: search })
+      const results = await R.rpc<{ items: Array<{ sessionId: string }> }>(ctx, 'session.search', { query: search })
       const ids = new Set(results.items.map((item) => String(item.sessionId)))
       const list = await R.cachedSessionList(ctx)
       all = list.filter((item) => ids.has(String(item.sessionId)))
@@ -101,6 +101,9 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       data: page.map((item) => convertSessionSummaryV2(item, {
         cwd: ctx.state.sessionDirectories.get(String(item.sessionId)) ?? ctx.cwd,
         title: ctx.state.sessionTitleFor(String(item.sessionId)),
+        ...(ctx.state.sessionAgentFor(String(item.sessionId)) === undefined
+          ? {}
+          : { agent: ctx.state.sessionAgentFor(String(item.sessionId)) }),
       })),
       cursor: {
         ...(nextOffset < filtered.length ? { next: R.encodeSessionCursor(nextOffset) } : {}),
@@ -113,7 +116,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const search = req.query.get('search')
     let all: SessionSummary[] = await R.cachedSessionList(ctx)
     if (search !== null && search.length > 0) {
-      const results = await R.rpc(ctx, 'session.search', { query: search })
+      const results = await R.rpc<{ items: Array<{ sessionId: string }> }>(ctx, 'session.search', { query: search })
       const ids = new Set(results.items.map((item) => String(item.sessionId)))
       all = all.filter((item) => ids.has(String(item.sessionId)))
     }
@@ -126,6 +129,9 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     return R.json(200, page.map((item) => convertSessionSummary(item, {
       cwd: ctx.state.sessionDirectories.get(String(item.sessionId)) ?? ctx.cwd,
       title: ctx.state.sessionTitleFor(String(item.sessionId)),
+      ...(ctx.state.sessionAgentFor(String(item.sessionId)) === undefined
+        ? {}
+        : { agent: ctx.state.sessionAgentFor(String(item.sessionId)) }),
     })))
   })
 
@@ -144,7 +150,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const id = req.params.sessionID as string
     const deadline = Date.now() + 30_000
     while (Date.now() < deadline) {
-      const list = await R.rpc(ctx, 'session.list', {})
+      const list = await R.rpc<{ items: Array<{ sessionId: string; running: boolean }> }>(ctx, 'session.list', {})
       const item = list.items.find((entry) => String(entry.sessionId) === id)
       if (item === undefined) throw notFound('session not found', { sessionID: id })
       if (!item.running) return R.json(204)

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { MuxFrame, RpcRequest, ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
-import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
+import type { BridgeFrame, ToolEventView } from './dsh-types.js'
+import type { BridgeEvent } from './dsh-types.js'
 import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
 import type { SnapshotFileDiff } from '@opencode-ai/sdk/v2/types'
 import {
@@ -66,6 +66,32 @@ export {
   type BridgeGlobalEvent,
   type TranslateDeps,
 } from './events-util.js'
+
+/**
+ * Extract an error descriptor from a tool-result message content when dsh
+ * marked the block `isError` (e.g. a permission-rejected tool) without a
+ * top-level `error` field on the event. Returns the first matching error
+ * carrying the block's own text, so the opencode TUI renders a readable
+ * "failed: <text>" (the mini TUI has no tool card title, only the error).
+ */
+function toolResultContentError(
+  content: readonly unknown[],
+): { name: string; code: string } | undefined {
+  for (const block of content) {
+    const record = block as { type?: unknown; isError?: unknown; content?: unknown } | null
+    if (record === null || typeof record !== 'object') continue
+    if (record.type !== 'tool-result') continue
+    if (record.isError !== true) continue
+    const inner = Array.isArray(record.content) ? record.content : []
+    for (const part of inner) {
+      const text = (part as { type?: unknown; text?: unknown } | null)?.text
+      if (typeof text === 'string' && text.length > 0) {
+        return { name: text, code: 'tool-rejected' }
+      }
+    }
+  }
+  return undefined
+}
 
 /**
  * Packed dsh chunk rows (`text-chunks` / `reasoning-chunks`) arrive through
@@ -609,22 +635,21 @@ export class MuxEventTranslator {
     }
   }
 
-  translate(frame: RpcRequest<MuxFrame>): BridgeGlobalEvent[] {
-    const payload = frame.payload
-    switch (payload.type) {
+  translate(frame: BridgeFrame): BridgeGlobalEvent[] {
+    switch (frame.type) {
       case 'session/event':
-        return this.translateSessionEvent(frame.rpcId, payload.sessionId, payload.event, payload.view)
+        return this.translateSessionEvent(frame.sessionId, frame.event, frame.view)
       case 'approval/requested': {
-        const approvalId = String(payload.approvalId)
+        const approvalId = String(frame.approvalId)
         if (this.deps.replayGuard?.approvals.has(approvalId)) return []
         this.deps.replayGuard?.approvals.add(approvalId)
         const entry: NewApprovalEntry = {
           rpcId: String(frame.rpcId),
-          sessionId: String(payload.sessionId),
+          sessionId: String(frame.sessionId),
           approvalId,
-          toolName: payload.toolName,
-          callId: payload.callId === undefined ? undefined : String(payload.callId),
-          reason: payload.reason,
+          toolName: frame.toolName,
+          callId: frame.callId === undefined ? undefined : String(frame.callId),
+          reason: frame.reason,
         }
         const registered = this.deps.state.registerApproval({
           opencodeId: randomUUID(),
@@ -641,13 +666,13 @@ export class MuxEventTranslator {
         ]
       }
       case 'approval/resolved': {
-        const entry = this.deps.state.permissionByApprovalId(String(payload.approvalId))
+        const entry = this.deps.state.permissionByApprovalId(String(frame.approvalId))
         if (!entry) {
-          this.deps.log(`[bridge/events] approval/resolved for unknown approval ${String(payload.approvalId)}`)
+          this.deps.log(`[bridge/events] approval/resolved for unknown approval ${String(frame.approvalId)}`)
           return []
         }
         const directory = directoryFor(entry.sessionId, this.deps)
-        const reply = payload.outcome === 'allowed-once' ? 'once' : 'reject'
+        const reply = frame.outcome === 'allowed-once' ? 'once' : 'reject'
         this.deps.state.removePermission(entry.opencodeId)
         return [
           makeEvent(
@@ -664,8 +689,8 @@ export class MuxEventTranslator {
         this.deps.replayGuard?.questions.add(questionKey)
         const entry: NewQuestionEntry = {
           rpcId: questionKey,
-          sessionId: String(payload.sessionId),
-          items: payload.questions,
+          sessionId: String(frame.sessionId),
+          items: frame.questions,
         }
         const registered = this.deps.state.registerQuestion({
           opencodeId: randomUUID(),
@@ -682,15 +707,15 @@ export class MuxEventTranslator {
         ]
       }
       case 'question/resolved': {
-        const entry = this.deps.state.questionByRpcId(String(payload.questionRpcId))
+        const entry = this.deps.state.questionByRpcId(String(frame.questionRpcId))
         if (!entry) {
-          this.deps.log(`[bridge/events] question/resolved for unknown rpcId ${String(payload.questionRpcId)}`)
+          this.deps.log(`[bridge/events] question/resolved for unknown rpcId ${String(frame.questionRpcId)}`)
           return []
         }
         const directory = directoryFor(entry.sessionId, this.deps)
         const project = projectIdFor(directory)
         this.deps.state.removeQuestion(entry.opencodeId)
-        if (payload.outcome === 'answered') {
+        if (frame.outcome === 'answered') {
           return [
             makeEvent(directory, 'question.replied', {
               sessionID: entry.sessionId,
@@ -707,16 +732,15 @@ export class MuxEventTranslator {
         ]
       }
       case 'session/projection':
-        return this.translateProjection(payload.sessionId, payload.key, payload.value)
-      case 'session/subscribed':
+        return this.translateProjection(frame.sessionId, frame.key, frame.value)
       case 'session/jobs':
         return []
       case 'session/queue': {
-        const sessionId = String(payload.sessionId)
+        const sessionId = String(frame.sessionId)
         const directory = directoryFor(sessionId, this.deps)
         const project = projectIdFor(directory)
-        const items = Array.isArray(payload.items)
-          ? (payload.items as Array<{
+        const items = Array.isArray(frame.items)
+          ? (frame.items as Array<{
               placement: 'queued' | 'steering' | 'context'
               message: { id: string; content: readonly unknown[]; source: { kind: string } }
             }>)
@@ -725,12 +749,12 @@ export class MuxEventTranslator {
         return this.queuedMessageEvents(sessionId, added, directory, project)
       }
       case 'stream/error':
-        this.deps.log(`[bridge/events] stream/error: ${payload.error.code} ${payload.error.message}`)
+        this.deps.log(`[bridge/events] stream/error: ${frame.error.code} ${frame.error.message}`)
         return [makeEvent(this.deps.cwd, 'session.error', {
-          error: opencodeError(String(payload.error.code), payload.error.message),
+          error: opencodeError(String(frame.error.code), frame.error.message),
         }, projectIdFor(this.deps.cwd))]
       default:
-        this.deps.log(`[bridge/events] unhandled mux frame ${String((payload as { type: string }).type)}`)
+        this.deps.log(`[bridge/events] unhandled mux frame ${String((frame as { type: string }).type)}`)
         return []
     }
   }
@@ -779,15 +803,14 @@ export class MuxEventTranslator {
   }
 
   private translateSessionEvent(
-    rpcId: string,
     sessionId: string,
-    event: SessionEvent,
+    event: BridgeEvent,
     view?: ToolEventView,
   ): BridgeGlobalEvent[] {
     const directory = directoryFor(sessionId, this.deps)
     const project = projectIdFor(directory)
     switch (event.type) {
-      case 'agent/inbox/spliced' as SessionEvent['type']: {
+      case 'agent/inbox/spliced': {
         const splice = event.data as unknown as {
           target: 'next-turn' | 'next-step'
           start: number
@@ -901,9 +924,9 @@ export class MuxEventTranslator {
         if (isUserPrompt) this.streamState(sessionId).lastUserMessageId = dshId
         return events
       }
-      case 'compaction/start' as SessionEvent['type']:
-      case 'compaction/summary' as SessionEvent['type']:
-      case 'compaction/end' as SessionEvent['type']:
+      case 'compaction/start':
+      case 'compaction/summary':
+      case 'compaction/end':
         return this.translateCompactionEvent(
           sessionId,
           event as unknown as CompactionEvent,
@@ -961,15 +984,15 @@ export class MuxEventTranslator {
         }
         return []
       }
-      case 'tool-call-chunks' as SessionEvent['type']:
+      case 'tool-call-chunks':
         return this.translateToolCallChunks(
           sessionId,
           event as unknown as ToolCallChunkRowEvent,
           directory,
           project,
         )
-      case 'text-chunks' as SessionEvent['type']:
-      case 'reasoning-chunks' as SessionEvent['type']:
+      case 'text-chunks':
+      case 'reasoning-chunks':
         {
           const chunkSeqKey = `${sessionId}:${event.seq}`
           if (this.deps.replayGuard?.chunks?.has(chunkSeqKey)) return []
@@ -1175,7 +1198,7 @@ export class MuxEventTranslator {
         this.streams.delete(sessionId)
         return events
       }
-      case 'step/end' as SessionEvent['type']: {
+      case 'step/end': {
         // A tool-call step may be followed by more steps of the same turn
         // (e.g. the follow-up text after the tool result). Completing the
         // message here marks the card finished too early and later parts for
@@ -1185,24 +1208,24 @@ export class MuxEventTranslator {
         return []
       }
       case 'todo/write':
-        this.sessionTodos.set(sessionId, event.data.todos)
+        this.sessionTodos.set(sessionId, (event.data as { todos: unknown }).todos)
         return this.todoUpdateEvents(sessionId, directory, project)
-      case 'step/start' as SessionEvent['type']:
-      case 'request/header' as SessionEvent['type']:
-      case 'request/context' as SessionEvent['type']:
-      case 'session/title-llm-request' as SessionEvent['type']:
-      case 'permission/preset' as SessionEvent['type']:
-      case 'sandbox/mode' as SessionEvent['type']:
-      case 'approval/policy' as SessionEvent['type']:
-      case 'command/run' as SessionEvent['type']:
-      case 'command/done' as SessionEvent['type']:
-      case 'session/end-seed' as SessionEvent['type']:
-      case 'approval/asked' as SessionEvent['type']:
-      case 'approval/decided' as SessionEvent['type']:
+      case 'step/start':
+      case 'request/header':
+      case 'request/context':
+      case 'session/title-llm-request':
+      case 'permission/preset':
+      case 'sandbox/mode':
+      case 'approval/policy':
+      case 'command/run':
+      case 'command/done':
+      case 'session/end-seed':
+      case 'approval/asked':
+      case 'approval/decided':
         // Log-only / environment-snapshot events: no TUI surface. Explicitly
         // silent so genuinely unknown event types stay loud in the logs.
         return []
-      case 'agent-preset/selected' as SessionEvent['type']: {
+      case 'agent-preset/selected': {
         const preset = (event.data as { agentPreset?: unknown }).agentPreset
         if (typeof preset === 'string') {
           this.deps.state.lastAgentPreset = preset
@@ -1214,7 +1237,7 @@ export class MuxEventTranslator {
         }
         return []
       }
-      case 'goal/change' as SessionEvent['type']: {
+      case 'goal/change': {
         const data = (event as unknown as { data: { goal?: unknown; cleared?: unknown } }).data
         if (data?.goal !== undefined) {
           this.sessionGoals.set(sessionId, { goal: data.goal })
@@ -1286,13 +1309,18 @@ export class MuxEventTranslator {
           view,
           callView: call.view,
         }
-        const part = data.error === undefined
+        // dsh 0.1.2 signals a rejected/errored tool result via the block's
+        // `isError` flag inside `message.content`; `data.error` is undefined in
+        // that case, so the bridge must treat either as an error.
+        const contentError = toolResultContentError(data.message.content)
+        const resultError = data.error ?? contentError
+        const part = resultError === undefined
           ? completedToolPart(call, {
               ...resultInfo,
             }, { sessionID: sessionId, messageID, time: event.time })
           : errorToolPart(call, {
               ...resultInfo,
-              error: data.error,
+              error: resultError,
             }, { sessionID: sessionId, messageID, time: event.time })
         calls?.delete(callId)
         const events: BridgeGlobalEvent[] = [
@@ -1304,7 +1332,7 @@ export class MuxEventTranslator {
           }, project),
         ]
         const output = toolResultText(resultInfo)
-        const tail = data.error === undefined
+        const tail = resultError === undefined
           ? [makeEvent(directory, 'session.next.tool.success', {
               timestamp: event.time,
               sessionID: sessionId,
@@ -1320,12 +1348,12 @@ export class MuxEventTranslator {
               assistantMessageID: messageID,
               callID: callId,
               error: {
-                code: data.error.code,
-                message: data.error.name,
+                code: resultError.code,
+                message: resultError.name,
               },
               provider: { executed: true },
             }, project)]
-        if (data.error === undefined) {
+        if (resultError === undefined) {
           const changes = fileChangesFromToolResult(call, resultInfo)
           if (changes.length > 0) {
             events.push(...fileChangeEvents(sessionId, messageID, changes, project, directory, event.time))
@@ -1396,7 +1424,7 @@ export class MuxEventTranslator {
             }, project),
           ]
         }
-        this.deps.log(`[bridge/events] unhandled session event ${event.type} (rpcId ${rpcId})`)
+        this.deps.log(`[bridge/events] unhandled session event ${event.type}`)
         return []
       }
     }

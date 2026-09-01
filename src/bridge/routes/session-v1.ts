@@ -1,7 +1,7 @@
 // session-v1 routes for the dsh-oc bridge.
 import * as R from '../router.js'
 import { randomUUID } from 'node:crypto'
-import type { HistoryEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { HistoryEntry } from '../dsh-types.js'
 import type { SessionStatus } from '@opencode-ai/sdk/v2/types'
 import { badRequest, notFound } from '../errors.js'
 import { call } from '../rpc.js'
@@ -96,6 +96,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     return R.json(200, items.map((item) => convertSessionSummary(item, {
       cwd: ctx.state.sessionDirectories.get(String(item.sessionId)) ?? ctx.cwd,
       title: ctx.state.sessionTitleFor(String(item.sessionId)),
+      ...(ctx.state.sessionAgentFor(String(item.sessionId)) === undefined
+        ? {}
+        : { agent: ctx.state.sessionAgentFor(String(item.sessionId)) }),
     })))
   })
 
@@ -341,7 +344,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     for (let index = history.events.length - 1; index >= 0; index--) {
       const event = (history.events[index] as HistoryEntry).event
       if (event.type === 'todo/write') {
-        todos = event.data.todos
+        todos = (event.data as { todos: unknown }).todos
         break
       }
     }

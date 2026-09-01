@@ -1,7 +1,7 @@
 import type {
   ModelCatalogModel,
   ModelProviderGroup,
-} from '@deepseek-ai/dsh-host-apiproxy/api'
+} from '@deepseek-ai/dsh-api-session-controller/types'
 import type {
   Model as V1Model,
   Provider as V1Provider,

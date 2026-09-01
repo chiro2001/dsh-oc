@@ -6,6 +6,8 @@ interface SseClient {
   res: ServerResponse
   controller: AbortController
   closed: boolean
+  /** Optional per-connection session filter (attach `?sessionID=`). */
+  filter?: (event: BridgeGlobalEvent) => boolean
 }
 
 /** Registry of active SSE connections plus the encoder/cleanup logic. */
@@ -17,12 +19,13 @@ export class SseHub {
 
   constructor(private log: (message: string) => void) {}
 
-  add(res: ServerResponse): SseClient {
+  add(res: ServerResponse, filter?: (event: BridgeGlobalEvent) => boolean): SseClient {
     const client: SseClient = {
       id: this.nextId++,
       res,
       controller: new AbortController(),
       closed: false,
+      filter,
     }
     this.clients.add(client)
     // A client that connects late must still receive events queued before
@@ -48,6 +51,7 @@ export class SseHub {
 
   send(client: SseClient, event: BridgeGlobalEvent): void {
     if (client.closed || client.res.destroyed) return
+    if (client.filter !== undefined && !client.filter(event)) return
     const data = JSON.stringify(event)
     try {
       client.res.write(`id: ${event.payload.id}\ndata: ${data}\n\n`)

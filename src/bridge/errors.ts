@@ -1,4 +1,9 @@
-import type { RpcError } from '@deepseek-ai/dsh-host-apiproxy/api'
+/** Structural view of a dsh 0.1.2 Remote failure (RemoteError). */
+export interface RpcError {
+  code: string
+  message: string
+  details: unknown
+}
 
 /**
  * opencode-compatible JSON error envelope.
@@ -67,6 +72,7 @@ const CLIENT_FIXABLE = new Set<string>([
   'settings-conflict',
   'credential-rejected',
   'attachment-error',
+  'session/attachment-invalid',
   'directory-unreadable',
   'directory-exists',
   'directory-create-failed',
@@ -89,7 +95,7 @@ const CONFLICT_CODES = new Set<string>([
   'subagent-not-resumable',
   'subagent-unauthorized',
   'subagent-delivery-unavailable',
-  'agent-preset-locked',
+  'agent-preset/locked',
 ])
 
 /**

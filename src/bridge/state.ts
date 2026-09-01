@@ -1,5 +1,5 @@
 import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
-import type { HistoryEntry, SessionProjectionsBlock, SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { HistoryEntry, SessionProjectionsBlock, SessionSummary } from './dsh-types.js'
 import type { PermissionEntry } from './convert/permission.js'
 import type { QuestionEntry } from './convert/question.js'
 
@@ -447,6 +447,11 @@ export class InteractionState {
   private static lockedAgentKey(sessionId: string, agent: string): string {
     return `${sessionId}\u0000${agent}`
   }
+
+  /** Pending approval decisions keyed by rpcId (answerer → HTTP reply). */
+  readonly pendingApprovals = new Map<string, (outcome: 'allowed-once' | 'rejected') => void>()
+  /** Pending question decisions keyed by rpcId (answerer → HTTP reply). */
+  readonly pendingQuestions = new Map<string, (answer: unknown | undefined) => void>()
 
   registerApproval(entry: PermissionEntry): PermissionEntry {
     this.permissions.set(entry.opencodeId, entry)

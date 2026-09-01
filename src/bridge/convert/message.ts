@@ -1,5 +1,6 @@
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { BridgeEvent } from '../dsh-types.js'
+import type { ToolEventView } from '../dsh-types.js'
 import type {
   AssistantMessage as DshAssistantMessage,
   ContentBlock,
@@ -432,7 +433,7 @@ function applyToolResultV1(
 
 /** Fold dsh history events into the v1 `{ info, parts }` message list. */
 export function convertMessagesV1(
-  events: readonly SessionEvent[],
+  events: readonly BridgeEvent[],
   opts: MessageConvertOptions,
   views?: ReadonlyArray<ToolEventView | undefined>,
 ): V1MessageEntry[] {
@@ -447,7 +448,7 @@ export function convertMessagesV1(
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastMessageId = ''
   for (let eventIndex = 0; eventIndex < events.length; eventIndex++) {
-    const event = events[eventIndex] as SessionEvent
+    const event = events[eventIndex] as BridgeEvent
     const view = views?.[eventIndex]
     switch (event.type) {
       case 'turn/start': {
@@ -502,8 +503,8 @@ export function convertMessagesV1(
         }
         break
       }
-      case 'text-chunks' as SessionEvent['type']:
-      case 'reasoning-chunks' as SessionEvent['type']: {
+      case 'text-chunks':
+      case 'reasoning-chunks': {
         const chunk = event as unknown as StreamChunkRowEvent
         const blockType = chunk.type === 'text-chunks' ? 'text' : 'reasoning'
         const key = `${chunk.data.turn}:${chunk.data.step}:${chunk.data.index}:${blockType}`
@@ -606,7 +607,7 @@ export function convertMessagesV1(
       default:
         // Log-only events (turn/start, request/header, ...) are not part of
         // the message surface; goal changes become concise assistant notes.
-        if (event.type === 'goal/change' as SessionEvent['type']) {
+        if (event.type === 'goal/change') {
           const text = goalChangeText((event as unknown as { data: unknown }).data)
           if (text !== undefined) {
             const id = `goal:${event.seq}`
@@ -873,7 +874,7 @@ function applyToolResultV2(
 
 /** Fold dsh history events into the v2 `SessionMessage[]` list. */
 export function convertMessagesV2(
-  events: readonly SessionEvent[],
+  events: readonly BridgeEvent[],
   opts: MessageConvertOptions,
   views?: ReadonlyArray<ToolEventView | undefined>,
   anchorSeqs?: number[],
@@ -896,7 +897,7 @@ export function convertMessagesV2(
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastAssistant: V2AssistantState | undefined
   for (let eventIndex = 0; eventIndex < events.length; eventIndex++) {
-    const event = events[eventIndex] as SessionEvent
+    const event = events[eventIndex] as BridgeEvent
     const view = views?.[eventIndex]
     switch (event.type) {
       case 'turn/start': {
@@ -948,8 +949,8 @@ export function convertMessagesV2(
         }
         break
       }
-      case 'text-chunks' as SessionEvent['type']:
-      case 'reasoning-chunks' as SessionEvent['type']: {
+      case 'text-chunks':
+      case 'reasoning-chunks': {
         const chunk = event as unknown as StreamChunkRowEvent
         const blockType = chunk.type === 'text-chunks' ? 'text' : 'reasoning'
         const key = `${chunk.data.turn}:${chunk.data.step}:${chunk.data.index}:${blockType}`
@@ -1039,7 +1040,7 @@ export function convertMessagesV2(
         break
       }
       default:
-        if (event.type === 'goal/change' as SessionEvent['type']) {
+        if (event.type === 'goal/change') {
           const text = goalChangeText((event as unknown as { data: unknown }).data)
           if (text !== undefined) {
             const id = `goal:${event.seq}`

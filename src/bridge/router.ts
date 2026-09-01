@@ -4,16 +4,13 @@ import type { ServerResponse } from 'node:http'
 import { extname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type {
+  BridgeFrame,
+  BridgeHostFrame,
   HistoryEntry,
-  HostFrame,
-  MuxFrame,
-  PromptContentPart,
-  RequestPayload,
-  RpcRequest,
-  ResponseValue,
-  RpcMethodMap,
+  SessionProjectionsBlock,
   SessionSummary,
-} from '@deepseek-ai/dsh-host-apiproxy/api'
+} from './dsh-types.js'
+import type { ModelProviderGroup, PromptContentPart } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
 import type {
   Command as V1Command,
@@ -29,7 +26,7 @@ import type {
 } from '@opencode-ai/sdk/v2/types'
 import type { Agent as V2Agent, AgentV2Info } from '@opencode-ai/sdk/v2/types'
 import type { BridgeApi, BridgeCommandExecution } from './rpc.js'
-import { call, RpcCallError, respondApproval, respondQuestion, cancelQuestion } from './rpc.js'
+import { call, RpcCallError } from './rpc.js'
 import {
   badRequest,
   conflict,
@@ -105,6 +102,10 @@ export interface BridgeRouter {
   ctx: BridgeRouteContext
   match(method: string, pathname: string): Route | undefined
   startSse(req: BridgeRequest, res: ServerResponse): void
+  /** Feed one translated bridge frame to all SSE clients (host-side pump). */
+  feed(frame: BridgeFrame): Promise<void>
+  /** Feed one host lifecycle frame to all SSE clients. */
+  feedHostFrame(frame: BridgeHostFrame): void
   /** Change the bridge working directory (e.g. from an attach `--dir`). */
   setCwd(directory: string): void
   /** Warm the session-list cache in the background after startup. */
@@ -134,16 +135,16 @@ export function sid(id: string): never {
   return id as never
 }
 
-export async function rpc<K extends keyof RpcMethodMap>(
+export async function rpc<T = unknown>(
   ctx: BridgeRouteContext,
-  method: K,
-  payload: RequestPayload<K>,
+  method: string,
+  payload: Record<string, unknown>,
   signal?: AbortSignal,
-): Promise<ResponseValue<K>> {
+): Promise<T> {
   try {
-    return await call(ctx.api, method, payload, signal)
+    return await call(ctx.api, method, payload, signal) as T
   } catch (error) {
-    if (error instanceof RpcCallError) throw rpcErrorToHttp(error.error)
+    if (error instanceof RpcCallError) throw rpcErrorToHttp(error)
     throw internalError(error instanceof Error ? error.message : String(error))
   }
 }
@@ -218,7 +219,11 @@ export function recordSessionSummaries(
     // the hardcoded "build" agent even after a Tab switch to another preset.
     const agent = (item as { agentPreset?: unknown; agent?: unknown }).agentPreset
       ?? (item as { agent?: unknown }).agent
-    if (typeof agent === 'string' && agent.length > 0) {
+    // Only seed the agent when the state has none yet. The summary's agent
+    // is the session-header default ("build") for a freshly created session
+    // even after the user switched preset — clobbering the live selection
+    // here reverts the TUI label (and message.mode) to the default.
+    if (typeof agent === 'string' && agent.length > 0 && ctx.state.sessionAgentFor(id) === undefined) {
       ctx.state.setSessionAgent(id, agent)
     }
     if (item.origin === 'subagent' && item.parentSessionId !== undefined) {
@@ -250,7 +255,7 @@ export async function sessionView(ctx: BridgeRouteContext, id: string): Promise<
   const history = await cachedSessionHistory(ctx, id)
   let model: SessionView['model']
   try {
-    const selection = await rpc(ctx, 'session.models', { sessionId: sid(id) })
+    const selection = await rpc<{ current: { model: string; provider: string; reasoningEffort?: string } }>(ctx, 'session.models', { sessionId: sid(id) })
     model = {
       id: selection.current.model,
       providerID: externalProviderId(selection.current.provider),
@@ -344,7 +349,7 @@ export async function cachedSessionList(ctx: BridgeRouteContext): Promise<Sessio
   const existing = ctx.state.sessionListLoading
   if (existing !== undefined) return existing
   const generation = ctx.state.listGeneration()
-  const promise = rpc(ctx, 'session.list', {}).then((list) => list.items)
+  const promise = rpc<{ items: SessionSummary[] }>(ctx, 'session.list', {}).then((list) => list.items)
   ctx.state.sessionListLoading = promise
   try {
     const items = await promise
@@ -376,9 +381,9 @@ export async function cachedSessionHistory(
     ...(options.maxMessages === undefined ? {} : { maxMessages: options.maxMessages }),
     ...(options.beforeSeq === undefined ? {} : { beforeSeq: options.beforeSeq }),
   }).then((history): CachedHistory => ({
-    events: history.events,
-    hasMore: history.hasMore,
-    ...(history.projections === undefined ? {} : { projections: history.projections }),
+    events: (history as { events: HistoryEntry[] }).events,
+    hasMore: (history as { hasMore: boolean }).hasMore,
+    ...((history as { projections?: SessionProjectionsBlock }).projections === undefined ? {} : { projections: (history as { projections: SessionProjectionsBlock }).projections }),
   }))
   ctx.state.setHistoryLoading(key, promise)
   try {
@@ -489,7 +494,7 @@ export async function skillList(
   const skills: Array<{ name: string; description: string; whenToUse?: string }> = []
   if (session !== undefined) {
     try {
-      const result = await rpc(ctx, 'skill.list', { sessionId: sid(String(session.sessionId)) })
+      const result = await rpc<{ skills: Array<{ name: string; description: string; whenToUse?: string }> }>(ctx, 'skill.list', { sessionId: sid(String(session.sessionId)) })
       skills.push(...result.skills.map((skill) => ({
         name: skill.name,
         description: skill.description,
@@ -534,7 +539,7 @@ export async function skillListForSession(
 ): Promise<Array<{ name: string; description: string }>> {
   const skills: Array<{ name: string; description: string }> = []
   try {
-    const result = await rpc(ctx, 'skill.list', { sessionId: sid(sessionId) })
+    const result = await rpc<{ skills: Array<{ name: string; description: string }> }>(ctx, 'skill.list', { sessionId: sid(sessionId) })
     skills.push(...result.skills.map((skill) => ({
       name: skill.name,
       description: skill.description,
@@ -563,6 +568,9 @@ export function toV1Session(view: SessionView, id: string, ctx: BridgeRouteConte
       cwd: view.cwd ?? ctx.cwd,
       createdAt: view.createdAt,
       ...(view.model === undefined ? {} : { model: view.model }),
+      ...(ctx.state.sessionAgentFor(id) === undefined
+        ? {}
+        : { agent: ctx.state.sessionAgentFor(id) }),
     })
   }
   return minimalSession(id, {
@@ -583,6 +591,9 @@ export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteConte
       cwd: view.cwd ?? ctx.cwd,
       createdAt: view.createdAt,
       ...(view.model === undefined ? {} : { model: view.model }),
+      ...(ctx.state.sessionAgentFor(id) === undefined
+        ? {}
+        : { agent: ctx.state.sessionAgentFor(id) }),
     })
   }
   return minimalSessionV2(id, {
@@ -598,7 +609,7 @@ export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteConte
 }
 
 export async function modelGroups(ctx: BridgeRouteContext) {
-  const catalog = await rpc(ctx, 'llm.models', {})
+  const catalog = await rpc<{ groups: ModelProviderGroup[] }>(ctx, 'llm.models', {})
   return catalog.groups
 }
 
@@ -845,7 +856,7 @@ export async function sessionModelRef(
   sessionId: string,
 ): Promise<{ providerID: string; modelID: string }> {
   try {
-    const selection = await rpc(ctx, 'session.models', { sessionId: sid(sessionId) })
+    const selection = await rpc<{ current: { provider: string; model: string } }>(ctx, 'session.models', { sessionId: sid(sessionId) })
     return {
       providerID: externalProviderId(selection.current.provider),
       modelID: selection.current.model,
@@ -874,7 +885,7 @@ export function bodyModelRef(
 export async function v1AgentList(ctx: BridgeRouteContext): Promise<V2Agent[]> {
   const { providerID, modelID } = await defaultAgents(ctx)
   const presets = await presetRoster(ctx)
-  const defaultId = presets.find((preset) => preset.isDefault)?.id
+  const defaultId = await defaultPresetId(ctx)
   const defaultName = defaultId ?? DEFAULT_AGENT_NAME
   return [
     {
@@ -902,7 +913,7 @@ export async function v1AgentList(ctx: BridgeRouteContext): Promise<V2Agent[]> {
 export async function v2AgentList(ctx: BridgeRouteContext): Promise<AgentV2Info[]> {
   const { providerID, modelID } = await defaultAgents(ctx)
   const presets = await presetRoster(ctx)
-  const defaultId = presets.find((preset) => preset.isDefault)?.id
+  const defaultId = await defaultPresetId(ctx)
   const defaultName = defaultId ?? DEFAULT_AGENT_NAME
   return [
     {
@@ -930,14 +941,13 @@ export async function v2AgentList(ctx: BridgeRouteContext): Promise<AgentV2Info[
 }
 
 export async function presetRoster(ctx: BridgeRouteContext) {
-  const roster = await rpc(ctx, 'agentPreset.list', {})
-  return roster.presets.filter((preset) => preset.broken === undefined)
+  const roster = await rpc<Array<{ broken?: string; id: string; name?: string; description?: string }>>(ctx, 'agentPreset.list', {})
+  return roster.filter((preset) => preset.broken === undefined)
 }
 
 export async function defaultPresetId(ctx: BridgeRouteContext): Promise<string | undefined> {
   try {
-    const presets = await presetRoster(ctx)
-    return presets.find((preset) => preset.isDefault)?.id
+    return ctx.api.agentPresets.defaultId
   } catch (error) {
     ctx.log(`[bridge] agent preset roster unavailable: ${error instanceof Error ? error.message : String(error)}`)
     return undefined
@@ -1020,9 +1030,10 @@ export async function presetCommandOutcome(
   try {
     if (argument === '') {
       const roster = await presetRoster(ctx)
+      const defaultId = await defaultPresetId(ctx)
       const text = roster.length === 0
         ? 'No switchable dsh agent presets'
-        : roster.map((preset) => `${preset.id}${preset.isDefault ? ' (default)' : ''}`).join('\n')
+        : roster.map((preset) => `${preset.id}${preset.id === defaultId ? ' (default)' : ''}`).join('\n')
       return { kind: 'success', text }
     }
     await switchAgentPreset(ctx, sessionId, argument)
@@ -1153,7 +1164,7 @@ export async function runRegistryCommand(
   }
   let execution: BridgeCommandExecution | undefined
   try {
-    execution = await ctx.api.commands.execute(agent, commandLine, new AbortController().signal)
+    execution = await ctx.api.commands.execute(agent, commandLine, [], new AbortController().signal)
   } catch (error) {
     const text = `${label} failed: ${error instanceof Error ? error.message : String(error)}`
     broadcastCommandResult(ctx, sessionId, text, 'idle')
@@ -1314,7 +1325,7 @@ export async function reconcileModelSelection(
   if (cached === undefined || cached.variant === undefined) return
   let current
   try {
-    current = await rpc(ctx, 'session.models', { sessionId: sid(sessionId) })
+    current = await rpc<{ current: { reasoningEffort?: string; provider: string; model: string } }>(ctx, 'session.models', { sessionId: sid(sessionId) })
   } catch (error) {
     ctx.log(`[bridge] model selection check failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
     return
@@ -1368,7 +1379,7 @@ export async function applyAgentFromBody(
     const code = typeof errorBody?.data?.code === 'string'
       ? (errorBody.data.code as string)
       : ''
-    if (code === 'agent-preset-locked' && !ctx.state.lockedAgentNoticeSeen(sessionId, agent)) {
+    if (code === 'agent-preset/locked' && !ctx.state.lockedAgentNoticeSeen(sessionId, agent)) {
       ctx.state.markLockedAgentNotice(sessionId, agent)
       broadcastCommandResult(
         ctx,
@@ -1477,7 +1488,7 @@ export async function forkFromSource(
   atSeq?: number,
 ): Promise<string> {
   const title = await forkTitleForSource(ctx, sourceId)
-  const result = await rpc(ctx, 'session.fork', {
+  const result = await rpc<{ sessionId: string }>(ctx, 'session.fork', {
     sessionId: sid(sourceId),
     ...(atSeq === undefined ? {} : { atSeq }),
   })
@@ -1516,7 +1527,7 @@ export async function runCompactCommand(
   }
   let execution: BridgeCommandExecution | undefined
   try {
-    execution = await ctx.api.commands.execute(agent, '/compact', new AbortController().signal)
+    execution = await ctx.api.commands.execute(agent, '/compact', [], new AbortController().signal)
   } catch (error) {
     const text = `Compaction failed: ${error instanceof Error ? error.message : String(error)}`
     broadcastCommandResult(ctx, sessionId, text, 'idle')
@@ -1565,7 +1576,7 @@ export async function createSession(
     const directory = typeof location?.directory === 'string'
       ? location.directory
       : queryDirectory ?? ctx.cwd
-    const result = await rpc(ctx, 'session.create', {
+    const result = await rpc<{ sessionId: string }>(ctx, 'session.create', {
       cwd: directory,
       ...(sessionIdInput === undefined ? {} : { sessionId: sid(sessionIdInput) }),
       ...(agentPreset === undefined ? {} : { agentPreset }),
@@ -1674,11 +1685,23 @@ export async function permissionReply(
   } else {
     throw badRequest('invalid permission reply', { reply })
   }
-  const receipt = await respondApproval(ctx.api, entry.rpcId, entry.sessionId, entry.approvalId, outcome)
-  if (!receipt.accepted) {
-    throw conflict('permission request is no longer pending', { reason: receipt.reason })
+  const resolve = ctx.state.pendingApprovals.get(entry.rpcId)
+  if (resolve === undefined) {
+    throw conflict('permission request is no longer pending')
   }
+  ctx.state.pendingApprovals.delete(entry.rpcId)
+  resolve(outcome)
   ctx.state.removePermission(requestID)
+  // dsh 0.1.2 has no mux stream, so no `approval/resolved` frame ever
+  // arrives to close the TUI's permission dialog. The opencode TUI restores
+  // its prompt only after `permission.replied`; without this broadcast the
+  // dialog stays open and the next prompt's keystrokes land in the dialog.
+  const directory = ctx.state.sessionDirectories.get(entry.sessionId) ?? ctx.cwd
+  ctx.hub.broadcast([makeEvent(directory, 'permission.replied', {
+    sessionID: entry.sessionId,
+    requestID: entry.opencodeId,
+    reply: outcome === 'allowed-once' ? 'once' : 'reject',
+  }, projectIdFor(directory))])
 }
 
 export async function questionReply(
@@ -1693,11 +1716,22 @@ export async function questionReply(
     throw badRequest('question reply requires answers: Array<Array<string>>')
   }
   const mapped = answersToDsh(entry, answers as Array<Array<string>>)
-  const receipt = await respondQuestion(ctx.api, entry.rpcId, entry.sessionId, mapped)
-  if (!receipt.accepted) {
-    throw conflict('question request is no longer pending', { reason: receipt.reason })
+  const resolve = ctx.state.pendingQuestions.get(entry.rpcId)
+  if (resolve === undefined) {
+    throw conflict('question request is no longer pending')
   }
+  ctx.state.pendingQuestions.delete(entry.rpcId)
+  resolve(mapped)
   ctx.state.removeQuestion(requestID)
+  // dsh 0.1.2 has no mux stream to carry `question/resolved`; without a
+  // `question.replied` broadcast the opencode TUI never closes the dialog,
+  // so the next prompt's keystrokes land in the still-open dialog.
+  const qDirectory = ctx.state.sessionDirectories.get(entry.sessionId) ?? ctx.cwd
+  ctx.hub.broadcast([makeEvent(qDirectory, 'question.replied', {
+    sessionID: entry.sessionId,
+    requestID: entry.opencodeId,
+    answers: [],
+  }, projectIdFor(qDirectory))])
 }
 
 export async function questionReject(
@@ -1706,11 +1740,19 @@ export async function questionReject(
 ): Promise<void> {
   const entry = ctx.state.questionByOpenCodeId(requestID)
   if (!entry) throw notFound('question request not found', { requestID })
-  const receipt = await cancelQuestion(ctx.api, entry.rpcId)
-  if (!receipt.accepted) {
-    throw conflict('question request is no longer pending', { reason: receipt.reason })
+  const resolve = ctx.state.pendingQuestions.get(entry.rpcId)
+  if (resolve === undefined) {
+    throw conflict('question request is no longer pending')
   }
+  ctx.state.pendingQuestions.delete(entry.rpcId)
+  resolve(undefined)
   ctx.state.removeQuestion(requestID)
+  // Same as questionReply: broadcast the reject so the TUI closes the dialog.
+  const qDirectory = ctx.state.sessionDirectories.get(entry.sessionId) ?? ctx.cwd
+  ctx.hub.broadcast([makeEvent(qDirectory, 'question.rejected', {
+    sessionID: entry.sessionId,
+    requestID: entry.opencodeId,
+  }, projectIdFor(qDirectory))])
 }
 
 export function producedFilesV1(diffs: readonly { file?: string; additions: number; deletions: number }[]): V1FileDiff[] {
@@ -1800,7 +1842,7 @@ export async function seedProjectionState(
   let todos: unknown
   for (const entry of history.events) {
     if (entry.event.type === 'todo/write') {
-      todos = entry.event.data.todos
+      todos = (entry.event.data as { todos: unknown }).todos
     }
   }
   const values = history.projections?.values as Partial<Record<string, unknown>> | undefined
@@ -1854,195 +1896,115 @@ export function createBridgeRouter(
       'Access-Control-Allow-Origin': '*',
     })
     res.write('retry: 3000\n\n')
-    const client = hub.add(res)
-    const controller = client.controller
     const sessionFilter = (req.params as Record<string, string | undefined>).sessionID
-    const sendToClient = (event: BridgeGlobalEvent): void => {
-      if (sessionFilter !== undefined) {
-        const eventSession = (event.payload.properties as Record<string, unknown> | undefined)?.sessionID
-        if (eventSession !== sessionFilter) return
+    hub.add(res, (event) => {
+      if (sessionFilter === undefined) return true
+      const eventSession = (event.payload.properties as Record<string, unknown> | undefined)?.sessionID
+      return eventSession === sessionFilter
+    })
+  }
+
+  // ---- shared host-side event pump (dsh 0.1.2: no mux stream) ----
+
+  let translator: MuxEventTranslator | undefined
+  let listRefreshTimer: NodeJS.Timeout | undefined
+  // Serialize session-event feeds per session: `feed` awaits translator
+  // initialization and projection seeding, so without a per-session queue
+  // two near-simultaneous frames can be translated out of order (e.g. a fast
+  // tool/result overtaking the preceding assistant/message), making the SSE
+  // event stream nondeterministic.
+  const sessionFeedQueues = new Map<string, Promise<void>>()
+  const replayGuard = {
+    approvals: new Set<string>(),
+    questions: new Set<string>(),
+    chunks: new Set<string>(),
+  }
+  const sharedState = { todos: new Map<string, unknown>(), goals: new Map<string, unknown>() }
+  const seededProjection = new Set<string>()
+
+  async function ensureTranslator(): Promise<MuxEventTranslator> {
+    if (translator !== undefined) return translator
+    const defaultModel = await defaultModelRef(ctx)
+    translator = new MuxEventTranslator({
+      cwd,
+      state,
+      defaultModel,
+      log,
+      replayGuard,
+      sharedState,
+      onFlush: (events) => {
+        hub.broadcast(events)
+      },
+    })
+    return translator
+  }
+
+  function scheduleListRefresh(): void {
+    if (listRefreshTimer !== undefined) return
+    listRefreshTimer = setTimeout(() => {
+      listRefreshTimer = undefined
+      void (async () => {
+        try {
+          const list = await rpc<{ items: SessionSummary[] }>(ctx, 'session.list', {})
+          ctx.state.setSessionListCache(list.items)
+          recordSessionSummaries(ctx, list.items)
+        } catch (error) {
+          log(`[bridge/sse] session list refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      })()
+    }, 250)
+  }
+
+  async function feed(frame: BridgeFrame): Promise<void> {
+    const t = await ensureTranslator()
+    if (frame.type === 'session/event') {
+      const sessionId = String(frame.sessionId)
+      if (!seededProjection.has(sessionId)) {
+        seededProjection.add(sessionId)
+        try {
+          await seedProjectionState(ctx, sharedState, sessionId)
+        } catch (error) {
+          log(`[bridge/sse] projection seed failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+        }
       }
-      hub.send(client, event)
+      const sessionEvent = frame.event as { type: string }
+      ctx.state.invalidateHistory(String(frame.sessionId))
+      if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {
+        ctx.state.invalidateSession()
+        scheduleListRefresh()
+      }
     }
-    void (async () => {
-      let translator: MuxEventTranslator | undefined
-      let listRefreshTimer: NodeJS.Timeout | undefined
-      try {
-        const defaultModel = await defaultModelRef(ctx)
-        const replayGuard = {
-          approvals: new Set<string>(),
-          questions: new Set<string>(),
-          chunks: new Set<string>(),
-        }
-        const sharedState = { todos: new Map<string, unknown>(), goals: new Map<string, unknown>() }
-        const makeTranslator = (): MuxEventTranslator => new MuxEventTranslator({
-          cwd,
-          state,
-          defaultModel,
-          log,
-          replayGuard,
-          sharedState,
-          onFlush: (events) => {
-            for (const event of events) sendToClient(event)
-          },
-        })
-        translator = makeTranslator()
-        const retryBaseMs = options.sseRetryBaseMs ?? SSE_RETRY_BASE_MS
-        const retryMaxAttempts = options.sseRetryMaxAttempts ?? SSE_RETRY_MAX_ATTEMPTS
-        const scheduleListRefresh = (): void => {
-          if (listRefreshTimer !== undefined) return
-          listRefreshTimer = setTimeout(() => {
-            listRefreshTimer = undefined
-            void (async () => {
-              try {
-                const list = await rpc(ctx, 'session.list', {})
-                ctx.state.setSessionListCache(list.items)
-                recordSessionSummaries(ctx, list.items)
-              } catch (error) {
-                log(`[bridge/sse] session list refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-              }
-            })()
-          }, 250)
-        }
-        const consumeHost = async (stream: AsyncIterable<RpcRequest<HostFrame>>): Promise<void> => {
-          for await (const frame of stream) {
-            const payload = frame.payload as { type?: string; sessionId?: unknown; message?: unknown }
-            if (payload.type === 'host/agent-error') {
-              const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
-              const message = typeof payload.message === 'string' ? payload.message : 'agent error'
-              if (sessionId) {
-                for (const event of agentErrorEvents(sessionId, message, cwd)) sendToClient(event)
-              }
-            }
-            if (payload.type === 'host/session-added' || payload.type === 'host/session-removed') {
-              ctx.state.invalidateSession()
-              scheduleListRefresh()
-              if (payload.type === 'host/session-added') {
-                // The TUI session list is loaded once at bootstrap; a session
-                // born mid-run (including subagent children) must be pushed
-                // live or the subagent panel never sees it.
-                for (const event of hostSessionAddedEvents(ctx, payload)) sendToClient(event)
-              }
-            }
-          }
-        }
-        const startHostLoop = async (): Promise<void> => {
-          let attempt = 0
-          let delay = retryBaseMs
-          while (!controller.signal.aborted) {
-            attempt += 1
-            const stream = api.events.host(
-              { rpcId: randomUUID() as never, payload: {} },
-              controller.signal,
-            )
-            try {
-              await consumeHost(stream)
-              return
-            } catch (error) {
-              if (controller.signal.aborted) return
-              if (attempt >= retryMaxAttempts) {
-                log(`[bridge/sse] host stream ended: ${error instanceof Error ? error.message : String(error)}`)
-                return
-              }
-              log(`[bridge/sse] host stream error, retry ${attempt}/${retryMaxAttempts} in ${delay}ms: ${error instanceof Error ? error.message : String(error)}`)
-              await new Promise((resolve) => setTimeout(resolve, delay))
-              delay = Math.min(delay * 2, 8000)
-            }
-          }
-        }
-        void startHostLoop().catch((error) => {
-          log(`[bridge/sse] host loop failed: ${error instanceof Error ? error.message : String(error)}`)
-        })
-        const consumeStream = async (stream: AsyncIterable<RpcRequest<MuxFrame>>): Promise<void> => {
-          const seededProjection = new Set<string>()
-          for await (const frame of stream) {
-            if (frame.payload.type === 'session/event' || frame.payload.type === 'session/projection') {
-              const sessionId = String(frame.payload.sessionId)
-              if (!seededProjection.has(sessionId)) {
-                seededProjection.add(sessionId)
-                try {
-                  await seedProjectionState(ctx, sharedState, sessionId)
-                } catch (error) {
-                  log(`[bridge/sse] projection seed failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
-                }
-              }
-            }
-            if (frame.payload.type === 'approval/requested') {
-              const sessionId = String(frame.payload.sessionId)
-              const toolName = frame.payload.toolName
-              if (ctx.state.savedPermissionFor(sessionId, toolName) !== undefined) {
-                try {
-                  await respondApproval(
-                    api,
-                    String(frame.rpcId),
-                    sessionId,
-                    String(frame.payload.approvalId),
-                    'allowed-once',
-                  )
-                } catch (error) {
-                  log(`[bridge/sse] auto-approval failed: ${error instanceof Error ? error.message : String(error)}`)
-                }
-                continue
-              }
-            }
-            if (frame.payload.type === 'session/event') {
-              const sessionEvent = frame.payload.event as unknown as { type: string }
-              ctx.state.invalidateHistory(String(frame.payload.sessionId))
-              if (sessionEvent.type === 'session' || sessionEvent.type === 'session/created' || sessionEvent.type === 'session/title') {
-                ctx.state.invalidateSession()
-                scheduleListRefresh()
-              }
-            }
-            try {
-              for (const event of translator!.translate(frame)) {
-                sendToClient(event)
-              }
-            } catch (error) {
-              // One malformed/unexpected frame must not tear down the whole
-              // mux stream; log and keep consuming.
-              log(`[bridge/sse] frame translate failed: ${error instanceof Error ? error.message : String(error)}`)
-            }
-          }
-        }
-        let attempt = 0
-        let delay = retryBaseMs
-        while (true) {
-          attempt += 1
-          const stream = api.events.mux(
-            { rpcId: randomUUID() as never, payload: {} },
-            controller.signal,
-          )
-          try {
-            await consumeStream(stream)
-            break
-          } catch (error) {
-            if (controller.signal.aborted) break
-            if (attempt >= retryMaxAttempts) throw error
-            log(`[bridge/sse] mux stream error, retry ${attempt}/${retryMaxAttempts} in ${delay}ms: ${error instanceof Error ? error.message : String(error)}`)
-            await new Promise((resolve) => setTimeout(resolve, delay))
-            delay = Math.min(delay * 2, 8000)
-            translator?.dispose()
-            translator = makeTranslator()
-          }
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return
-        log(`[bridge/sse] mux stream ended: ${error instanceof Error ? error.message : String(error)}`)
-      } finally {
-        translator?.dispose()
-        if (listRefreshTimer !== undefined) {
-          clearTimeout(listRefreshTimer)
-          listRefreshTimer = undefined
-        }
-        hub.remove(client)
+    try {
+      for (const event of t.translate(frame)) {
+        hub.broadcast([event])
       }
-    })()
+    } catch (error) {
+      log(`[bridge/sse] frame translate failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  function feedHostFrame(frame: BridgeHostFrame): void {
+    if (frame.type === 'host/agent-error') {
+      for (const event of agentErrorEvents(frame.sessionId, frame.message, cwd)) {
+        hub.broadcast([event])
+      }
+    } else if (frame.type === 'host/session-added' || frame.type === 'host/session-removed') {
+      ctx.state.invalidateSession()
+      scheduleListRefresh()
+      if (frame.type === 'host/session-added') {
+        for (const event of hostSessionAddedEvents(ctx, frame as unknown as { type: string; sessionId: string })) {
+          hub.broadcast([event])
+        }
+      }
+    }
   }
 
   return {
     ctx,
     match,
     startSse,
+    feed,
+    feedHostFrame,
     setCwd(directory: string) {
       cwd = directory
       ctx.cwd = directory
