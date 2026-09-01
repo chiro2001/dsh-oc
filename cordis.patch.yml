@@ -1,18 +1,8 @@
 # 叠加在 dsh-base 之上；插入顺序决定依赖激活顺序。
+- id: session-title-llm
+  disabled: true
+
 - insert:
-    - id: storage
-      name: '@deepseek-ai/dsh-storage'
-
-    - id: storage-json
-      name: '@deepseek-ai/dsh-storage-json'
-      config:
-        root: !!js dshHomePath('storages')
-
-    - id: storage-domain
-      name: '@deepseek-ai/dsh-storage-domain'
-      config:
-        backend: json
-
     - id: webserver
       name: '@deepseek-ai/dsh-host-webserver'
       config:
@@ -24,18 +14,25 @@
       config:
         default: minimal
 
+    # The `standard` preset's delegation tools sample a host-owned model
+    # selection settings namespace. dsh-base does not mount it (only the
+    # web-app bundle does), so without this the standard preset fails to mount
+    # with "modelSelectionSettings requires ... in the Host scope".
+    - id: subagent-model-selection-settings
+      name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
+
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
 
-    - id: api-proxy
-      name: '@deepseek-ai/dsh-host-apiproxy'
+    - id: session-controller
+      name: '@deepseek-ai/dsh-api-session-controller'
 
     - id: oc-bridge
       name: '@chiro2001/dsh-oc/bridge'
-      inject: [apiProxy]
+      inject: [sessionController, agentPresets, goals, sessionSkillCatalog]
 
     - id: oc-tui
       name: '@chiro2001/dsh-oc/tui'
