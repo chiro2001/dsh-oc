@@ -1,7 +1,7 @@
 import { Context, Service } from "@deepseek-ai/cordis";
 //#region src/bridge/index.d.ts
 declare const name = "@chiro2001/dsh-oc/bridge";
-declare const inject: readonly ['apiProxy'];
+declare const inject: readonly ['sessionController', 'agentPresets', 'goals', 'sessionSkillCatalog'];
 interface OcBridgeValue {
   url: string;
   port: number;
@@ -28,6 +28,13 @@ declare class OcBridgeService extends Service implements OcBridgeValue {
   private readonly logger;
   constructor(ctx: Context);
   [Service.init](): AsyncGenerator<() => Promise<void>>;
+  /**
+   * Host-side event pump (dsh 0.1.2 has no mux/host stream): subscribe to
+   * session events, lifecycle, approval/question answerer waterfalls, and the
+   * session control stream, translating each into bridge frames for the SSE
+   * hub. Registered once for the service's lifetime.
+   */
+  private subscribeHostEvents;
   setCwd(directory: string): void;
   prefetchSession(sessionId: string): void;
   hasNewActivity(): boolean;

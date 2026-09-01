@@ -1,26 +1,30 @@
 import { Context, Service } from "@deepseek-ai/cordis";
 import http, { ServerResponse } from "node:http";
-import { z } from "zod";
-//#region node_modules/.pnpm/@deepseek-ai+dsh-brand@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariants_802f22b0cd5ecae261f195284703c30b/node_modules/@deepseek-ai/dsh-brand/lib/types/index.d.ts
+import { ZodType, z } from "zod";
+//#region node_modules/.pnpm/@deepseek-ai+dsh-scope@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invaria_c477ecc44bb94579140b267a7ca3a06e/node_modules/@deepseek-ai/dsh-scope/lib/types/index.d.ts
+/** An opaque, identity-compared scope key. */
+type ScopeKey = object;
+declare const ScopedBrand: unique symbol;
 /**
- * The `Branded<B>` nominal-typing primitive — a type-only utility (no runtime
- * code, no harness-package dependency) shared by every package that owns a
- * cross-boundary id.
+ * A routing-only event receiver built by {@link scopeTarget}. The type
+ * parameter records the subject type for dispatch checking; the carrier does
+ * not expose the subject's properties. Event payloads carry the real subject.
+ */
+type Scoped<T extends object> = object & {
+  readonly [ScopedBrand]: T;
+};
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-brand@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invaria_11f5cb072f87e81bfbcb4be7f3026c25/node_modules/@deepseek-ai/dsh-brand/lib/types/index.d.ts
+/**
+ * Duplicate-install-safe nominal string helpers.
  *
  * A brand makes structurally-identical strings non-interchangeable at the type
- * level: a `SessionId` cannot be passed where a `CallId` is expected, even
- * though both are plain strings at runtime. Construction goes through a per-id
- * factory in the OWNING package (a plain cast inside — zero runtime cost);
- * comparison, logging, and serialization all behave as ordinary strings.
+ * level: a `SessionId` cannot be passed where a `ToolCallId` is expected, even
+ * though both are plain strings at runtime. Comparison, logging, and
+ * serialization all behave as ordinary strings.
  *
- * Policy: a package brands the ids it owns — `CallId` in dsh-llm (tool-call
- * correlation), the shared agent/session `SessionId` in dsh-session, and
- * `JobId` in dsh-jobs. Branding is for ids that cross package boundaries and
- * could plausibly be confused; not every string needs a brand.
- * This package owns ONLY the primitive — no concrete id, no runtime code beyond
- * the (erased) type — so the brand vocabulary stays dependency-free and a
- * package can brand its ids without depending on an unrelated capability
- * package.
+ * This package owns no concrete id and keeps no runtime identity or mutable
+ * state, so independently installed copies produce interchangeable values.
  *
  * @module @deepseek-ai/dsh-brand
  */
@@ -30,44 +34,7 @@ type Branded<B extends string> = string & {
   readonly [BRAND]: B;
 };
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-attachment@0_7dd6ce73a1d47d070bd8315386fa797c/node_modules/@deepseek-ai/dsh-llm/lib/types/brand.d.ts
-/** Stable identity carried by one message across inbox, log, and model-request boundaries. */
-type MessageId = Branded<'MessageId'>;
-/**
- * Brand a message identifier.
- * @param id - the opaque message identifier.
- * @returns the same string, branded; no validation is performed.
- */
-declare function MessageId(id: string): MessageId;
-/**
- * Correlates a model-issued tool call with its result. Provider-issued for
- * real adapters; synthesized by mocks/assembler fallbacks.
- */
-type CallId = Branded<'CallId'>;
-/**
- * Brand a string as a {@link CallId}.
- * @param id - the provider-issued (or synthesized) call id.
- * @returns the same string, branded; no validation is performed.
- */
-declare function CallId(id: string): CallId;
-/** Provider-issued request identifier retained for diagnostics across package boundaries. */
-type ProviderRequestId = Branded<'ProviderRequestId'>;
-/**
- * Brand a provider-issued request identifier.
- * @param id - the opaque provider-issued string.
- * @returns the same string, branded; no validation is performed.
- */
-declare function ProviderRequestId(id: string): ProviderRequestId;
-/** Adapter-owned identifier for one model's selectable reasoning effort. */
-type ReasoningEffortId = Branded<'ReasoningEffortId'>;
-/**
- * Brand an adapter-owned reasoning-effort identifier.
- * @param id - the opaque identifier exposed by one model capability.
- * @returns the same string, branded; no validation is performed.
- */
-declare function ReasoningEffortId(id: string): ReasoningEffortId;
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-brand_cf2c8511ebf31e66fcfb36dac897539b/node_modules/@deepseek-ai/dsh-attachment/lib/types/brand.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-br_0d1e6b96e1727323833c01f55a295376/node_modules/@deepseek-ai/dsh-attachment/lib/types/brand.d.ts
 /** Opaque content-addressed identifier for one immutable attachment object. */
 type AttachmentId = Branded<'AttachmentId'>;
 /**
@@ -76,11 +43,19 @@ type AttachmentId = Branded<'AttachmentId'>;
  * @returns the branded identifier.
  */
 declare function AttachmentId(value: string): AttachmentId;
+/** Opaque deterministic identity for one request-image transformation. */
+type ImageVariantId = Branded<'ImageVariantId'>;
+/**
+ * Brand a validated request-image transformation identifier.
+ * @param value - attachment-provider-produced opaque identifier.
+ * @returns the branded identifier.
+ */
+declare function ImageVariantId(value: string): ImageVariantId;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-brand_cf2c8511ebf31e66fcfb36dac897539b/node_modules/@deepseek-ai/dsh-attachment/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-br_0d1e6b96e1727323833c01f55a295376/node_modules/@deepseek-ai/dsh-attachment/lib/types/types.d.ts
 /** Raster image formats accepted by the version-one attachment path. */
 type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
-/** Durable, serializable metadata for one immutable image object. */
+/** Durable, serializable reference to one immutable normalized image. */
 interface ImageAttachmentRef {
   /** Opaque storage identifier; never a filesystem path or bearer URL. */
   attachmentId: AttachmentId;
@@ -94,6 +69,14 @@ interface ImageAttachmentRef {
   height: number;
   /** Optional display name stripped of local path information. */
   name?: string;
+  /**
+   * Input dimensions after applying EXIF orientation and before normalization
+   * scaling. Present only when normalization reduced the image.
+   */
+  originalDimensions?: {
+    width: number;
+    height: number;
+  };
 }
 /** Deployment-resolved limits used by upload admission and request buffering. */
 interface ImageAttachmentLimits {
@@ -101,6 +84,8 @@ interface ImageAttachmentLimits {
   maxImagesPerMessage: number;
   maxMessageImageBytes: number;
   maxImagePixels: number;
+  /** Maximum intrinsic width and maximum intrinsic height in pixels for one image. */
+  maxImageDimension: number;
   mediaTypes: readonly ImageMediaType[];
 }
 /** Request to validate and durably commit one image. */
@@ -116,8 +101,34 @@ interface StoredImageAttachment {
   ref: ImageAttachmentRef;
   data: Uint8Array;
 }
+/** Deterministic request-image policy selected by one exact model route. */
+interface ImageRequestPolicy {
+  /** Maximum width multiplied by height after aspect-preserving projection. */
+  maxPixels: number;
+  /** Encoded-byte target before base64 expansion or Files API upload; the smallest quality-ladder output is kept when no quality fits. */
+  maxBytes: number;
+}
+/** Cached request version derived from one provider-independent normalized attachment. */
+interface RequestImageAttachment {
+  /** Cache and upload-index key over the attachment id, policy, and fixed encoder parameters. */
+  variantId: ImageVariantId;
+  /** Durable normalized attachment from which this request version was derived. */
+  attachment: ImageAttachmentRef;
+  /** Encoded request bytes. */
+  data: Uint8Array;
+  mediaType: ImageMediaType;
+  bytes: number;
+  width: number;
+  height: number;
+  /** Provider-compatible sample depth proven after request encoding. */
+  depth: 'uchar';
+  /** Provider-compatible color space proven after request encoding. */
+  space: 'srgb';
+  /** Whether the encoded request version retains an alpha channel. */
+  hasAlpha: boolean;
+}
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-brand_cf2c8511ebf31e66fcfb36dac897539b/node_modules/@deepseek-ai/dsh-attachment/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-br_0d1e6b96e1727323833c01f55a295376/node_modules/@deepseek-ai/dsh-attachment/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     attachments: AttachmentStore;
@@ -136,22 +147,92 @@ declare abstract class AttachmentStore extends Service {
    */
   abstract validateImage(input: SaveImageAttachment): Promise<void>;
   /**
+   * Validate one ordered image batch before committing any member.
+   * Validation failures start no writes; storage failures return no partial
+   * references, although already published content-addressed objects may stay
+   * unreachable until a future retention policy collects them.
+   * @param inputs - encoded images in their owning message order.
+   * @returns durable references in the exact input order.
+   */
+  protected validateImageBatch(inputs: readonly SaveImageAttachment[]): void;
+  /**
+   * Validate and durably commit one ordered image batch.
+   * @param inputs - encoded images in owning-message order.
+   * @returns durable normalized attachment references in the same order after every member succeeds.
+   */
+  saveImages(inputs: readonly SaveImageAttachment[]): Promise<readonly ImageAttachmentRef[]>;
+  /**
    * Validate and durably commit one image before its owning session event is appended.
+   * The returned reference describes the persisted normalized image. When
+   * normalization reduces the raster, its `originalDimensions` records the
+   * orientation-applied input dimensions.
    * @param input - encoded bytes, declared media type, and optional display name.
-   * @returns a durable content-addressed reference.
+   * @returns the durable content-addressed normalized image reference.
    */
   abstract saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef>;
   /**
    * Read one image and verify that bytes still match the recorded reference.
    * @param ref - durable reference from the session log.
    * @param signal - optional cancellation for backend read and verification work.
-   * @returns the verified bytes and canonical reference.
+   * @returns the verified bytes and normalized attachment reference.
    * @throws the signal reason when aborted, or a storage error when verification fails.
    */
   abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>;
+  /**
+   * Locate the provider-owned normalized object in the harness host filesystem.
+   * @param ref - durable normalized attachment reference.
+   * @returns an absolute host path, or undefined when this backend is not host-file-backed.
+   * @throws an AttachmentError when the durable reference is invalid.
+   */
+  imageHostPath(ref: ImageAttachmentRef): string | undefined;
+  /**
+   * Generate or read one deterministic model-request version from the stored normalized image.
+   * @param ref - durable provider-independent normalized attachment reference.
+   * @param policy - exact route pixel budget and encoded-byte target; a target no ladder quality meets yields the smallest ladder output.
+   * @param signal - optional cancellation.
+   * @returns request bytes and the cache/upload identity covering every transform input.
+   */
+  readImageRequest(ref: ImageAttachmentRef, policy: ImageRequestPolicy, signal?: AbortSignal): Promise<RequestImageAttachment>;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-attachment@0_7dd6ce73a1d47d070bd8315386fa797c/node_modules/@deepseek-ai/dsh-llm/lib/types/message.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariant_4e27b4e5bf17933160d40674963f26f8/node_modules/@deepseek-ai/dsh-llm/lib/types/brand.d.ts
+/** Stable identity carried by one message across inbox, log, and model-request boundaries. */
+type MessageId = Branded<'MessageId'>;
+/**
+ * Brand a message identifier.
+ * @param id - the opaque message identifier.
+ * @returns the same string with the message-id brand.
+ */
+declare function MessageId(id: string): MessageId;
+/**
+ * Correlates a model-issued tool call with its result. Provider-issued for
+ * real adapters; synthesized by mocks/assembler fallbacks.
+ */
+type ToolCallId = Branded<'ToolCallId'>;
+/**
+ * Brand a string as a {@link ToolCallId}.
+ * @param id - the provider-issued or synthesized call id.
+ * @returns the same string with the tool-call-id brand.
+ */
+declare function ToolCallId(id: string): ToolCallId;
+/** Provider-issued request identifier retained for diagnostics across package boundaries. */
+type ProviderRequestId = Branded<'ProviderRequestId'>;
+/**
+ * Brand a provider-issued request identifier.
+ * @param id - the opaque provider-issued string.
+ * @returns the same string, branded; no validation is performed.
+ */
+declare function ProviderRequestId(id: string): ProviderRequestId;
+/** Adapter-owned identifier for one model's selectable reasoning effort. */
+type ReasoningEffortId = Branded<'ReasoningEffortId'>;
+/**
+ * Brand an adapter-owned reasoning-effort identifier.
+ * @param id - the opaque identifier exposed by one model capability.
+ * @returns the same string, branded; no validation is performed.
+ */
+declare function ReasoningEffortId(id: string): ReasoningEffortId;
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariant_4e27b4e5bf17933160d40674963f26f8/node_modules/@deepseek-ai/dsh-llm/lib/types/message.d.ts
 /** Provider/model identity and adapter-private replay data for an assistant message. */
 interface AssistantProvenance {
   /** Provider route that produced the message. */
@@ -172,7 +253,7 @@ interface ModelMessageSource extends AssistantProvenance {
 /** Required source of a user-role message carrying one tool result. */
 interface ToolMessageSource {
   kind: 'tool';
-  callId: CallId;
+  callId: ToolCallId;
 }
 /** One named contribution to a `snapshot`-form context, in assembly order. */
 interface ContextSnapshotSection {
@@ -253,7 +334,7 @@ interface ToolResultMessage extends Message {
   readonly source: ToolMessageSource;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-attachment@0_7dd6ce73a1d47d070bd8315386fa797c/node_modules/@deepseek-ai/dsh-llm/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariant_4e27b4e5bf17933160d40674963f26f8/node_modules/@deepseek-ai/dsh-llm/lib/types/types.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
@@ -295,7 +376,7 @@ interface ReasoningBlock {
  * A durable raster image reference, valid in user or assistant content. The
  * block is deliberately role-neutral; assistant-side rendering is forward
  * compatibility — the current production adapters declare text-only output,
- * so only user content carries images today.
+ * so only user messages may carry images.
  */
 interface ImageBlock {
   type: 'image';
@@ -306,7 +387,7 @@ interface ImageBlock {
 interface ToolCallBlock {
   type: 'tool-call';
   /** Provider-issued call id; correlates with the matching tool result. */
-  id: CallId;
+  id: ToolCallId;
   name: string;
   /** Raw JSON string as produced by the model. */
   arguments: string;
@@ -314,7 +395,7 @@ interface ToolCallBlock {
 /** The result of a tool invocation, sent back to the model. */
 interface ToolResultBlock {
   type: 'tool-result';
-  toolCallId: CallId;
+  toolCallId: ToolCallId;
   content: ContentBlock[];
   isError?: boolean;
 }
@@ -369,9 +450,45 @@ type FinishReason = FinishReasonMap[keyof FinishReasonMap];
 interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Exact full-call total including aggregate prompt and output tokens.
+   *
+   * Adapters preserve a provider total or derive it from authoritative
+   * aggregate prompt/output counters; they omit it when unavailable or
+   * inconsistent.
+   */
+  totalTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   reasoningTokens?: number;
+}
+/**
+ * Request price of one ordered image occurrence under one exact model route's
+ * request projection. Every occurrence resolves to the pair the wire actually
+ * carries: provider visual tokens for a retained image, plus the model-visible
+ * text sent with or instead of it (request-preview handle, offload placeholder,
+ * or text-only substitution). The caller prices `text` with its own text
+ * estimator so provider pricing never fixes a text tokenization.
+ */
+interface LlmImageRequestPrice {
+  /** Provider visual tokens for the retained request image; 0 when only text represents this occurrence. */
+  visualTokens: number;
+  /** Model-visible text sent for this occurrence, to be priced by the caller's text estimator. */
+  text: string;
+}
+/**
+ * Provider-side request-image pricing for one exact model route. Implemented
+ * by adapters whose provider charges visual tokens; consumers (the token
+ * meter) resolve it synchronously per measurement, so implementations must not
+ * perform I/O.
+ */
+interface LlmImageRequestPricing {
+  /**
+   * Price every image occurrence of one request projection.
+   * @param images - durable image references in request order, one entry per occurrence.
+   * @returns one price per occurrence, aligned by index with `images`.
+   */
+  priceImages(images: readonly ImageAttachmentRef[]): readonly LlmImageRequestPrice[];
 }
 /** Display metadata for one registered provider route. */
 interface LlmProviderInfo {
@@ -438,8 +555,15 @@ interface LlmModelDiscoveryRequest {
   api?: string;
   /** Credential for this interrogation alone; the harness never stores it. */
   apiKey?: string;
-  /** Caller cancellation; implementations must settle promptly after it aborts. */
-  signal?: AbortSignal;
+}
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    /** A draft provider interrogation refused or failed. */
+    'llm/model-discovery-rejected': {
+      readonly settingsNs: string;
+      readonly baseURL?: string;
+    };
+  }
 }
 /**
  * One model an endpoint reports about itself. Every field but the id is
@@ -503,6 +627,26 @@ interface LlmResolvedModelInfo extends LlmModelInfo {
   reasoning?: LlmModelReasoningInfo;
 }
 /**
+ * Adapter-private lossless-JSON state for replaying a successful response,
+ * carried by a terminal `finish` chunk and stored on the assembled assistant
+ * message's model source. Both halves stay opaque to the harness; only the
+ * split is shared vocabulary, so assembly can keep stored metadata aligned
+ * with stored content without reading either half.
+ */
+interface ReplayEnvelope {
+  /** Response-level adapter-private metadata (ids, native stop reason). */
+  response: unknown;
+  /**
+   * Per-block adapter-private metadata, one entry per emitted block in
+   * first-seen stream order. When assembly drops a block it drops the entry at
+   * the same position; entries whose length does not match the emitted block
+   * count discard the whole envelope. An adapter whose metadata is independent
+   * of block structure omits this field and the envelope passes through
+   * assembly unchanged.
+   */
+  blocks?: readonly unknown[];
+}
+/**
  * Raw streaming protocol emitted by adapters.
  * Block indexes correlate interleaved deltas, and `block-end` carries the
  * assembled block. Adapters emit usage before the terminal finish and nothing
@@ -525,7 +669,7 @@ type StreamChunk = {
 } | {
   type: 'tool-call-delta';
   index: number;
-  id: CallId;
+  id: ToolCallId;
   name?: string;
   argumentsDelta: string;
 } | {
@@ -538,8 +682,8 @@ type StreamChunk = {
 } | {
   type: 'finish';
   reason: FinishReason;
-  /** Adapter-private lossless-JSON state for replaying a successful response. */
-  replayState?: unknown;
+  /** Replay metadata for a successful response; see {@link ReplayEnvelope}. */
+  replayState?: ReplayEnvelope;
 };
 /**
  * JSON-schema description of a tool, as sent to the model.
@@ -593,7 +737,417 @@ interface GenerateOptions {
   purpose?: 'compaction' | 'session-title';
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+cosmokit@1.8.2/node_modules/@deepseek-ai/cosmokit/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+d_cfd36a297b14beb36a96e2ffc3071fb7/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/remote-error.d.ts
+/**
+ * One Remote call failure: a real Error carrying its stable code and typed
+ * details. Owners throw it at the failure point; the Host Gateway encodes it
+ * onto the wire unchanged; the Client face rebuilds an instance for the
+ * `RemoteResult` error branch, so `throw result.error` keeps throw semantics.
+ * Discrimination is always by `code`, never by instanceof.
+ */
+declare class RemoteError<Code extends RemoteErrorCode = RemoteErrorCode> extends Error {
+  readonly code: Code;
+  readonly details: RemoteErrorDetailsMap[Code];
+  /** Structural marker: cross-realm/bundle identification never uses instanceof. */
+  readonly isDSHRemoteError: true;
+  /**
+   * @param code - stable failure code declared in {@link RemoteErrorDetailsMap}.
+   * @param message - human diagnostic carried across the wire.
+   * @param details - structured payload typed by the code.
+   * @param options - standard Error options (`cause` survives in-process only).
+   */
+  constructor(code: Code, message: string, details: RemoteErrorDetailsMap[Code], options?: ErrorOptions);
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+d_cfd36a297b14beb36a96e2ffc3071fb7/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/types.d.ts
+declare const LOOKUP_HOST: unique symbol;
+declare const LOOKUP_WIRE: unique symbol;
+declare const CONTEXT_WIRE: unique symbol;
+/** Type-level association between a Host object and its wire identity. */
+interface TypertLookup<Host, Wire> {
+  readonly [LOOKUP_HOST]: Host;
+  readonly [LOOKUP_WIRE]: Wire;
+}
+/** Extract the Host object associated with one lookup declaration. */
+type TypertLookupHost<Lookup> = Lookup extends TypertLookup<infer Host, infer _Wire> ? Host : never;
+/** Extract the wire identity associated with one lookup declaration. */
+type TypertLookupWire<Lookup> = Lookup extends TypertLookup<infer _Host, infer Wire> ? Wire : never;
+/** Type-level association between a scoped Context kind and its wire identity. */
+interface TypertContext<Wire> {
+  readonly [CONTEXT_WIRE]: Wire;
+}
+/** Extract the wire identity associated with one scoped Context declaration. */
+type TypertContextWire<ContextType> = ContextType extends TypertContext<infer Wire> ? Wire : never;
+/** Merge-extensible Host object lookup declarations. */
+interface TypertLookupMap {}
+/** Merge-extensible scoped Context declarations. */
+interface TypertContextMap {}
+/**
+ * Merge-extensible Remote failure vocabulary: this package declares the
+ * universal carrier codes once; the Gateway merges its infrastructure codes
+ * and every owner merges its domain codes next to the throwing code.
+ */
+interface RemoteErrorDetailsMap {
+  /** Owner-side business validation refused the request; `issues` carries codec output when one produced it. */
+  'gateway/bad-request': {
+    readonly issues?: readonly object[];
+  };
+  /** The call was cancelled by the carrier signal or the backend. */
+  'gateway/cancelled': {};
+  /** Carrier, dispatch, or unclassified Host failure. */
+  'gateway/internal': {};
+}
+/** Every declared Remote failure code. */
+type RemoteErrorCode = keyof RemoteErrorDetailsMap;
+/** Awaitable disposer returned by Cordis-owned Typert registrations. */
+type TypertDisposer = () => Promise<void>;
+type StringKeyOf<Value> = Extract<keyof Value, string>;
+/** Minimal runtime-schema capability carried by strict generated codecs. */
+interface TypertSchema<Output = unknown> {
+  /**
+   * Parse and validate one boundary value.
+   * @param value - untrusted boundary value.
+   * @returns the validated value.
+   */
+  parse(value: unknown): Output;
+}
+/** Codec attached to one invocation parameter or result. */
+type TypertCodec = {
+  readonly mode: 'strict';
+  readonly typeSymbol: string;
+  readonly schema: TypertSchema;
+} | {
+  readonly mode: 'src-json';
+};
+/** One ordered business parameter in a Remote invocation. */
+interface InvocationParameterDescriptor {
+  /** Source-level parameter name. */
+  readonly name: string;
+  /** Required key in the wire `args` object. */
+  readonly wire: string;
+  /** Whether the value is JSON or requires a registered Host lookup. */
+  readonly source: 'json' | 'lookup';
+  /** Lookup key when `source` is `lookup`. */
+  readonly lookup?: string;
+  /** Boundary codec for the wire representation. */
+  readonly codec: TypertCodec;
+  /** Missing wire fields decode to `undefined` only for an explicitly declared `T | undefined`. */
+  readonly acceptsUndefined?: true;
+}
+/** Source position retained for diagnostics from generated definitions. */
+interface InvocationSourceLocation {
+  readonly file: string;
+  readonly line: number;
+  readonly column: number;
+}
+/** Carrier-independent description of one exported method invocation. */
+interface InvocationDescriptor {
+  /** Globally stable generated identity. */
+  readonly id: string;
+  /** Cordis service key owning the method. */
+  readonly service: string;
+  /** Wire namespace, defaulting to the service key. */
+  readonly namespace: string;
+  /** Public instance method name. */
+  readonly method: string;
+  /** Service member invoked when the exported method name is an alias. */
+  readonly implementation?: string;
+  /** Absent for unary calls; stream calls validate and deliver every yielded item. */
+  readonly mode?: 'stream';
+  /** Receiver selection mode. */
+  readonly invocation: {
+    readonly kind: 'direct';
+  } | {
+    readonly kind: 'context';
+    readonly context: string;
+    readonly wire: string;
+    readonly codec: TypertCodec;
+  };
+  /** Optional consuming-Context projection for one direct lookup parameter. */
+  readonly scope?: {
+    /** Context kind whose Client adapter supplies the identity. */
+    readonly context: string;
+    /** Lookup parameter wire field replaced by the Context identity. */
+    readonly wire: string;
+  };
+  /** Ordered business parameters. */
+  readonly parameters: readonly InvocationParameterDescriptor[];
+  /** Transport cancellation injected after business parameters instead of entering wire args. */
+  readonly cancellation?: {
+    /** Reserved final Host method parameter. */
+    readonly parameter: 'signal';
+  };
+  /** Codec for the unary result or each yielded stream item. */
+  readonly result: TypertCodec;
+  /** Source declaration used only for diagnostics. */
+  readonly sourceLocation?: InvocationSourceLocation;
+}
+/** Generated Host contract selected explicitly by a Client assembly. */
+interface TypertRemoteContribution {
+  /** npm package that owns the Remote methods. */
+  readonly package: string;
+  /** Consumer-side invocation descriptors generated from that package. */
+  readonly descriptors: readonly InvocationDescriptor[];
+}
+/**
+ * Resolve one validated wire identity, synchronously or asynchronously.
+ * @param id - validated wire identity.
+ * @returns the Host object, or `undefined` when unavailable.
+ */
+type TypertLookupResolver<Host = unknown, Wire = unknown> = (id: Wire) => Host | undefined | Promise<Host | undefined>;
+/** Runtime provider for one declared Host object lookup. */
+interface TypertLookupProvider<Host = unknown, Wire = unknown> {
+  /** Source parameter name recognized by the SRC weak parser. */
+  readonly parameter: string;
+  /** Wire field replacing the Host object parameter. */
+  readonly wire: string;
+  /** Canonical Host type symbol used by strict generation. */
+  readonly hostTypeSymbol: string;
+  /** Canonical wire type symbol used by strict generation. */
+  readonly wireTypeSymbol: string;
+  /**
+   * Resolve a wire identity through the provider's default policy.
+   * @param id - validated wire identity.
+   * @returns the object, `undefined` when unavailable, or either asynchronously.
+   */
+  resolve(id: Wire): Host | undefined | Promise<Host | undefined>;
+}
+/** Stable wire declaration retained after a lookup provider unloads. */
+interface TypertLookupDefinition {
+  /** Merge-declared lookup key. */
+  readonly key: string;
+  /** Source parameter name recognized by the SRC weak parser. */
+  readonly parameter: string;
+  /** Wire field replacing the Host object parameter. */
+  readonly wire: string;
+  /** Canonical Host type symbol used by strict generation. */
+  readonly hostTypeSymbol: string;
+  /** Canonical wire type symbol used by strict generation. */
+  readonly wireTypeSymbol: string;
+}
+/** Bidirectional projection between one environment's Context and its wire identity. */
+interface TypertContextAdapter<Wire = unknown> {
+  /**
+   * Read the identity represented by a live Context.
+   * @param ctx - Context in this adapter's environment.
+   * @returns the wire identity, or `undefined` when the Context has another kind.
+   */
+  identity(ctx: Context): Wire | undefined;
+  /**
+   * Resolve a wire identity to a live Context in this adapter's environment.
+   * An asynchronous Client resolver may wait for its owner to create the Context.
+   * @param id - validated wire identity.
+   * @returns the Context, or `undefined` when it is unavailable.
+   */
+  resolve(id: Wire): Context | undefined | Promise<Context | undefined>;
+}
+/** Host Context adapter plus the wire declaration used by strict Remote methods. */
+interface TypertHostContextAdapter<Wire = unknown> extends TypertContextAdapter<Wire> {
+  /** Wire field carrying the Context identity. */
+  readonly wire: string;
+  /** Canonical wire type symbol used by strict generation. */
+  readonly wireTypeSymbol: string;
+}
+/** Composition-owned resolver replacing one Host Context adapter's default lookup policy. */
+type TypertHostContextResolver<Wire = unknown> = (id: Wire) => Context | undefined | Promise<Context | undefined>;
+/** Client-side bidirectional Context adapter. */
+interface TypertClientContextAdapter<Wire = unknown> {
+  /**
+   * Read the identity represented by a live Client Context.
+   * @param ctx - Client Context inspected by a scoped Remote caller.
+   * @returns the wire identity, or `undefined` for another Context kind.
+   */
+  identity(ctx: Context): Wire | undefined;
+  /**
+   * Resolve a wire identity from the Client's currently materialized Contexts.
+   * @param id - validated wire identity.
+   * @returns the Client Context, or `undefined` when unavailable.
+   */
+  resolve(id: Wire): Context | undefined;
+}
+/** Host Context identity selected from the registered adapter set. */
+interface TypertHostContextIdentity {
+  /** Merge-declared Context kind whose adapter recognized the Context. */
+  readonly kind: string;
+  /** Wire identity returned by that adapter. */
+  readonly identity: unknown;
+}
+/** Notification emitted after a Typert runtime registry changes. */
+interface TypertRegistryChange {
+  readonly kind: 'local' | 'remote' | 'lookup' | 'host-context' | 'client-context';
+  readonly key: string;
+}
+/** Listener for one Typert runtime registry. */
+type TypertRegistryListener = (change: TypertRegistryChange) => void;
+/** Current-environment invocation definitions. */
+interface TypertLocalRegistry {
+  /**
+   * Look up one invocation by `<namespace>/<method>`.
+   * @param endpoint - canonical endpoint.
+   * @returns the live descriptor, or `undefined` when absent.
+   */
+  get(endpoint: string): InvocationDescriptor | undefined;
+  /**
+   * Report whether a strict definition has existed during this Typert Service lifetime.
+   * @param endpoint - canonical endpoint.
+   * @returns `true` after the endpoint has been registered at least once, even if withdrawn.
+   */
+  hasSeen(endpoint: string): boolean;
+  /** @returns a registration-order snapshot of local descriptors. */
+  list(): readonly InvocationDescriptor[];
+  /**
+   * Observe later local-definition changes.
+   * @param listener - synchronous contained observer.
+   * @returns disposer for this subscription.
+   */
+  subscribe(listener: TypertRegistryListener): TypertDisposer;
+}
+/** Consumer-selected Remote contribution registry. */
+interface TypertRemoteRegistry {
+  /**
+   * Register one generated contribution for the calling Cordis fiber.
+   * @param contribution - generated Remote descriptors.
+   * @returns disposer withdrawing the exact contribution.
+   */
+  register(contribution: TypertRemoteContribution): TypertDisposer;
+  /**
+   * Look up one Remote descriptor by endpoint.
+   * @param endpoint - canonical endpoint.
+   * @returns the descriptor, or `undefined` when unmounted.
+   */
+  get(endpoint: string): InvocationDescriptor | undefined;
+  /** @returns a registration-order snapshot of Remote descriptors. */
+  list(): readonly InvocationDescriptor[];
+  /**
+   * Observe later Remote contribution changes.
+   * @param listener - synchronous contained observer.
+   * @returns disposer for this subscription.
+   */
+  subscribe(listener: TypertRegistryListener): TypertDisposer;
+}
+/** Runtime registry for Host object lookup providers. */
+interface TypertLookupRegistry {
+  /**
+   * Register one provider under its merge-declared key.
+   * @param key - lookup key.
+   * @param provider - owning package's live resolver.
+   * @returns disposer withdrawing the exact provider.
+   */
+  register<K extends StringKeyOf<TypertLookupMap>>(key: K, provider: TypertLookupProvider<TypertLookupHost<TypertLookupMap[K]>, TypertLookupWire<TypertLookupMap[K]>>): TypertDisposer;
+  /**
+   * Replace one provider's default resolution policy while this contribution is active.
+   * Configuration may precede provider registration; without a live provider, `get()` remains unavailable.
+   * @param key - lookup key whose wire declaration remains provider-owned.
+   * @param resolver - composition-owned resolver used by every lookup of this key.
+   * @returns disposer restoring the provider's default resolver.
+   */
+  configure<K extends StringKeyOf<TypertLookupMap>>(key: K, resolver: TypertLookupResolver<TypertLookupHost<TypertLookupMap[K]>, TypertLookupWire<TypertLookupMap[K]>>): TypertDisposer;
+  /**
+   * Look up one provider by runtime key.
+   * @param key - descriptor lookup key.
+   * @returns the live provider, or `undefined` when absent.
+   */
+  get(key: string): TypertLookupProvider | undefined;
+  /** @returns lookup declarations observed during this Typert Service lifetime. */
+  definitions(): readonly TypertLookupDefinition[];
+  /** @returns a snapshot of registered provider keys. */
+  keys(): readonly string[];
+  /**
+   * Observe later lookup changes.
+   * @param listener - synchronous contained observer.
+   * @returns disposer for this subscription.
+   */
+  subscribe(listener: TypertRegistryListener): TypertDisposer;
+}
+/** Runtime registry for the Host and Client adapters of each Context kind. */
+interface TypertContextRegistry {
+  /**
+   * Register a Host Context adapter.
+   * @param key - merge-declared Context key.
+   * @param adapter - owning package's bidirectional Host projection.
+   * @returns disposer withdrawing the exact adapter.
+   */
+  registerHost<K extends StringKeyOf<TypertContextMap>>(key: K, adapter: TypertHostContextAdapter<TypertContextWire<TypertContextMap[K]>>): TypertDisposer;
+  /**
+   * Override one Host Context key's resolution policy for the calling fiber.
+   * Configuration may precede provider registration and restores the provider's default resolver on disposal.
+   * @param key - merge-declared Context key.
+   * @param resolver - composition-owned resolver used by every Host Context lookup of this key.
+   * @returns disposer restoring the provider's default resolver.
+   */
+  configureHost<K extends StringKeyOf<TypertContextMap>>(key: K, resolver: TypertHostContextResolver<TypertContextWire<TypertContextMap[K]>>): TypertDisposer;
+  /**
+   * Register a Client Context adapter.
+   * @param key - merge-declared Context key.
+   * @param adapter - owning package's bidirectional Client projection.
+   * @returns disposer withdrawing the exact adapter.
+   */
+  registerClient<K extends StringKeyOf<TypertContextMap>>(key: K, adapter: TypertClientContextAdapter<TypertContextWire<TypertContextMap[K]>>): TypertDisposer;
+  /**
+   * Identify a live Host Context through the sole registered adapter set.
+   * @param ctx - Context projected by a Host-to-Client scoped event.
+   * @returns its kind and wire identity, or `undefined` when no adapter recognizes it.
+   * @throws when more than one Context kind recognizes the same Context.
+   */
+  identifyHost(ctx: Context): TypertHostContextIdentity | undefined;
+  /**
+   * Look up a Host Context adapter.
+   * @param key - descriptor Context key.
+   * @returns the adapter, or `undefined` when absent.
+   */
+  getHost(key: string): TypertHostContextAdapter | undefined;
+  /**
+   * Look up a Client Context adapter.
+   * @param key - descriptor Context key.
+   * @returns the adapter, or `undefined` when absent.
+   */
+  getClient(key: string): TypertClientContextAdapter | undefined;
+  /**
+   * Observe later Context adapter changes.
+   * @param listener - synchronous contained observer.
+   * @returns disposer for this subscription.
+   */
+  subscribe(listener: TypertRegistryListener): TypertDisposer;
+}
+/** Minimal Typert runtime consumed through dependency inversion. */
+interface TypertRegistryContract {
+  readonly local: TypertLocalRegistry;
+  readonly remotes: TypertRemoteRegistry;
+  readonly lookups: TypertLookupRegistry;
+  readonly contexts: TypertContextRegistry;
+}
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    typert: TypertRegistryContract;
+  }
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+d_cfd36a297b14beb36a96e2ffc3071fb7/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/index.d.ts
+/** Options for an explicit Service-to-Gateway binding. */
+interface TypertGatewayBindingOptions {
+  /** Wire namespace; defaults to the Cordis service key. */
+  readonly namespace?: string;
+}
+/** Visible declaration that one Service participates in Typert Gateway export. */
+interface TypertGatewayBinding<Service extends object = object> {
+  readonly service: Service;
+  readonly serviceKey: string;
+  readonly namespace: string;
+}
+/** Cordis Service base that exposes its registered name through Typert Gateway. */
+declare abstract class TypertRemoteService<out T = never> extends Service<T> {
+  /** Visible binding consumed by the Gateway's source-mode discovery. */
+  readonly typertRemote: TypertGatewayBinding<this>;
+  /**
+   * Register the Service and bind the same key to Typert Gateway.
+   * @param ctx - owning Cordis Context.
+   * @param serviceKey - exact Cordis service key and default wire namespace.
+   * @param options - optional distinct wire namespace.
+   */
+  protected constructor(ctx: Context, serviceKey: string, options?: TypertGatewayBindingOptions);
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+cosmokit@1.8.3/node_modules/@deepseek-ai/cosmokit/lib/types/types.d.ts
 declare function isArrayBufferLike(value: any): value is ArrayBufferLike;
 declare function isArrayBufferSource(value: any): value is Binary.Source;
 /** Binary source detection and base64/hex conversion helpers. */
@@ -608,7 +1162,7 @@ declare namespace Binary {
   function fromHex(source: string): ArrayBuffer;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+cosmokit@1.8.2/node_modules/@deepseek-ai/cosmokit/lib/types/misc.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+cosmokit@1.8.3/node_modules/@deepseek-ai/cosmokit/lib/types/misc.d.ts
 /** String/symbol keyed dictionary type. */
 type Dict<T = any, K extends string | symbol = string> = { [key in K]: T; };
 //#endregion
@@ -689,7 +1243,7 @@ declare namespace StandardSchemaV1 {
   type InferOutput<Schema extends StandardTypedV1> = StandardTypedV1.InferOutput<Schema>;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+schemastery@3.18.1/node_modules/@deepseek-ai/schemastery/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+schemastery@3.18.2/node_modules/@deepseek-ai/schemastery/lib/types/index.d.ts
 declare const kSchema: unique symbol;
 declare global {
   namespace Schemastery {
@@ -883,7 +1437,7 @@ declare class ValidationError extends TypeError {
 type Schema<S = any, T = S> = Schemastery<S, T>;
 declare const Schema: Schemastery.Static;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-attachment@0_7dd6ce73a1d47d070bd8315386fa797c/node_modules/@deepseek-ai/dsh-llm/lib/types/retry-policy.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariant_4e27b4e5bf17933160d40674963f26f8/node_modules/@deepseek-ai/dsh-llm/lib/types/retry-policy.d.ts
 /** Fully resolved backoff shared by both retry modes. */
 interface ResolvedRetryBackoff {
   readonly initialDelayMs: number;
@@ -903,7 +1457,7 @@ interface ResolvedAlwaysRetryPolicy extends ResolvedRetryBackoff {
 /** Immutable provider policy captured when its adapter route is registered. */
 type ResolvedRetryPolicy = ResolvedNormalRetryPolicy | ResolvedAlwaysRetryPolicy;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-attachment@0_7dd6ce73a1d47d070bd8315386fa797c/node_modules/@deepseek-ai/dsh-llm/lib/types/call-config.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariant_4e27b4e5bf17933160d40674963f26f8/node_modules/@deepseek-ai/dsh-llm/lib/types/call-config.d.ts
 /**
  * Provider, model, reasoning effort, and sampling scalars of one conversation's
  * requests. Every field maps 1:1 onto the same-named `GenerateOptions` field;
@@ -927,7 +1481,7 @@ interface LlmCallConfigAdapterDefaults {
   maxTokens?: true;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-attachment@0_7dd6ce73a1d47d070bd8315386fa797c/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariant_4e27b4e5bf17933160d40674963f26f8/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     llm: LlmRuntime;
@@ -956,6 +1510,8 @@ interface PreparedLlmCall {
   readonly retryPolicy: ResolvedRetryPolicy;
   /** Detached context metadata resolved with the registration-bound call. */
   readonly context?: LlmModelContext;
+  /** Exact model modalities captured with the adapter dispatch generation. */
+  readonly inputModalities?: readonly ModelModality[];
   /** Config fields materialized by the captured adapter rather than proposed by the caller. */
   readonly adapterDefaults: LlmCallConfigAdapterDefaults;
   /**
@@ -965,6 +1521,13 @@ interface PreparedLlmCall {
    * @param options - fully assembled request carrying the prepared config.
    * @returns the chunk stream, including the `llm/stream` waterfall.
    */
+  stream(options: GenerateOptions): AsyncIterable<StreamChunk>;
+}
+/** One adapter-owned model-resolution generation bound to its eventual stream call. */
+interface PreparedAdapterCall {
+  /** Exact model metadata from the same adapter generation as {@link stream}. */
+  readonly model: LlmResolvedModelInfo;
+  /** Dispatch through that generation without re-reading dynamic connection facts. */
   stream(options: GenerateOptions): AsyncIterable<StreamChunk>;
 }
 /**
@@ -987,6 +1550,16 @@ declare abstract class LlmAdapter {
    */
   providerRetryPolicy(_provider: string): ResolvedRetryPolicy | undefined;
   /**
+   * Resolve provider-side request-image pricing for one exact model route.
+   * The default declares none, so consumers fall back to their own neutral
+   * estimate. Implementations must answer synchronously without I/O; the
+   * token meter resolves this per measurement.
+   * @param _provider - a route passed to `registerAdapter()` for this instance.
+   * @param _model - exact model id passed to {@link GenerateOptions.model}.
+   * @returns route-owned image pricing, or `undefined` when the route declares none.
+   */
+  imageRequestPricing(_provider: string, _model: string): LlmImageRequestPricing | undefined;
+  /**
    * List models this adapter can currently advertise for one owned provider.
    * The result is advisory: an adapter may accept unlisted model ids, and
    * consumers must not turn absence into request rejection.
@@ -1004,6 +1577,16 @@ declare abstract class LlmAdapter {
    * @returns provider/model identity plus any context, call-default, and reasoning metadata.
    */
   resolveModel(provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;
+  /**
+   * Bind exact model metadata and the eventual request dispatch to one adapter generation.
+   * Dynamic adapters override this so settings changes between preparation and
+   * dispatch cannot combine one generation's capabilities with another's endpoint.
+   * @param provider - registered provider route.
+   * @param model - exact model id.
+   * @param signal - cancellation for model resolution.
+   * @returns model metadata and a one-generation stream entry point.
+   */
+  prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall>;
   /**
    * Stream one model call as raw chunks. The only required method.
    * @param options - the fully-assembled request; implementations must honor `options.signal`.
@@ -1058,7 +1641,7 @@ interface DirectoryRegistrationHandle {
  * The abstract `llm` service: an adapter registry plus a streaming model-call
  * API, interceptable via the `llm/stream` waterfall.
  */
-declare class LlmRuntime extends Service {
+declare class LlmRuntime extends TypertRemoteService {
   private adapters;
   private directory;
   private discoveries;
@@ -1116,10 +1699,10 @@ declare class LlmRuntime extends Service {
    * directory, and because a provider being *added* has no route to name yet.
    * Disposed with the fiber.
    * @param settingsNs - the namespace whose profiles this discovery serves.
-   * @param discover - interrogates one endpoint; must honor `request.signal`.
+   * @param discover - interrogates one endpoint and must honor the supplied signal.
    * @returns the disposer that withdraws the offer.
    */
-  registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest) => Promise<readonly LlmDiscoveredModel[]>): () => void;
+  registerModelDiscovery(settingsNs: string, discover: (request: LlmModelDiscoveryRequest, signal?: AbortSignal) => Promise<readonly LlmDiscoveredModel[]>): () => void;
   /**
    * Interrogate one provider endpoint for the models it advertises. The
    * request describes a draft, not a stored route, so nothing here reads or
@@ -1127,15 +1710,35 @@ declare class LlmRuntime extends Service {
    * candidate metadata a surface may offer for adoption.
    * @param settingsNs - namespace whose registered discovery serves this draft.
    * @param request - the endpoint, protocol, and one-shot credential to use.
+   * @param signal - caller cancellation.
    * @returns the advertised models, deduplicated in endpoint order.
    */
-  discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<LlmDiscoveredModel[]>;
+  discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;
+  /**
+   * Remote adapter for one draft provider interrogation.
+   * @param settingsNs - namespace whose registered discovery serves this draft.
+   * @param request - endpoint, protocol, and one-shot credential to use.
+   * @param signal - caller cancellation supplied by the Remote carrier.
+   * @returns advertised models in endpoint order.
+   * @throws RemoteError with `llm/model-discovery-rejected` when discovery refuses or fails.
+   */
+  remoteDiscoverModels(settingsNs: string, request: LlmModelDiscoveryRequest, signal: AbortSignal): Promise<LlmDiscoveredModel[]>;
   /**
    * Resolve the retry policy captured when one provider route was registered.
    * @param provider - registered provider route to inspect.
    * @returns the provider-owned policy, with normal defaults already resolved.
    */
   providerRetryPolicy(provider: string): ResolvedRetryPolicy;
+  /**
+   * Resolve provider-side request-image pricing for one exact route, or
+   * `undefined` when the provider is unregistered or declares none. Unknown
+   * providers degrade to `undefined` rather than throwing because callers
+   * price durable history whose route may no longer be mounted.
+   * @param provider - provider route named by a request header.
+   * @param model - exact model id named by the same header.
+   * @returns the owning adapter's image pricing for the route, when declared.
+   */
+  imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;
   /** Detach typed adapter-owned modality metadata. */
   private detachedModalities;
   /**
@@ -1156,6 +1759,8 @@ declare class LlmRuntime extends Service {
    */
   resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo>;
   private resolveModelInfoFor;
+  /** Validate and detach one adapter-returned exact model result. */
+  private normalizeModelInfo;
   /**
    * Validate a conversation call config against its exact model capability and
    * materialize adapter-configured defaults. Unsupported explicit efforts
@@ -1168,6 +1773,8 @@ declare class LlmRuntime extends Service {
    */
   resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<LlmCallConfig>;
   private resolveCallFor;
+  /** Validate request controls against one already-bound exact model result. */
+  private resolveCallWithInfo;
   /**
    * Resolve one call under its current adapter registration. The returned
    * one-shot handle keeps that registration across header logging and dispatch,
@@ -1201,31 +1808,102 @@ declare class LlmRuntime extends Service {
   private streamWithRegistration;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.0-rc.6_f235ac9f211331e710cb045f7d4315a5/node_modules/@deepseek-ai/dsh-session/lib/types/json.d.ts
-/** Lossless-JSON validation and detached snapshots for durable session data. @module @deepseek-ai/dsh-session/json */
-/**
- * A value that round-trips losslessly through JSON: `null`, a boolean, a finite
- * number other than negative zero, a string, an array of such values, or a
- * plain object whose values are such values. Arrays may carry only their dense
- * indexed elements; extra own properties would be discarded by JSON. TypeScript
- * cannot distinguish `-0` from `number`, so {@link isJsonValue} and
- * {@link snapshotJsonValue} enforce these details at runtime. Use this type for
- * a payload that must survive session-log persistence and replay byte-identically
- * — e.g. a tool's private presentation `meta`.
- */
+//#region node_modules/.pnpm/@deepseek-ai+dsh-util-values@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-i_7e99c1405f3d86d963920117744e3443/node_modules/@deepseek-ai/dsh-util-values/lib/types/index.d.ts
+/** Duplicate-install-safe JSON and immutable-value helpers. @module @deepseek-ai/dsh-util-values */
+/** A value that round-trips through JSON without loss. */
 type JsonValue = null | boolean | number | string | JsonValue[] | {
   [key: string]: JsonValue;
 };
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.0-rc.6_f235ac9f211331e710cb045f7d4315a5/node_modules/@deepseek-ai/dsh-session/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invar_35862f134669c27ec5e8de8435edb3e5/node_modules/@deepseek-ai/dsh-session/lib/types/types.d.ts
 /** Identifies one session in the store (and its persistence artifacts). */
 type SessionId = Branded<'SessionId'>;
 /**
  * Brand a string as a {@link SessionId}.
  * @param id - the raw session id string.
- * @returns the same string, branded (a compile-time cast — no runtime cost).
+ * @returns the same string with the session-id brand.
  */
 declare function SessionId(id: string): SessionId;
+/**
+ * Immutable validated storage metadata, kept outside the conversation event log.
+ */
+interface SessionHeader {
+  /**
+   * On-disk format version, stamped from {@link SESSION_FORMAT_VERSION} when the
+   * session is created. A persistence backend rejects any other version on load
+   * (no migration — see the constant).
+   */
+  readonly version: number;
+  /** The session's id (mirrors the {@link Session}'s id). */
+  readonly id: SessionId;
+  /** Non-negative safe-integer Unix epoch milliseconds when the session was created. */
+  readonly createdAt: number;
+  /** Absolute working directory the session was created in (if any). */
+  readonly cwd?: string;
+  /** The session this one was forked from (seed lineage), if any. */
+  readonly parentSession?: SessionId;
+  /**
+   * How many leading events were inherited through a seed. Persisting this
+   * boundary lets resume and replay distinguish parent history from child work.
+   */
+  readonly seedLength?: number;
+  /**
+   * Coarse product classification for a session created as a subagent child.
+   * This is presentation metadata, not proof that the child is continuable.
+   */
+  readonly origin?: 'subagent';
+  /**
+   * Delegation depth: absent (zero) for a top-level session, parent depth + 1
+   * for a subagent child. Persisted so a recursion budget survives restart and
+   * resume — a runtime-only depth would reset a resumed child to top-level.
+   */
+  readonly delegationDepth?: number;
+  /**
+   * Id of the agent preset this session's agent was composed from, when the
+   * deployment composes per session. Durable because the preset decides the
+   * session's tools and prompt: a resume that restored a different composition
+   * would replay history the model can no longer act on.
+   */
+  readonly agentPreset?: string;
+}
+/**
+ * Options for creating a {@link Session} via the store. `seed` replays/forks
+ * an existing event log; `meta` carries the caller-supplied storage fields the
+ * store folds into a {@link SessionHeader}.
+ */
+interface CreateSessionOptions {
+  /** Initial replay or fork history supplied at construction. */
+  readonly seed?: readonly SessionEvent[];
+  /**
+   * Storage metadata read once before publication. `seedLength` is explicit
+   * because a resumed seed contains the full stored log, not only its inherited prefix.
+   */
+  readonly meta?: {
+    readonly cwd?: string;
+    readonly parentSession?: SessionId;
+    readonly createdAt?: number;
+    readonly seedLength?: number;
+    readonly origin?: 'subagent';
+    readonly delegationDepth?: number;
+    readonly agentPreset?: string;
+  };
+}
+/**
+ * Fresh storage values transferred to {@link SessionStore.prepare} without a
+ * second serialization copy. Callers retain no mutable aliases.
+ */
+interface RestoredSessionOptions {
+  /** Fresh detached storage events to validate and freeze in place. */
+  readonly seed: SessionEvent[];
+  /** Fresh detached storage metadata to validate and freeze in place. */
+  readonly meta: SessionHeader;
+  /** Select the persistence ownership-transfer path. */
+  readonly seedSource: 'persistence';
+}
+/** Inputs accepted while constructing an unpublished Session. */
+type PrepareSessionOptions = (CreateSessionOptions & {
+  readonly seedSource?: undefined;
+}) | RestoredSessionOptions;
 /** Why an active agent driver was cancelled. */
 type AgentCancelCause = {
   readonly kind: 'user';
@@ -1280,22 +1958,6 @@ interface TurnEndReasonMap {
 /** The union over {@link TurnEndReasonMap} — why a turn ended; plugins extend it by merging variants into the map. */
 type TurnEndReason = TurnEndReasonMap[keyof TurnEndReasonMap];
 /**
- * One entry in an agent's todo list — the unit of the `todo/write`
- * {@link SessionEventMap} event's whole-list snapshot.
- *
- * Deliberately minimal: a human-readable `content` line and a three-state
- * `status`. No id, priority, or `activeForm` — the list is replaced wholesale
- * on every write (last-write-wins), so entries need no stable identity. The
- * three statuses describe the complete portable lifecycle needed by model and
- * UI consumers.
- */
-interface TodoItem {
-  /** What this task is — a short imperative line shown in the UI. */
-  content: string;
-  /** Lifecycle state. `in_progress` marks a task being worked now; parallel work may mark several. */
-  status: 'pending' | 'in_progress' | 'completed';
-}
-/**
  * Logged request state outside derived history: call config, system prompt, and
  * tools. The latest full `request/header` snapshot reconstructs it; canonical
  * empty optional fields are absent.
@@ -1323,9 +1985,11 @@ interface RequestContext {
  * Why a `request/header` snapshot was appended: `'initial'` — the log's first
  * header (a new conversation); `'resume'` — a loop instance's first request
  * over a log that already has header events (process restart, fork seed);
- * `'change'` — a later request used a different header.
+ * `'change'` — a later request used a different header, with `startsSeries`
+ * preserving a coincident series boundary; `'series'` — an unchanged header
+ * began an explicitly distinct message series or followed a surface replacement.
  */
-type RequestHeaderReason = 'initial' | 'resume' | 'change';
+type RequestHeaderReason = 'initial' | 'resume' | 'change' | 'series';
 /**
  * The merge-extensible, append-only source of truth for an agent interaction.
  * Message history is derived from this log. Every event is lossless JSON and
@@ -1382,13 +2046,18 @@ interface SessionEventMap {
    * Assembled assistant message for one step (derived history uses this).
    * Carries the step's `usage` when the adapter reported token accounting, so
    * the model output and its accounting travel together (there is no separate
-   * usage record). `usage` is absent when the adapter reported none.
+   * usage record). `usage` is absent when the adapter reported none. A turn
+   * cancelled mid-stream finalizes its delivered text/reasoning prefix as this
+   * event with `interrupted: true`; undispatched tool calls are absent. The
+   * marker distinguishes that prefix without re-deriving interruption from turn
+   * boundaries. An aborted turn with no such event streamed no visible content.
    */
   'assistant/message': {
     turn: number;
     step: number;
     message: AssistantMessage;
     usage?: TokenUsage;
+    interrupted?: true;
   };
   /**
    * The model requested one tool invocation: `name` with the raw `arguments`
@@ -1398,7 +2067,7 @@ interface SessionEventMap {
   'tool/call': {
     turn: number;
     step: number;
-    callId: CallId;
+    callId: ToolCallId;
     name: string;
     arguments: string;
   };
@@ -1423,10 +2092,6 @@ interface SessionEventMap {
     };
     meta?: JsonValue;
   };
-  /** Whole-list snapshot; latest write wins on replay. Log-only UI state; never derived history. */
-  'todo/write': {
-    todos: TodoItem[];
-  };
   /**
    * Full header for the next request, appended inside its step before dispatch.
    * It is log-only; the latest snapshot reconstructs the request header.
@@ -1434,6 +2099,8 @@ interface SessionEventMap {
   'request/header': {
     header: EpochHeader;
     reason: RequestHeaderReason;
+    /** A changed header also begins a distinct model-message series. */
+    startsSeries?: true;
   };
   /**
    * Route metadata for the next request, logged only when the route or capacity
@@ -1473,6 +2140,18 @@ type SessionEventType = keyof SessionEventMap;
  */
 type SurfaceEventType = 'user/message' | 'assistant/message' | 'tool/result';
 /**
+ * A {@link SessionEvent} that is **on** the ordered surface — its
+ * `surfaceOp` is guaranteed present (mandatory), narrowed from a
+ * surface-eligible {@link SessionEvent} by checking both `type` and
+ * `surfaceOp` at runtime.
+ *
+ * Use the `isSurfaceEvent` type guard (in `surface.ts`) to narrow a
+ * `SessionEvent` to this type.
+ */
+type SurfaceEvent = SessionEvent<SurfaceEventType> & {
+  surfaceOp: SurfaceOp;
+};
+/**
  * How a session event entered the ordered surface. Only valid on
  * {@link SurfaceEventType} events.
  *
@@ -1490,6 +2169,20 @@ type SurfaceOp = 'append' | {
   start: number;
   end: number;
 };
+/**
+ * Surface placement and cited source-event seqs for {@link Session.append}. Required on
+ * message-producing events and forbidden on log-only events.
+ */
+interface SurfaceIntent {
+  surfaceOp: SurfaceOp;
+  /**
+   * Complete set of known source-event seqs. `assistant/message` may use a
+   * present empty array for a known empty provider stream; when the field is
+   * absent, the event does not record which earlier events produced the message.
+   * Other surface events require a non-empty set when this field is present.
+   */
+  sourceEventSeqs?: number[];
+}
 /**
  * One immutable entry in the session log.
  *
@@ -1534,256 +2227,72 @@ type SessionEvent<T extends SessionEventType = SessionEventType> = { [K in Sessi
   /** How this event entered the surface; absent for non-surface events. */
   surfaceOp?: SurfaceOp;
 } : object); }[T];
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    /** The named Session does not exist; produced by every layer that resolves a SessionId. */
+    'session/not-found': {
+      readonly sessionId: SessionId;
+    };
+  }
+}
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-projection@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+d_ce3609b9047395a5683eb03018b77293/node_modules/@deepseek-ai/dsh-session-projection/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-alpha.3_a8c52ae09efda0e213edf7d94ec2cf32/node_modules/@deepseek-ai/dsh-agent/lib/types/types.d.ts
+/** Public live-agent handle; the runtime face augments its live capabilities. */
+interface Agent {
+  /** Session-backed Agent identity. */
+  readonly id: SessionId;
+}
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertLookupMap {
+    agent: TypertLookup<Agent, SessionId>;
+  }
+  interface TypertContextMap {
+    /** Agent Context identity shared by Host and Client adapters. */
+    agent: TypertContext<SessionId>;
+  }
+}
+/** One of the two ordered pending-message lists owned by an agent. */
+type InboxTarget$1 = 'next-turn' | 'next-step';
 /**
- * Pure-type outlet of the session-projection Service Definition: the one projection type
- * table, importable from client aggregates without dragging the host-side
- * cordis Context merges of the package root (dsh-agent → dsh-session). Domain
- * packages may declare-merge through either the package root or this outlet —
- * re-export preserves symbol identity, so both land on the same table.
+ * Turn and step boundaries folded from one agent session log.
  *
- * @module @deepseek-ai/dsh-session-projection/types
+ * Reader contract: the key is registered by `dsh-agent-loop` and absent
+ * otherwise. Without agent-loop no turn events exist, so readers treat an
+ * absent key as "no open turn / no boundaries" — capability absence, not a
+ * corrupt state. A reader whose behavior has no safe fallback for that
+ * absence (the step-open decision, for example) may fail loud instead.
  */
-/**
- * The single projection type table for the whole chain (host provider, wire
- * block, client cell, React hook). Domain packages merge their key here via
- * declaration merging; values are wire-JSON whole values. How a value is
- * rendered is the slot system's business, never this layer's.
- */
-interface SessionProjectionMap {}
+interface TurnBoundaryProjection {
+  /** Seq of the open turn's `turn/start`, or null between turns. */
+  readonly openTurnStartSeq: number | null;
+  /** Seq of the latest `step/start` event, or null before the first step. */
+  readonly lastStepStartSeq: number | null;
+  /** The latest step boundary (`step/start` or `step/end`) and its seq, or null before the first step boundary. */
+  readonly lastStepBoundary: {
+    readonly kind: 'start' | 'end';
+    readonly seq: number;
+  } | null;
+  /** Turn number of the latest `turn/start`; 0 before the first turn. */
+  readonly lastTurn: number;
+}
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /**
+     * One normalized mutation of an agent's durable pending-message lists.
+     * Live dispatch precedes projection mutation, so synchronous observers may
+     * read the pre-splice inbox to recover the removed messages.
+     */
+    'agent/inbox/spliced': {
+      target: InboxTarget$1;
+      start: number;
+      removedCount?: number;
+      inserted: UserMessage[];
+      outcome?: 'canceled';
+    };
+  }
+}
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/rpc.d.ts
-type ZodIssue = z.core.$ZodIssue;
-/**
- * Message correlation id: the initiator mints it on a request; a response
- * echoes the matching request's rpcId and never mints a new one.
- */
-type RpcId = Branded<'rpc-id'>;
-/**
- * Brands a string as RpcId (same precedent as core `SessionId()`). Minted by the initiator:
- * client-request → client mints; server-request → host mints (answerable frames get a stable
- * logical id, pure pushes mint a fresh one each time).
- * @param id - Raw id string (implementations mint UUIDs; tests may pass fixtures).
- * @returns The same string, branded (compile-time cast, zero runtime cost).
- */
-declare function RpcId(id: string): RpcId;
-/** Error code → details type map (a second table isomorphic to RpcMethodMap). New code = one row here + one branch in the error schema. */
-interface RpcErrorDetailsMap {
-  'bad-request': {
-    issues: ZodIssue[];
-  };
-  'cancelled': {};
-  'session-not-found': {
-    sessionId: SessionId;
-  };
-  'model-unavailable': {
-    provider: string;
-    model: string;
-  };
-  'session-conflict': {
-    sessionId: SessionId;
-    requestedCwd: string;
-    existingCwd?: string;
-  };
-  'invalid-time-zone': {
-    value: string;
-  };
-  'workspace-attach-failed': {
-    sessionId: SessionId;
-    workspaceId: string;
-  };
-  'workspace-not-found': {
-    workspaceId: string;
-  };
-  'workspace-invalid-path': {
-    path: string;
-  };
-  'workspace-name-conflict': {
-    name: string;
-  };
-  'workspace-move-invalid': {
-    workspaceId: string;
-    sessionId: SessionId;
-    beforeSessionId?: SessionId;
-  };
-  'directory-unreadable': {
-    path: string;
-  };
-  'directory-exists': {
-    path: string;
-  };
-  'directory-create-failed': {
-    path: string;
-  };
-  'directory-picker-unavailable': {
-    capability: string;
-  };
-  'agent-preset-read-only': {
-    agentPreset: string;
-    reason: string;
-  };
-  'agent-preset-locked': {
-    sessionId: SessionId;
-    agentPreset: string;
-  };
-  'agent-preset-conflict': {
-    sessionId: SessionId;
-    requestedPreset: string;
-    existingPreset?: string;
-  };
-  'agent-preset-not-found': {
-    agentPreset: string;
-    available: string[];
-  };
-  'agent-preset-invalid': {
-    agentPreset: string;
-    reason: string;
-  };
-  'agent-busy': {
-    reason: string;
-  };
-  'attachment-error': {
-    reason: string;
-  };
-  'queue-item-not-found': {
-    itemId: MessageId;
-  };
-  'steer-unavailable': {
-    itemId: MessageId;
-  };
-  /** A known slash command reported a usage/state error; the message is the command's own text. */
-  'command-error': {};
-  /** A leading-/ prompt named no registered command; the message names the token. */
-  'unknown-command': {};
-  /**
-   * A settings write was refused (schema validation, unknown namespace,
-   * read-only provider, or storage failure); the message is the seam's text.
-   */
-  'settings-rejected': {
-    ns: string;
-  };
-  /**
-   * A settings namespace exists in the seam but is outside the configuration
-   * plane's model-provider boundary, so this proxy neither reads nor writes
-   * it; the message names the namespace.
-   */
-  'settings-not-exposed': {
-    ns: string;
-  };
-  /**
-   * A settings write carried an `expectedRevision` the namespace has already
-   * moved past: another writer (tab, editor, or an external file edit) landed
-   * first. The details carry both revisions so a client can re-read and retry.
-   */
-  'settings-conflict': {
-    ns: string;
-    expected: number;
-    actual: number;
-  };
-  /** A credential write was refused (read-only shadowing layer or storage failure); the message is the seam's own text. */
-  'credential-rejected': {
-    ref: string;
-  };
-  /**
-   * Interrogating a draft provider endpoint did not produce a model listing:
-   * no adapter family serves the namespace, the protocol has no listing this
-   * build can read, or the endpoint was unreachable, refused the credential,
-   * or answered with something else. The message is the adapter's own text —
-   * it is what the form shows before falling back to hand-entry — and the
-   * details name the endpoint asked, never the credential offered.
-   */
-  'model-discovery-failed': {
-    settingsNs: string;
-    baseURL?: string;
-  };
-  'title-invalid': {
-    sessionId: SessionId;
-  };
-  'fork-unavailable': {
-    sessionId: SessionId;
-  };
-  'subagent-parent-unavailable': {
-    parentSessionId: SessionId;
-  };
-  'subagent-not-found': {
-    parentSessionId: SessionId;
-    childSessionId: SessionId;
-  };
-  'subagent-catalog-diagnostic': {
-    parentSessionId: SessionId;
-    childSessionId: SessionId;
-    reason: 'corrupt' | 'unsupported' | 'unavailable';
-  };
-  'subagent-not-resumable': {
-    childSessionId: SessionId;
-  };
-  'subagent-unauthorized': {
-    childSessionId: SessionId;
-  };
-  'subagent-delivery-unavailable': {
-    childSessionId: SessionId;
-  };
-  'internal': {};
-}
-/** Closed error-code union (the keys of RpcErrorDetailsMap). */
-type RpcErrorCode = keyof RpcErrorDetailsMap;
-/**
- * Distributive union expanded from the map: code is the discriminant, so
- * `switch (error.code)` narrows details. details is required (internal uses an explicit {}).
- */
-type RpcError = { [C in RpcErrorCode]: {
-  code: C;
-  message: string;
-  details: RpcErrorDetailsMap[C];
-}; }[RpcErrorCode];
-/** Business success/failure result: the result slot of a unary response; methods never throw business errors. */
-type RpcResult<T> = {
-  ok: true;
-  value: T;
-} | {
-  ok: false;
-  error: RpcError;
-};
-/**
- * Signature-layer narrow form, request side (domain-interface view, shared by
- * both directions): rpcId is explicit in the signature, never mixed into the
- * business payload; the type tag and method are filled in by the carrier layer.
- */
-interface RpcRequest<P> {
-  rpcId: RpcId;
-  payload: P;
-}
-/** Signature-layer narrow form, response side: rpcId always echoes the matching request. */
-interface RpcResponse<T> {
-  rpcId: RpcId;
-  result: RpcResult<T>;
-}
-/** Response to a ServerRequest (wire carrier: POST /api/respond body); rpcId echoed, never minted anew. */
-interface ClientResponse {
-  type: 'client-response';
-  rpcId: RpcId;
-  result: RpcResult<unknown>;
-}
-/**
- * Carrier receipt (not an RpcMessage — it belongs to the carrier layer, same
- * discipline as "HTTP status describes only the carrier"): the HTTP response
- * body of the POST carrying a client-response. Late/duplicate responses yield not-pending.
- */
-type RpcReceipt = {
-  accepted: true;
-} | {
-  accepted: false;
-  reason: 'not-pending' | 'bad-response';
-};
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-user-questions@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-a_ba429e79a2cefb246385e60d206cdfef/node_modules/@deepseek-ai/dsh-user-questions/lib/types/types.d.ts
-/**
- * Wire-safe question and answer types, free of cordis/service imports so browser
- * type chains (apiproxy api → client) can consume them without loading this
- * package's Context augmentation.
- * @module @deepseek-ai/dsh-user-questions/types
- */
+//#region node_modules/.pnpm/@deepseek-ai+dsh-user-questions@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+ds_1e0a096c0b107d76c6c986f7c0ae21a5/node_modules/@deepseek-ai/dsh-user-questions/lib/types/types.d.ts
 /** One selectable answer offered to the user. */
 interface AskUserQuestionOption {
   /** User-facing label. */
@@ -1825,26 +2334,632 @@ interface AskUserQuestionItem {
   /** Optional presentation intent for capable UIs; absent asks for the generic option list. */
   intent?: AskUserQuestionIntent;
 }
+/** Answer to one question. */
+interface AskUserQuestionAnswerItem {
+  /** The answered question id. */
+  id: string;
+  /** Selected option labels. May accompany custom text for a multi-select question. */
+  selected: string[];
+  /** Optional free-text "Other" answer. */
+  custom?: string;
+}
+/** The human's answer. */
+interface AskUserQuestionAnswer {
+  /** Structured answers keyed by question id. */
+  answers: AskUserQuestionAnswerItem[];
+}
+/** Client-safe payload declared for the user-question answerer waterfall. */
+interface AskUserQuestionRequestEvent {
+  /** Questions to display. */
+  questions: AskUserQuestionItem[];
+  /** Agent identity projected to the corresponding Client Context in transit. */
+  agent?: Agent;
+  /** Cancellation lifetime of the pending request. */
+  signal?: AbortSignal;
+}
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * Ask composed answerers for structured user input. Return an answer to
+     * claim the request or call `next()` to delegate. Scope-filtered dispatch
+     * (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @param request - pending user-question request.
+     * @mode waterfall
+     */
+    'user-questions/request'(this: Scoped<Agent>, request: AskUserQuestionRequestEvent, next: () => Promise<AskUserQuestionAnswer>): Promise<AskUserQuestionAnswer>;
+  }
+}
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-user-approval@0.1.0-rc.6_67d77734ddb0cff591f2161d31a510cb/node_modules/@deepseek-ai/dsh-user-approval/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invar_35862f134669c27ec5e8de8435edb3e5/node_modules/@deepseek-ai/dsh-session/lib/types/chunk-rows.d.ts
 /**
- * Pairs one `approval/asked` audit event with its `approval/decided`.
- * Service-issued (one fresh id per {@link ApprovalService.request} call).
+ * Fields shared by every packed run: placement, block correlation, and member
+ * timestamps as gaps. Member `k` reconstructs as seq `seq0 + k` and time
+ * `time0` plus the first `k` gaps; a gap may be negative when the wall clock
+ * stepped backwards between events.
  */
-type ApprovalRequestId = Branded<'ApprovalRequestId'>;
+interface RunDataBase {
+  turn: number;
+  step: number;
+  /** The stream block index every member shares. */
+  index: number;
+  /** Epoch-ms gaps between consecutive members; length is one less than the member count. */
+  dt: number[];
+}
+/** Payload of a `text-chunks`/`reasoning-chunks` row: one entry per member, never joined — token boundaries are data. */
+interface TextRunData extends RunDataBase {
+  texts: string[];
+}
+/** Payload of a `tool-call-chunks` row: the run-constant call identity plus each member's raw arguments fragment. */
+interface ToolCallRunData extends RunDataBase {
+  id: ToolCallId;
+  /** Present iff every member carried it, with one uniform value (a mixed run never packs). */
+  name?: string;
+  args: string[];
+}
 /**
- * Brand a string as an {@link ApprovalRequestId}.
- * @param id - the raw id string to brand.
- * @returns the same string carrying the brand.
+ * A packed run of consecutive delta chunk events, discriminated on `type`.
+ * `seq0`/`time0` anchor the first member; text and reasoning rows share the
+ * {@link TextRunData} payload, tool-call rows carry {@link ToolCallRunData}.
  */
-declare function ApprovalRequestId(id: string): ApprovalRequestId;
-/**
- * Closed approval outcomes: a one-shot grant, explicit rejection, withdrawn
- * request, or unavailable answerer. Callers fail closed on `unavailable`.
- */
-type ApprovalOutcome = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable';
+type ChunkRow = {
+  type: 'text-chunks';
+  seq0: number;
+  time0: number;
+  data: TextRunData;
+} | {
+  type: 'reasoning-chunks';
+  seq0: number;
+  time0: number;
+  data: TextRunData;
+} | {
+  type: 'tool-call-chunks';
+  seq0: number;
+  time0: number;
+  data: ToolCallRunData;
+};
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-tools@0.1.0-rc.6_986143ff0e0cd01f957bae4eeb45a538/node_modules/@deepseek-ai/dsh-tools/lib/types/presentation.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-projection@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-a_44d1fd464ad259eab2a8e659fb57e1c1/node_modules/@deepseek-ai/dsh-session-projection/lib/types/types.d.ts
+/**
+ * Pure-type outlet of the session-projection Service Definition: the one projection type
+ * table, importable from client aggregates without dragging the host-side
+ * cordis Context merges of the package root (dsh-agent → dsh-session). Domain
+ * packages may declare-merge through either the package root or this outlet —
+ * re-export preserves symbol identity, so both land on the same table.
+ *
+ * @module @deepseek-ai/dsh-session-projection/types
+ */
+/**
+ * The merge-extensible client projection table shared by wire blocks, client
+ * cells, and React hooks. Domain packages merge their client-visible key here;
+ * values are wire-JSON whole values. How a value is rendered is the slot
+ * system's business, never this layer's.
+ */
+interface SessionProjectionMap {}
+/**
+ * The merge-extensible host fold-state table. Each client-visible key also
+ * appears in {@link SessionProjectionMap}; host-only keys appear only here.
+ * Values must be plain JSON so the projection cache can persist them.
+ */
+interface SessionProjectionStateMap {}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-jobs@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-agent@0._4c034c7b8d23cc68dc9e3850eb530f62/node_modules/@deepseek-ai/dsh-jobs/lib/types/brand.d.ts
+/**
+ * Identifies a background job. The registry generates `<kind>-N`; predictable
+ * ids rely on owner authorization rather than secrecy.
+ */
+type JobId = Branded<'JobId'>;
+/**
+ * Brand a string as a {@link JobId}.
+ * @param id - the raw job-id string (the registry generates `<kind>-N`).
+ * @returns the same string, branded; no validation is performed.
+ */
+declare function JobId(id: string): JobId;
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-workspace@0.1.2-alpha.3_a5add783097c225adafc2e87539607dc/node_modules/@deepseek-ai/dsh-workspace/lib/types/types.d.ts
+/**
+ * Identifies one workspace record. A generated uuid, never the path: path
+ * normalization rewrites paths, and a reference anchor must stay stable.
+ */
+type WorkspaceId = Branded<'WorkspaceId'>;
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    /** No registration carries that Workspace identity. */
+    'workspace/not-found': {
+      readonly workspaceId: WorkspaceId;
+    };
+  }
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-alpha.3_2b04d62505425c479b58ef585be9fb63/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/types.d.ts
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** Host state persisted for cold Session list summaries. */
+    sessionListMetadata: SessionListMetadata;
+    /** Host state for the boot-constant image-limit view. */
+    imageLimits: null;
+    /** Durable model selection already used by a request and still pending for a later request. */
+    modelSelection: ModelSelectionProjectionState;
+  }
+  interface SessionProjectionMap {
+    /** Persisted facts used to summarize a Session without activating it. */
+    sessionListMetadata: SessionListMetadata;
+    /** Image-intake limits enforced by the Session prompt endpoint. */
+    imageLimits: ImageAttachmentLimits;
+    /** Durable model selection already used and selected for the next request. */
+    modelSelection: ModelSelectionProjection;
+  }
+}
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /**
+     * Complete validated model selection requested for subsequent prompt
+     * assembly. Log-only: it never enters derived model history.
+     */
+    'model/selection': ModelSelection;
+  }
+}
+/** Persisted hints used to summarize a cold Session. */
+interface SessionListMetadata {
+  /** Whether the folded prefix contains no turn. */
+  readonly blank: boolean;
+  /** Latest human-authored prompt time in the folded prefix. */
+  readonly lastPromptAt: number | null;
+}
+/** Every available cached wire value used as partial, possibly stale Session-list hints. */
+interface SessionProjectionHints {
+  readonly asOfSeq: number;
+  /** Provider-validated values present in the cache; omitted keys remain unknown. */
+  readonly values: SessionProjectionValues;
+}
+/** Complete projection values at an exact Session event cursor. */
+interface SessionProjectionBaseline {
+  readonly asOfSeq: number;
+  /** Provider-validated values; omitted keys are absent capabilities at this cut. */
+  readonly values: SessionProjectionValues;
+}
+/** Typed known projections plus JSON-safe values contributed outside this compilation face. */
+type SessionProjectionValues = Partial<SessionProjectionMap> & Readonly<Record<string, SessionProjectionValue>>;
+/** Browser-submitted prompt content; the Host promotes image bytes to durable references. */
+type PromptContentPart = {
+  readonly type: 'text';
+  readonly text: string;
+} | {
+  readonly type: 'image';
+  readonly mediaType: ImageMediaType;
+  readonly data: string;
+  readonly name?: string;
+};
+/** Complete model selection for one Session. */
+interface ModelSelection {
+  readonly provider: string;
+  readonly model: string;
+  readonly reasoningEffort?: string;
+}
+/** Host fold state for durable model selection. */
+interface ModelSelectionProjectionState {
+  /** Selection consumed by the latest recorded model request. */
+  readonly lastUsed: ModelSelection | null;
+  /** Later user selection not yet consumed by a matching model request. */
+  readonly pending: ModelSelection | null;
+}
+/** Client view of the durable model-selection fold. */
+interface ModelSelectionProjection {
+  /** Selection consumed by the latest recorded model request. */
+  readonly lastUsed: ModelSelection | null;
+  /** Selection the next request should use, falling back to {@link lastUsed}. */
+  readonly next: ModelSelection | null;
+}
+/** One adapter-owned reasoning effort for an exact model route. */
+interface ModelReasoningEffort {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+}
+/** Selectable reasoning metadata for one exact model route. */
+interface ModelReasoning {
+  readonly efforts: readonly ModelReasoningEffort[];
+  readonly defaultEffort?: string;
+}
+/** One model displayed inside its provider group. */
+interface ModelCatalogModel {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string;
+  readonly reasoning?: ModelReasoning;
+}
+/** One provider and its successfully loaded model catalog. */
+interface ModelProviderGroup {
+  readonly id: string;
+  readonly name: string;
+  readonly models: readonly ModelCatalogModel[];
+}
+/** One provider whose model catalog lookup failed. */
+interface ModelCatalogFailure {
+  readonly id: string;
+  readonly name: string;
+  readonly message: string;
+}
+/** Host-generation model catalog and the default used by unconfigured Sessions. */
+interface ModelCatalog {
+  readonly default: ModelSelection;
+  /** Provider routes currently able to serve a request, including empty catalogs. */
+  readonly routableProviders: readonly string[];
+  readonly groups: readonly ModelProviderGroup[];
+  readonly failures: readonly ModelCatalogFailure[];
+}
+/** One client-requested mutation of a still-pending queue item. */
+type QueueAction = {
+  readonly kind: 'edit';
+  readonly content: readonly ContentBlock[];
+} | {
+  readonly kind: 'remove';
+} | {
+  readonly kind: 'steer';
+};
+/** One Session list entry. */
+interface SessionSummary$1 {
+  readonly sessionId: SessionId;
+  readonly updatedAt: number;
+  readonly running: boolean;
+  readonly blank: boolean;
+  readonly parentSessionId?: SessionId;
+  readonly origin?: 'subagent';
+  readonly cwd?: string;
+  readonly projections?: SessionProjectionHints;
+}
+/** One session-content search result. */
+interface SessionSearchItem {
+  readonly sessionId: SessionId;
+  readonly snippet: string;
+}
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface RemoteErrorDetailsMap {
+    'session/model-unavailable': {
+      readonly provider: string;
+      readonly model: string;
+    };
+    'session/conflict': {
+      readonly sessionId: SessionId;
+      readonly requestedCwd: string;
+      readonly existingCwd?: string;
+    };
+    'session/agent-busy': {
+      readonly reason: string;
+    };
+    'session/invalid-time-zone': {
+      readonly value: string;
+    };
+    'session/workspace-attach-failed': {
+      readonly sessionId: SessionId;
+      readonly workspaceId: string;
+    };
+    'agent-preset/conflict': {
+      readonly sessionId: SessionId;
+      readonly requestedPreset: string;
+      readonly existingPreset?: string;
+    };
+    'session/attachment-invalid': {
+      readonly reason: string;
+    };
+    'session/queue-item-not-found': {
+      readonly itemId: MessageId;
+    };
+    'session/steer-unavailable': {
+      readonly itemId: MessageId;
+    };
+    'session/title-invalid': {
+      readonly sessionId: SessionId;
+    };
+    'session/fork-unavailable': {
+      readonly sessionId: SessionId;
+    };
+    'subagent/not-found': {
+      readonly parentSessionId: SessionId;
+      readonly childSessionId: SessionId;
+    };
+    'subagent/catalog-diagnostic': {
+      readonly parentSessionId: SessionId;
+      readonly childSessionId: SessionId;
+      readonly reason: 'corrupt' | 'unsupported' | 'unavailable';
+    };
+  }
+}
+/** Session-addressed request for the human-invocable skill catalog. */
+interface SkillListRequest {
+  readonly sessionId: SessionId;
+}
+/** One skill available to the Session's human-facing composer. */
+interface SkillEntry {
+  /** Kebab-case identifier referenced as `/name`. */
+  readonly name: string;
+  /** Short routing description. */
+  readonly description: string;
+  /** Optional extra routing guidance. */
+  readonly whenToUse?: string;
+  /** Whether the same skill is also advertised to the model. */
+  readonly modelInvocable: boolean;
+}
+/** Human-invocable skills visible through one Session's composition. */
+interface SkillListValue {
+  readonly skills: readonly SkillEntry[];
+}
+/** Session list request. */
+interface SessionListRequest {
+  readonly cursor?: string;
+}
+/** Session list response value. */
+interface SessionListValue {
+  readonly items: readonly SessionSummary$1[];
+}
+/** Session search request. */
+interface SessionSearchRequest$1 {
+  readonly query: string;
+}
+/** Session search response value. */
+interface SessionSearchValue {
+  readonly items: readonly SessionSearchItem[];
+  readonly hasMore: boolean;
+}
+/** Session creation or explicit-id adoption request. */
+interface SessionCreateRequest {
+  readonly workspaceId?: WorkspaceId;
+  readonly cwd?: string;
+  readonly sessionId?: SessionId;
+  readonly agentPreset?: string;
+}
+/** Session creation response value. */
+interface SessionCreateValue {
+  readonly sessionId: SessionId;
+  readonly agentPreset?: string;
+}
+/** Session model-selection request. */
+interface SessionSelectModelRequest extends ModelSelection {
+  readonly sessionId: SessionId;
+}
+/** Accepted model selection after Host resolution. */
+interface SessionSelectModelValue {
+  readonly selected: ModelSelection;
+}
+/** Session rename request. */
+interface SessionRenameRequest {
+  readonly sessionId: SessionId;
+  readonly title: string;
+}
+/** Normalized title and the durable event position that committed it. */
+interface SessionRenameValue {
+  readonly title: string;
+  readonly seq: number;
+}
+/** Session fork request. */
+interface SessionForkRequest {
+  readonly sessionId: SessionId;
+  readonly atSeq?: number;
+}
+/** Identity of a newly forked Session. */
+interface SessionForkValue {
+  readonly sessionId: SessionId;
+}
+/** Session prompt request. */
+interface SessionPromptRequest {
+  /** Client-minted identity persisted on the exact accepted user message. */
+  readonly requestId: SessionRequestId;
+  readonly sessionId: SessionId;
+  readonly mode: 'queue' | 'steer';
+  readonly content: readonly PromptContentPart[];
+  readonly clientTimeZone?: string;
+}
+/** Receipt after one prompt enters the target Agent inbox. */
+interface SessionPromptValue {
+  readonly accepted: true;
+}
+/** Durable image read request. */
+interface SessionAttachmentRequest {
+  readonly sessionId: SessionId;
+  readonly attachmentId: AttachmentId;
+}
+/** Durable image read response value. */
+interface SessionAttachmentValue {
+  readonly attachment: ImageAttachmentRef;
+  readonly data: string;
+}
+/** Pending queue mutation request. */
+interface SessionUpdateQueueRequest {
+  readonly sessionId: SessionId;
+  readonly itemId: MessageId;
+  readonly action: QueueAction;
+}
+/** Receipt after one pending queue mutation commits. */
+interface SessionUpdateQueueValue {
+  readonly accepted: true;
+}
+/** Active-turn cancellation request. */
+interface SessionCancelRequest {
+  readonly sessionId: SessionId;
+}
+/** Receipt after cancellation is admitted to the live Agent. */
+interface SessionCancelValue {
+  readonly accepted: true;
+}
+/** Request to open one path prepared by a Session-aware caller on the Host desktop. */
+interface SessionOpenWorkspacePathRequest {
+  /** Path after best-effort Session workspace resolution, in Host filesystem syntax. */
+  readonly path: string;
+}
+/** Confirmation that the Host handed a workspace path to its native opener. */
+interface SessionOpenWorkspacePathValue {
+  readonly opened: true;
+}
+/** Client-minted prompt identity used to reconcile optimistic and durable messages. */
+type SessionRequestId = Branded<'session-request-id'>;
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** Browser prompt correlation and optional Host-validated time zone. */
+    'user-rpc': {
+      kind: 'user';
+      rpcId: SessionRequestId;
+      clientTimeZone?: string;
+    };
+  }
+}
+/** Durable identity selecting an ordinary Session or one direct subagent child. */
+type SessionAddress = {
+  readonly kind: 'session';
+  readonly sessionId: SessionId;
+} | {
+  readonly kind: 'subagent';
+  readonly parentSessionId: SessionId;
+  readonly childSessionId: SessionId;
+  readonly mode: 'one-shot' | 'continuable';
+};
+/** One raw Session event in the Remote journal. */
+interface SessionEventEntry {
+  readonly type: 'event';
+  readonly event: SessionWireEvent;
+}
+/** Event-shaped wire representation of one packed chunk row. */
+type ChunkRowEvent = { [Kind in ChunkRow['type']]: {
+  readonly type: `chunkrow/${Kind}`;
+  readonly seq: number;
+  readonly time: number;
+  readonly data: Extract<ChunkRow, {
+    readonly type: Kind;
+  }>['data'];
+}; }[ChunkRow['type']];
+/** One lossless run of consecutive Assistant delta events in a history page. */
+interface SessionChunkRun {
+  readonly type: 'chunks';
+  readonly event: ChunkRowEvent;
+}
+/** One history-page record: a raw event or a packed Assistant delta run. */
+type SessionHistoryRecord = SessionEventEntry | SessionChunkRun;
+/** Session event wire form; durable readers own recognition of merge-extensible event names. */
+interface SessionWireEvent {
+  readonly type: string;
+  readonly seq: number;
+  readonly time: number;
+  readonly data: JsonValue;
+  readonly ignorable?: true;
+  readonly sourceEventSeqs?: number[];
+  readonly surfaceOp?: SurfaceOp;
+}
+/** One message-aligned backwards-history request. */
+interface SessionPageRequest {
+  readonly address: SessionAddress;
+  /** Inclusive log cut obtained from the corresponding follow opening frame. */
+  readonly throughSeq: number;
+  readonly beforeSeq?: number;
+  readonly maxMessages?: number;
+}
+/** One live event request for a durable Session address. */
+interface SessionFollowRequest {
+  readonly address: SessionAddress;
+  readonly maxMessages?: number;
+}
+/** One contiguous backwards page of a Session log. */
+interface SessionPage {
+  readonly records: readonly SessionHistoryRecord[];
+  readonly hasMore: boolean;
+}
+/** Complete opening window followed by ordered events appended after its cursor. */
+type SessionFollowFrame = {
+  readonly type: 'snapshot';
+  readonly header: SessionHeader;
+  readonly cursor: number;
+  readonly records: readonly SessionHistoryRecord[];
+  readonly hasMore: boolean;
+  readonly projections: SessionProjectionBaseline;
+} | SessionEventEntry;
+/** One pending inbox occurrence in the authoritative queue snapshot. */
+interface SessionQueuedItem {
+  readonly id: MessageId;
+  readonly placement: 'queued' | 'steering' | 'context';
+  /** Prompt-RPC identity from the queued message's user source; clients retire the matching local submission echo on it. */
+  readonly rpcId?: SessionRequestId;
+  /** JSON-safe message fields consumed by pending-queue presentation. */
+  readonly message: {
+    readonly id: MessageId;
+    readonly content: readonly JsonValue[];
+  };
+}
+/** Browser-safe background-job row. */
+interface SessionJob {
+  readonly id: JobId;
+  readonly kind: string;
+  readonly label: string;
+  readonly status: 'running' | 'stopping' | 'completed' | 'killed' | 'failed';
+  readonly detail?: string;
+  readonly startedAt: number;
+  readonly finishedAt?: number;
+}
+/** Complete live control baseline emitted once per control stream generation. */
+interface SessionControlBaseline {
+  readonly queues: Readonly<Record<SessionId, readonly SessionQueuedItem[]>>;
+  readonly jobs: Readonly<Record<SessionId, readonly SessionJob[]>>;
+  readonly projections: Readonly<Record<SessionId, SessionProjectionBaseline>>;
+}
+/** One finished projection value and its durable watermark. */
+interface SessionProjectionUpdate {
+  readonly sessionId: SessionId;
+  readonly key: string;
+  readonly value: JsonValue;
+  readonly seq: number;
+}
+/** Host-wide live state stream. Each generation starts with exactly one baseline. */
+type SessionControlFrame = {
+  readonly type: 'baseline';
+  readonly value: SessionControlBaseline;
+} | {
+  readonly type: 'queue';
+  readonly sessionId: SessionId;
+  readonly items: readonly SessionQueuedItem[];
+} | {
+  readonly type: 'jobs';
+  readonly sessionId: SessionId;
+  readonly jobs: readonly SessionJob[];
+} | ({
+  readonly type: 'projection';
+} & SessionProjectionUpdate);
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * A Session became visible to Session list consumers.
+     * @mode emit
+     * @param summary - initial list row for the Session.
+     */
+    'api-session/added'(summary: SessionSummary$1): void;
+    /**
+     * A Session left the live Host registry.
+     * @mode emit
+     * @param sessionId - removed Session identity.
+     */
+    'api-session/removed'(sessionId: SessionId): void;
+    /**
+     * One Agent changed running state.
+     * @mode emit
+     * @param sessionId - Agent and Session identity.
+     * @param running - whether the Agent is running.
+     */
+    'api-session/status'(sessionId: SessionId, running: boolean): void;
+    /**
+     * One user-authored durable message advanced Session list activity.
+     * @mode emit
+     * @param sessionId - addressed Session identity.
+     * @param updatedAt - durable message time used for list ordering.
+     */
+    'api-session/activity'(sessionId: SessionId, updatedAt: number): void;
+    /**
+     * One Agent failed outside a durable turn position.
+     * @mode emit
+     * @param sessionId - Agent and Session identity.
+     * @param message - user-safe failure chain.
+     */
+    'api-session/error'(sessionId: SessionId, message: string): void;
+  }
+}
+/** JSON-compatible projection value accepted by list consumers. */
+type SessionProjectionValue = JsonValue;
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-tools@0.1.2-alpha.3_2192a86d9d45bb1b3a748844b9ccabe8/node_modules/@deepseek-ai/dsh-tools/lib/types/presentation.d.ts
 /**
  * Category of a tool call, used by a UI to pick an icon or treatment. The
  * provider-neutral vocabulary lets tools describe themselves without depending
@@ -2205,171 +3320,122 @@ interface WebFetchResultView {
   truncated: boolean;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-jobs@0.1.0-rc.6_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-agent@0.1.0_d1347a4d07b79141c4fa3c065b2ddf0b/node_modules/@deepseek-ai/dsh-jobs/lib/types/brand.d.ts
+//#region src/bridge/dsh-types.d.ts
 /**
- * Identifies a background job. The registry generates `<kind>-N`; predictable
- * ids rely on owner authorization rather than secrecy.
+ * The plugin-merged event names the bridge consumes beyond the core
+ * `SessionEvent` union. Each is read structurally.
  */
-type JobId = Branded<'JobId'>;
-/**
- * Brand a string as a {@link JobId}.
- * @param id - the raw job-id string (the registry generates `<kind>-N`).
- * @returns the same string, branded; no validation is performed.
- */
-declare function JobId(id: string): JobId;
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/jobs.d.ts
-/**
- * One background job as the client sees it.
- *
- * Three registry fields are deliberately absent. `ownerSession` is redundant
- * beside the frame's own `sessionId`; `reported` is an internal notice-delivery
- * bit with no user meaning; `outputLimitBytes` is producer-owned model
- * presentation policy that never reaches a human surface.
- */
-interface JobView {
-  /** Registry-issued `<kind>-N` identity, stable for the task's whole life. */
-  id: JobId;
-  /**
-   * Producer kind (`bash`, `pwsh`, `pty-send`, `subagent`, …). Kept as a bare
-   * string because producer plugins extend the kind map by declaration merging,
-   * so no client build can enumerate the closed set.
-   */
-  kind: string;
-  /** Producer-supplied one-line label: the command, or the delegation description. */
-  label: string;
-  /** Current lifecycle state. */
-  status: 'running' | 'stopping' | 'completed' | 'killed' | 'failed';
-  /** Kind-specific status detail ('exit code: 3'), present once the producer supplied one. */
-  detail?: string;
-  /** Epoch ms when the task was registered. */
-  startedAt: number;
-  /** Epoch ms when the task settled; absent while live. */
-  finishedAt?: number;
+type PluginSessionEventType = 'agent/inbox/spliced' | 'compaction/start' | 'compaction/summary' | 'compaction/end' | 'tool-call-chunks' | 'text-chunks' | 'reasoning-chunks' | 'todo/write' | 'session/title-llm-request' | 'permission/preset' | 'sandbox/mode' | 'approval/policy' | 'command/run' | 'command/done' | 'approval/asked' | 'approval/decided' | 'agent-preset/selected' | 'goal/change';
+/** Core union ∪ plugin events, as the bridge's event feed actually delivers. */
+type BridgeEvent = SessionEvent | {
+  readonly type: PluginSessionEventType;
+  readonly seq: number;
+  readonly time: number;
+  readonly data: unknown;
+  readonly ignorable?: true;
+  readonly sourceEventSeqs?: readonly number[];
+  readonly surfaceOp?: unknown;
+};
+/** One queued inbox item as surfaced by `session/queue`. */
+interface QueuedInboxItem {
+  placement: 'queued' | 'steering' | 'context';
+  message: {
+    id: string;
+    content: readonly unknown[];
+    source: {
+      kind: string;
+    };
+  };
 }
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/workspace.d.ts
 /**
- * Wire-side workspace id brand. Deliberately re-declared here rather than
- * imported from dsh-workspace: api/ must stay browser-importable with zero
- * host-package dependencies, and the brand string matches, so both sides
- * agree structurally.
+ * One frame the bridge event translator consumes. This mirrors the deleted
+ * `MuxFrame` wire union but carries a plain `rpcId` field (no RpcRequest
+ * envelope): the answerable frames keep it so the HTTP reply routes can
+ * correlate, while the pure-push frames leave it optional.
  */
-type WorkspaceId = Branded<'WorkspaceId'>;
-/** One workspace row: the record projection every workspace.* value carries. */
-interface WorkspaceView {
-  workspaceId: WorkspaceId;
-  /** Canonical directory path (host-side realpath canon). */
-  path: string;
-  /** Display title (defaults to the path basename at create). */
-  title: string;
-  /**
-   * Sessions accounted under this workspace, in manually owned order
-   * (attach prepends, insertSessionBefore reorders; activity never does).
-   */
-  sessionIds: SessionId[];
-  /** ISO-8601 creation instant. */
-  createdAt: string;
-  /** ISO-8601 last-mutation instant. */
-  updatedAt: string;
+type BridgeFrame = {
+  type: 'session/event';
+  sessionId: string;
+  event: BridgeEvent;
+  view?: ToolEventView;
+} | {
+  type: 'approval/requested';
+  rpcId: string;
+  sessionId: string;
+  approvalId: string;
+  toolName: string;
+  callId?: string;
+  reason?: string;
+} | {
+  type: 'approval/resolved';
+  sessionId: string;
+  approvalId: string;
+  outcome: 'allowed-once' | 'rejected';
+} | {
+  type: 'question/requested';
+  rpcId: string;
+  sessionId: string;
+  questions: AskUserQuestionItem[];
+} | {
+  type: 'question/resolved';
+  sessionId: string;
+  questionRpcId: string;
+  outcome: 'answered' | 'cancelled';
+} | {
+  type: 'session/queue';
+  sessionId: string;
+  items: QueuedInboxItem[];
+} | {
+  type: 'session/jobs';
+  sessionId: string;
+  jobs: unknown[];
+} | {
+  type: 'session/projection';
+  sessionId: string;
+  key: string;
+  value: unknown;
+  seq: number;
+} | {
+  type: 'stream/error';
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+};
+/** One frame of the host-level lifecycle stream. */
+type BridgeHostFrame = {
+  type: 'host/agent-error';
+  sessionId: string;
+  message: string;
+} | {
+  type: 'host/session-added';
+  sessionId: string;
+} | {
+  type: 'host/session-removed';
+  sessionId: string;
+};
+/** Per-session agent preset, learned from the creation value or live events. */
+interface SessionSummary extends SessionSummary$1 {
+  /** Agent preset this session's agent was composed from (may be absent). */
+  agentPreset?: string;
 }
-/** Workspace-domain unary methods (the map keys workspace.* of RpcMethodMap). */
-interface WorkspaceApi {
-  /**
-   * Lists all workspaces in the registry's durable display order, plus the
-   * registry-global archive set (the reconnect baseline of
-   * `host/archived-sessions-changed`). Archived sessions stay in their
-   * workspace's `sessionIds` account; grouping surfaces hide them.
-   */
-  list(request: RpcRequest<{}>): Promise<RpcResponse<{
-    items: WorkspaceView[];
-    archivedSessionIds: SessionId[];
-  }>>;
-  /**
-   * Creates (or idempotently resolves) a workspace over an EXISTING directory
-   * (no mkdir — a missing or non-directory path fails with
-   * `workspace-invalid-path`). A path resolving to a directory already owned
-   * by a workspace returns that workspace (`created: false`). Adoption allows
-   * distinct canonical paths whose basenames produce the same display title;
-   * the registry's basename title default names the new workspace.
-   */
-  create(request: RpcRequest<{
-    path: string;
-  }>): Promise<RpcResponse<{
-    workspace: WorkspaceView;
-    created: boolean;
-  }>>;
-  /**
-   * Renames a workspace. `title` is trimmed and must be non-empty
-   * (schema-enforced). An unknown id fails with `workspace-not-found`; a
-   * title equal to another workspace's fails with `workspace-name-conflict`.
-   * Renaming to the current title is a no-op success (no durable write).
-   */
-  rename(request: RpcRequest<{
-    workspaceId: WorkspaceId;
-    title: string;
-  }>): Promise<RpcResponse<{
-    workspace: WorkspaceView;
-  }>>;
-  /**
-   * Removes one Workspace registration. The directory, every user file, and
-   * every session log remain untouched; those Sessions consequently become
-   * ungrouped. An unknown id fails with `workspace-not-found`.
-   */
-  delete(request: RpcRequest<{
-    workspaceId: WorkspaceId;
-  }>): Promise<RpcResponse<{
-    deleted: true;
-  }>>;
-  /**
-   * Moves one Workspace within the registry display order,
-   * DOM-insertBefore-like. An omitted anchor appends to the end.
-   */
-  insertBefore(request: RpcRequest<{
-    workspaceId: WorkspaceId;
-    beforeWorkspaceId?: WorkspaceId;
-  }>): Promise<RpcResponse<{
-    workspaceIds: WorkspaceId[];
-  }>>;
-  /**
-   * Moves an accounted session within its workspace's manual order,
-   * DOM-insertBefore-like: with `beforeSessionId` the session is inserted
-   * before that anchor; omitted appends to the end. An unknown workspace
-   * fails with `workspace-not-found`; a session or anchor not accounted by
-   * the workspace fails with `workspace-move-invalid`. A move to the current
-   * position is a no-op success.
-   */
-  insertSessionBefore(request: RpcRequest<{
-    workspaceId: WorkspaceId;
-    sessionId: SessionId;
-    beforeSessionId?: SessionId;
-  }>): Promise<RpcResponse<{
-    workspace: WorkspaceView;
-  }>>;
-  /**
-   * Adds one session to the registry-global archive set: the session
-   * disappears from every grouping surface but keeps its session log and its
-   * workspace accounting slot (a future unarchive restores its position).
-   * Idempotent for an already archived id. A session neither live nor in
-   * session persistence fails with `session-not-found`. Returns the full
-   * updated set (same snapshot the changed frame carries).
-   */
-  archiveSession(request: RpcRequest<{
-    sessionId: SessionId;
-  }>): Promise<RpcResponse<{
-    archivedSessionIds: SessionId[];
-  }>>;
+/** One cut of provider-validated projection values at a session event cursor. */
+interface SessionProjectionsBlock {
+  asOfSeq: number;
+  values: Partial<Record<string, unknown>>;
 }
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/events.d.ts
 /**
- * Host-computed render intent accompanying a `tool/call` or `tool/result`
- * event. A pure derivation of args/result through the presenter registered at
- * emission time — never persisted (the session log carries only the event), so
- * the same event may carry a different view (or none) on a later delivery.
- * `for` names which vocabulary applies without re-inspecting the event type.
- * An absent view means the client's documented default (generic JSON card).
+ * One history record the bridge reads. In 0.1.2 durable history is paginated
+ * and chunk-packaged; the bridge expands it back into `{ event, view }` so the
+ * rest of the translation layer keeps the pre-0.1.2 shape.
  */
+interface HistoryEntry {
+  event: BridgeEvent;
+  /** Host-computed presenter view for tool call/result events (may be absent). */
+  view?: ToolEventView;
+}
+/** Render intent for a `tool/call` or `tool/result` event. */
 type ToolEventView = {
   for: 'call';
   view: ToolCallView;
@@ -2377,1246 +3443,2776 @@ type ToolEventView = {
   for: 'result';
   view: ToolResultView;
 };
-/** One pending inbox occurrence in the authoritative `session/queue` snapshot. */
-interface QueuedInboxItem {
-  /** Message identity used by inbox mutations. */
-  id: MessageId;
-  /** Agent-resolved FIFO placement; queued and steering items render on different surfaces, context items stay invisible until claimed. */
-  placement: 'queued' | 'steering' | 'context';
-  /** Complete pending message; it is not durable until the Agent claims it. */
-  message: Message;
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invar_35862f134669c27ec5e8de8435edb3e5/node_modules/@deepseek-ai/dsh-session/lib/types/surface.d.ts
+/** Readonly live projection of the message-producing session events. */
+interface SessionSurface {
+  /** Current surface event sequences in model-visible order. */
+  readonly nodes: readonly number[];
+  /** Monotonic count of committed positional replacements. */
+  readonly replaceGeneration: number;
 }
-/** Streaming face of the contract: the two logical stream openers (mux + host). */
-interface EventsApi {
-  /**
-   * All-session aggregated mux stream. On open, emits a subscribed control frame for every
-   * attached session, then replays each session's still-pending approval/question requested
-   * frames (rpcId reused verbatim — the refresh-recovery baseline). Session titles ride the
-   * generic projection pair (history-tail projections block + session/projection frames).
-   * since: resume hook, unimplemented in v1 (ignored if passed); reconnection = reopen the
-   * stream + refetch history.
-   */
-  mux(request: RpcRequest<{
-    since?: Record<SessionId, number>;
-  }>, signal: AbortSignal): AsyncIterable<RpcRequest<MuxFrame>>;
-  /**
-   * Host-level info stream: session create/destroy, running-status flips, and
-   * agent failures with no turn position. Empty payload uses `{}`.
-   */
-  host(request: RpcRequest<{}>, signal: AbortSignal): AsyncIterable<RpcRequest<HostFrame>>;
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invar_35862f134669c27ec5e8de8435edb3e5/node_modules/@deepseek-ai/dsh-session/lib/types/preparation.d.ts
+/** Options for a preparation whose provider retains unpublished state. */
+interface SessionPreparationOptions {
+  /** Release provider-owned state when the Session was not published. */
+  readonly release?: () => void;
 }
 /**
- * Mux stream frames: raw session-event passthrough + control frames +
- * approval/question frames (requested = answerable server-request, the rest are pure pushes).
+ * One exact unpublished Session and the provider state that keeps it usable.
+ * Disposal is synchronous and idempotent. Providers decide whether release
+ * returns the Session to a cache or discards it; publication may consume that
+ * state before disposal, making the callback a no-op.
  */
-type MuxFrame = {
-  type: 'session/event';
-  sessionId: SessionId;
-  event: SessionEvent;
-  view?: ToolEventView;
-} | {
-  type: 'session/subscribed';
-  sessionId: SessionId;
-  lastSeq: number;
-} | {
-  type: 'approval/requested';
-  sessionId: SessionId;
-  approvalId: ApprovalRequestId;
-  toolName: string;
-  callId?: CallId;
-  reason?: string;
-} | {
-  type: 'approval/resolved';
-  sessionId: SessionId;
-  approvalId: ApprovalRequestId;
-  outcome: ApprovalOutcome;
-} | {
-  type: 'question/requested';
-  sessionId: SessionId;
-  questions: AskUserQuestionItem[];
-} | {
-  type: 'question/resolved';
-  sessionId: SessionId;
-  questionRpcId: RpcId;
-  outcome: 'answered' | 'cancelled';
-} |
+declare class SessionPreparation implements Disposable {
+  private readonly options;
+  private released;
+  /** The exact Session to use for setup and publication. */
+  readonly session: Session;
+  private constructor();
+  /**
+   * Wrap an unpublished Session in one preparation lifetime.
+   * @param session - exact unpublished Session.
+   * @param options - optional provider release behavior.
+   * @returns a preparation disposed after publication or rollback.
+   */
+  static create(session: Session, options?: SessionPreparationOptions): SessionPreparation;
+  /** Release provider state once when this preparation leaves its caller. */
+  [Symbol.dispose](): void;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invar_35862f134669c27ec5e8de8435edb3e5/node_modules/@deepseek-ai/dsh-session/lib/types/index.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    sessions: SessionStore;
+  }
+  interface Events {
+    /**
+     * Creation announcement during session publication. A synchronous throw vetoes and rolls
+     * back with a paired disposal; detach requested during dispatch is deferred.
+     * A returned-promise rejection is logged but cannot retroactively veto this
+     * synchronous boundary.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners
+     * receive only sessions entered through that agent's context.
+     * @param session - the session just entered and announced.
+     * @dshScopeScan unsupported
+     * @mode emit
+     */
+    'session/created'(this: Scoped<Session>, session: Session): void;
+    /**
+     * Emitted once when an announced session leaves the store, including
+     * publication rollback, but never for an entry whose creation announcement
+     * did not begin. Listener failures are logged and contained.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`) reuses the owner scope.
+     * @param session - the session that is no longer live in the store.
+     * @dshScopeScan unsupported
+     * @mode emit
+     */
+    'session/disposed'(this: Scoped<Session>, session: Session): void;
+    /**
+     * Post-commit, fire-and-forget append feed. The listener snapshot resolves
+     * before the log push, but callbacks run after it; observer failures are
+     * logged and contained without making the committed append fail.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners
+     * receive only events from sessions entered through that agent's context.
+     * @param session - the session whose log grew.
+     * @param event - the appended event, exactly as recorded.
+     * @dshScopeScan unsupported
+     * @mode emit
+     */
+    'session/event'(this: Scoped<Session>, session: Session, event: SessionEvent): void;
+    /**
+     * Awaited parallel durability checkpoint: every listener runs and the
+     * caller awaits all of them, with no waterfall veto. Scope-filtered dispatch
+     * (`@deepseek-ai/dsh-scope`) reuses the session's owner scope.
+     * @param session - the session whose buffered events must reach durable storage.
+     * @dshScopeScan unsupported
+     * @mode parallel
+     */
+    'session/flush'(this: Scoped<Session>, session: Session): Promise<void> | void;
+  }
+}
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface TypertLookupMap {
+    session: TypertLookup<Session, SessionId>;
+  }
+}
 /**
- * Complete transient inbox state after every enqueue, mutation, claim, or
- * discard. Pending work is not model-visible and therefore has no durable
- * session event; the whole snapshot makes edit, deletion, cancel, and
- * reconnect converge through one authoritative signal. `session/queue`
- * covers both resolved placements: queued items render
- * in QueueDock, while pending steering renders at the conversation tail.
- */
-{
-  type: 'session/queue';
-  sessionId: SessionId;
-  items: QueuedInboxItem[];
-} |
-/**
- * Complete set of background jobs this session can see, after every registry
- * commit that changes it: registration, the stopping transition, settlement,
- * and owner-disposal removal. The registry is process-local and holds no
- * durable event, so — exactly like `session/queue` — the whole snapshot is
- * what makes a start, a kill, a reconnect, and a second tab converge on one
- * authoritative value.
+ * An event-sourced session: an append-only log of {@link SessionEvent}s.
  *
- * Sent as a subscription baseline only for a session that currently has
- * tasks; an absent key means an empty set. A change that empties the set
- * still sends `[]`, since that transition is the only one absence cannot
- * express.
+ * Plain class (not a Service) — create live instances via
+ * `ctx.sessions.create()` and detached instances via {@link create}.
+ * Seeding with an existing event log replays/forks a session.
+ * @typert object
  */
-{
-  type: 'session/jobs';
-  sessionId: SessionId;
-  jobs: JobView[];
-} |
+declare class Session {
+  private log;
+  /** Single incremental owner of surface acceptance and projection state. */
+  private readonly surfaceManager;
+  /** The ordered surface over this session's event log. */
+  get surface(): SessionSurface;
+  /**
+   * Detached, deep-frozen creation metadata (format version, cwd, lineage,
+   * seed boundary). Supplied by the store via `ctx.sessions.create()`. When a
+   * `Session` is created without a store-owned header, a minimal header is
+   * synthesized (stamped with the current {@link SESSION_FORMAT_VERSION}) so
+   * `session.header` is always present. Kept out of the event log — it is a
+   * storage concern, not replayable conversation state.
+   */
+  readonly header: SessionHeader;
+  /** The session identity, derived from its durable header's single copy. */
+  get id(): SessionId;
+  /**
+   * The first seq appended IN THIS PROCESS: the length of the constructor
+   * seed (0 without one). Events with smaller seq values entered through
+   * construction — replay, fork, or resume — and were never published on the
+   * `session/event` firehose (constructor seeds do not emit), so consumers
+   * that replay the log as a publication substitute (telemetry adoption)
+   * start here. Distinct from `header.seedLength`, the DURABLE fork-lineage
+   * boundary: a resumed session's constructor seed is its full stored log,
+   * while its header keeps the original fork value — this field is the
+   * in-process construction fact.
+   *
+   * Not persisted itself: a seeded session projects it into the log as the
+   * `session/end-seed` event, which is what a consumer reading STORED history
+   * reads. Locate the LAST such event, not necessarily one at this seq — a
+   * seed already ending in one is not re-marked, so reopening an untouched
+   * session leaves that event at a smaller seq than `firstLiveSeq`. Prefer
+   * this field in-process: it is exact before the marker reaches storage.
+   *
+   * When this lifecycle appends the marker, it occupies this seq before the
+   * store attaches and therefore does not publish either. Otherwise this seq
+   * holds an ordinary published write.
+   */
+  readonly firstLiveSeq: number;
+  /**
+   * Create a detached session by validating and snapshotting borrowed seed
+   * events and storage metadata.
+   * @param id - session identity.
+   * @param seed - optional borrowed replay or fork events.
+   * @param header - optional borrowed storage metadata.
+   * @returns a detached session.
+   */
+  static create(id: SessionId, seed?: readonly SessionEvent[], header?: SessionHeader): Session;
+  /**
+   * Restore a detached session by taking ownership of fresh persistence values.
+   * The storage format, event envelopes, sequence continuity, surface transitions,
+   * and header fields are validated before the restored objects are frozen.
+   * @param id - restored session identity.
+   * @param seed - fresh detached events whose ownership is transferred.
+   * @param header - fresh detached metadata whose ownership is transferred.
+   * @returns a restored detached session.
+   */
+  static fromRestore(id: SessionId, seed: readonly SessionEvent[], header: SessionHeader): Session;
+  private constructor();
+  /** Cached immutable public snapshot of the private append-only log. */
+  private eventsSnapshot;
+  /**
+   * An immutable snapshot of the append-only event log. The snapshot is reused
+   * until the next append; a previously returned array does not grow later.
+   * Events and their nested data are deep-frozen at acceptance, so neither a
+   * cast nor ordinary JavaScript can rewrite durable history.
+   */
+  get events(): readonly SessionEvent[];
+  /** The next event's sequence number — always the log length (the `seq = log.length` contiguity contract). */
+  get seq(): number;
+  /**
+   * Append one typed event to the log and synchronously notify observers via
+   * the store-owned, module-private publication hooks. The hot path never blocks
+   * on I/O — persistence plugins buffer asynchronously. Once the event enters
+   * the log, the append is committed: observer failures are logged and
+   * contained per listener, so they do not change the return value or prevent
+   * later listeners from observing the same accepted event.
+   *
+   * @param type - The event type (key of {@link SessionEventMap}).
+   * @param data - The event payload; must be JSON-serializable.
+   * @param opts - Surface metadata: `surfaceOp` controls how the event enters
+   *   the ordered surface; `sourceEventSeqs` lists the seq numbers of earlier
+   *   events this one derives from. REQUIRED for
+   *   {@link SurfaceEventType} events (every message-producing event must
+   *   declare how it joins the surface, the sole source of derived model
+   *   history) and
+   *   rejected by the compiler for non-surface types like `turn/start` or
+   *   `assistant/chunk`.
+   * @returns the logged event — its assigned `seq`/`time` plus the SNAPSHOT of
+   *   `data` that entered the log, so reading `event.data` back sees the logged
+   *   value, never the caller's still-mutable input.
+   * @throws if `data` or surface metadata is not losslessly JSON-serializable
+   *   (BigInt, function, symbol, undefined, negative zero, non-finite number,
+   *   circular reference, sparse array, or an exotic object such as
+   *   Map/Set/Date/class instance), or when the candidate violates the
+   *   canonical surface contract (marker shape and eligibility, unique
+   *   earlier source-event references, positional replacement validity, and complete
+   *   shadowed-node coverage). One iterative pass reads, validates, and
+   *   copies each nested value once, so a stateful getter cannot supply one value
+   *   to validation and another to storage. The event log is the durable source
+   *   of truth, so a bad event fails at the append site rather than later during
+   *   a backend flush. A synchronous internal dispatch validation failure or an
+   *   append reentered while this acceptance/publication boundary is open also
+   *   rejects before the log changes.
+   */
+  append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : []): SessionEvent<T>;
+  /** Cached fold of the request-header events — see {@link requestHeader}. */
+  private headerFold;
+  /** Log position (events consumed) the header fold has reached. */
+  private headerFoldSeq;
+  /**
+   * The {@link EpochHeader} in force after the log's last header event — the
+   * header the NEXT request will be compared against — or undefined before
+   * the first `request/header` snapshot. The live, incrementally-maintained
+   * form of `foldRequestHeader(session.events)`: each header event is folded
+   * once, when first seen, so a per-step read costs O(new events).
+   * @returns the folded header, or undefined when no header event exists yet.
+   */
+  requestHeader(): EpochHeader | undefined;
+  /** Cached fold of `request/context` events. */
+  private contextFold;
+  private contextFoldSeq;
+  /**
+   * Return the latest resolved route metadata, or `undefined` before the first
+   * `request/context` event. Each event is folded once.
+   * @returns the latest immutable route metadata.
+   */
+  requestContext(): RequestContext | undefined;
+  /** The derived-message cache: frozen projections, extended per unseen node. */
+  private derived;
+  /** Surface position (nodes projected) the cache has reached. */
+  private derivedNodes;
+  /** {@link SurfaceManager.replaceGeneration} the cache was built under. */
+  private derivedGeneration;
+  /**
+   * Derive the LLM message history by walking the ordered sequences of
+   * message-producing events maintained by `surfaceOp` markers. The
+   * surface is the single source of derived history: every message-producing
+   * append records its `surfaceOp`, so a raw event with no marker (a chunk, a
+   * turn boundary) is correctly absent, and a compaction `replace` deletes the
+   * shadowed nodes from the derivation. The projection rules are
+   * {@link deriveEventMessage}, folded per node.
+   *
+   * CACHED: each surface node is projected exactly once, when first seen — a
+   * call costs O(new nodes), and a surface rewrite (a `replace`;
+   * {@link SessionSurface.replaceGeneration}) rebuilds. The returned array is
+   * a fresh snapshot per call (later appends never grow an array a caller
+   * already holds); the `Message` objects in it are SHARED and **deep-frozen**.
+   * Their content reuses the already frozen durable event data, so the cache
+   * needs no second deep clone and consumers still cannot mutate the log.
+   * @returns a fresh array of the shared, frozen derived history.
+   */
+  deriveMessages(): Message[];
+  /**
+   * Instance face of the pure per-node `deriveEventMessage` export from
+   * `surface.ts`.
+   * @param event - the event to project.
+   * @returns the derived message, or null when the event produces none.
+   */
+  deriveEventMessage(event: SessionEvent): Message | null;
+}
+/** A fork source: either the live session object or its live store id. */
+type SessionForkSource = Session | SessionId;
 /**
- * One projection unit's finished value changed (session-projection RFC).
- * Live push state, never logged — replay recomputes on the host (the
- * tool-view posture). `value` is the unit's schema-validated view output;
- * `seq` is the unit's watermark at emission. Clients keep one generic
- * per-session value store under higher-seq-wins, seeded by the history
- * tail page's projections block.
+ * In-memory session store (`ctx.sessions`).
+ *
+ * Persistence is intentionally not implemented here — persistence plugins
+ * subscribe to `session/event` and flush on `session/flush` / dispose.
  */
-{
-  type: 'session/projection';
-  sessionId: SessionId;
-  key: string;
-  value: unknown;
-  seq: number;
-} | {
-  type: 'stream/error';
-  error: RpcError;
-};
-/**
- * Host stream frames. session-added carries the lineage anchor, product
- * origin, project cwd, and blank bit (the list-summary fields a client cannot
- * wait for a refresh to learn); the frame fires at session/created, so blank is
- * constantly true — clients flip it on the session's first
- * `host/session-status(running:true)` (a blank session never runs), and a
- * reconnecting client takes `session.list`'s summary.blank as authoritative.
- * agent-error is the only outlet for live failures with no turn position;
- * workspace-changed pushes the full new snapshot after every durable
- * workspace mutation (create/attach/order change — the client upserts, while
- * `workspace.list` provides the reconnect baseline); workspace-removed is the
- * committed registration-deletion increment and never implies directory or
- * session-log deletion; workspace-order-changed pushes the complete durable
- * registry order after a reorder; archived-sessions-changed pushes the full registry
- * archive set after every durable change (same full-snapshot posture as
- * workspace-changed — `workspace.list` re-baselines it on reconnect).
- */
-type HostFrame = {
-  type: 'host/session-added';
-  sessionId: SessionId;
-  blank: boolean;
-  parentSessionId?: SessionId;
-  origin?: 'subagent';
-  cwd?: string;
-  agentPreset?: string;
-} | {
-  type: 'host/session-removed';
-  sessionId: SessionId;
-} | {
-  type: 'host/session-status';
-  sessionId: SessionId;
-  running: boolean;
-} | {
-  type: 'host/agent-error';
-  sessionId: SessionId;
-  message: string;
-} | {
-  type: 'host/workspace-changed';
-  workspace: WorkspaceView;
-} | {
-  type: 'host/workspace-removed';
-  workspaceId: WorkspaceView['workspaceId'];
-} | {
-  type: 'host/workspace-order-changed';
-  workspaceIds: WorkspaceView['workspaceId'][];
-} | {
-  type: 'host/archived-sessions-changed';
-  archivedSessionIds: SessionId[];
-} |
-/**
- * One allowlisted host cordis event forwarded verbatim. The allowlist is
- * owned by `@deepseek-ai/dsh-api-remotes` (`API_REMOTE_FORWARDED_EVENTS`),
- * which is also the only control point over what a consumer can receive.
- * `event` is the host's own event name and `args` its argument list: this
- * path applies no projection, no redaction, and no renaming, so the payload
- * contract is the owner package's cordis `Events` declaration rather than
- * anything stated here. Delivery lands on `ctx.remote.$on`, not on a
- * per-event frame variant.
- */
-{
-  type: 'host/remote-event';
-  event: string;
-  args: JsonValue[];
-} | {
-  type: 'stream/error';
-  error: RpcError;
-};
+declare class SessionStore extends Service {
+  private store;
+  private counter;
+  constructor(ctx: Context);
+  /**
+   * Create a session owned by the calling fiber: disposing that fiber stops
+   * event notification and removes the session from the store. `options.seed`
+   * populates the session with a copy of those events (replay/fork);
+   * `options.meta` attaches creation metadata (validated absolute `cwd`, seed
+   * and parent lineage, and delegation depth) as the immutable
+   * {@link SessionHeader} (the store fills `version`/`id`/`createdAt`).
+   *
+   * For an agent whose session must be torn down IN ORDER with its loop (so the
+   * loop's final events are published before the store attachment ends), do NOT use this
+   * — fold the session lifecycle into the agent's own effect via
+   * {@link prepare} + {@link enter} + {@link announce} (see
+   * `dsh-agent-loop`'s creation transaction).
+   *
+   * @param id - the session id; omitted, the store mints `session-<n>`.
+   * @param options - seed events and/or creation metadata for the header.
+   * @returns the live session, already entered and announced.
+   * @throws if a session with `id` already exists, metadata is not a plain
+   *   lossless-JSON record with valid scalar fields, or `meta.cwd` is a
+   *   non-absolute path (storage backends key directories off it).
+   */
+  create(id?: SessionId, options?: CreateSessionOptions): Session;
+  /**
+   * Build a session WITHOUT entering it into the store — validate the id/cwd and
+   * construct the {@link Session} (with its immutable {@link SessionHeader}).
+   * Pairs with {@link enter} + {@link announce}: a caller that owns a composite
+   * `ctx.effect` (the agent factory) folds the session lifecycle into that ONE
+   * effect so a fiber unload tears the session + agent down as a single ORDERED
+   * chain rather than as racing sibling effects — which would remove the publication hooks
+   * before the driver's closing events commit, dropping them.
+   *
+   * @param id - the session id; omitted, the store mints `session-<n>`.
+   * @param options - seed events and/or creation metadata for the header. With
+   *   `seedSource: 'persistence'`, metadata and events must be fresh detached
+   *   graphs whose ownership transfers to this call: they are validated and
+   *   frozen in place through {@link Session.fromRestore}, so the caller must
+   *   retain no mutable aliases.
+   * @returns the constructed session, NOT yet in the store.
+   * @throws if a session with `id` already exists, metadata is not a plain
+   *   lossless-JSON record with valid scalar fields, or `meta.cwd` is a
+   *   non-absolute path.
+   */
+  prepare(id?: SessionId, options?: PrepareSessionOptions): Session;
+  /**
+   * Enter a {@link prepare}d session into the store: install the module-private
+   * append publication hooks and add it to the store. Returns the DETACH
+   * disposer (hooks + store removal). Does NOT emit `session/created` —
+   * the caller yields this disposer inside its effect and THEN calls
+   * {@link announce}, so a throwing `session/created` listener rolls the attach
+   * back instead of leaking it.
+   *
+   * Re-checks the id for a duplicate: `prepare` and `enter` are public
+   * cross-package primitives and a caller may interleave arbitrary work (or
+   * another create) between them, so a stale prepared session must NOT overwrite
+   * a live store entry of the same id — its detach disposer would later delete
+   * the REAL session. The {@link create} convenience and the agent factory call
+   * the two back-to-back so they never trip this, but the public API cannot
+   * assume that.
+   *
+   * @param session - a {@link prepare}d session not yet in the store.
+   * @returns the detach disposer (publication hooks + store removal). When called from
+   *   a synchronous `session/created` listener, removal and disposal wait until
+   *   that creation dispatch unwinds.
+   * @throws if a session with this id is already in the store.
+   */
+  enter(session: Session): () => void;
+  /** Remove one exact entered session and emit its paired disposal when announced. */
+  private detachEntered;
+  /** Emit `session/created` exactly once for an {@link enter}ed session (with
+   * the carrier {@link enter} captured). Separate from {@link enter} so the
+   * caller can yield the detach disposer first (rollback safety — see
+   * {@link enter}).
+   * @param session - the entered session to announce to listeners.
+   * @throws if the session is not live or its announcement already began,
+   *   including a reentrant call from a creation listener. */
+  announce(session: Session): void;
+  /** Emit the paired teardown notification with per-listener containment. */
+  private emitDisposed;
+  /**
+   * Dispatch the awaited `session/flush` durability checkpoint for `session`,
+   * with the carrier captured at {@link enter}. THE flush entry point: the
+   * store owns the carrier, so callers (the checkpoint policy's per-request
+   * barrier, goal-round-driver's idle checkpoint, teardown drains, and consumers
+   * that flush themselves before reading storage) must come through here
+   * rather than dispatch a raw `ctx.parallel('session/flush', …)` — one owner,
+   * one spelling, and the scoped-dispatch invariant can pin it.
+   * @param session - the session whose buffered events must reach durable storage.
+   * @returns whether at least one durability listener participated, after every
+   *   listener has settled successfully.
+   * @throws the first registered listener failure after every listener settles.
+   */
+  flush(session: Session): Promise<boolean>;
+  /** Return the exact live entry; detached/prepared objects reject. */
+  private liveEntryFor;
+  /**
+   * Look up a live session.
+   * @param id - the session id to look up.
+   * @returns the session, or undefined when no live session has that id.
+   */
+  get(id: SessionId): Session | undefined;
+  /**
+   * All live sessions, in creation order.
+   * @returns a fresh array; mutating it does not affect the store.
+   */
+  list(): Session[];
+  /**
+   * Create a live child session from a stable prefix of a live source.
+   * `boundary` is an inclusive source event seq; omitted means the source's
+   * current last event. The selected slice may end with a between-turn event
+   * but must not end inside an open turn.
+   *
+   * @param source - Live source session object or id.
+   * @param boundary - Inclusive source event seq to fork through; omitted means
+   *   the source's current last event, and omitted on an empty source forks an
+   *   empty child.
+   * @param childSessionId - Optional child session id; omitted delegates to
+   *   `SessionStore`'s id policy.
+   * @returns The created live child session.
+   */
+  fork(source: SessionForkSource, boundary?: number, childSessionId?: SessionId): Session;
+  private _forkSeed;
+  private _resolveForkSource;
+}
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/sessions.d.ts
-declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionMap {
-    /**
-     * Session-list hints persisted by the projection cache. `blank: false`
-     * is monotonic and may suppress a cold-log probe; `blank: true` is only a
-     * checkpoint-prefix fact and must not hide a cold Session without direct
-     * verification. `lastPromptAt` is the latest human-authored prompt time.
-     */
-    sessionListMetadata: SessionListMetadata;
-    /**
-     * The deployment's image-intake limits: the attachments service's config
-     * as this proxy enforces it at prompt admission, constant per host boot.
-     * Clients pre-check count and bytes at intake and show the limits in
-     * upload affordances. Key absence means no attachment service is
-     * composed — clients skip the pre-check and let the host answer.
-     */
-    imageLimits: ImageAttachmentLimits;
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-alpha.3_a8c52ae09efda0e213edf7d94ec2cf32/node_modules/@deepseek-ai/dsh-agent/lib/types/inbox.d.ts
+/** Live notifications committed by inbox mutations. */
+interface InboxNotifications {
+  /** Publish one inserted message. */
+  inserted(message: UserMessage): void;
+  /** Publish one discarded message. */
+  discarded(message: UserMessage): void;
+  /** Publish one claimed message inside its owning turn. */
+  claimed(message: UserMessage, turn: number): void;
+}
+/** A replay-once projection that incrementally consumes later inbox splices. */
+declare class Inbox {
+  private readonly session;
+  private readonly notifications;
+  private readonly state;
+  constructor(session: Session, notifications: InboxNotifications);
+  /** Prompts awaiting individual turns. */
+  get nextTurn(): readonly UserMessage[];
+  /** Input awaiting the next step boundary. */
+  get nextStep(): readonly UserMessage[];
+  /** Whether either pending-message list contains work. */
+  get hasPending(): boolean;
+  /** Durably cancel all pending input, clearing next-step before next-turn. */
+  clear(): void;
+  /**
+   * Remove and return the complete batch proposed for one step, publishing
+   * each claimed message. The durable splices are pure deletions.
+   * @param target - whether this boundary also consumes one queued turn.
+   * @param turn - turn that will own the claimed batch.
+   * @returns next-step input followed by the queued turn, when requested.
+   * @internal - The agent loop's step-boundary operation, not a plugin extension point.
+   */
+  claim(target: InboxTarget$1, turn: number): UserMessage[];
+  /**
+   * Append one message to a pending list and durably record the insertion.
+   * @param target - pending list to extend.
+   * @param message - message to append.
+   * @throws if the message identity is already pending.
+   */
+  append(target: InboxTarget$1, message: UserMessage): void;
+  /**
+   * Prepend one message to a pending list and durably record the insertion.
+   * @param target - pending list to extend.
+   * @param message - message to prepend.
+   * @throws if the message identity is already pending.
+   */
+  prepend(target: InboxTarget$1, message: UserMessage): void;
+  /**
+   * Replace one pending message in place, possibly changing its identity. A
+   * successful replacement publishes the old message as discarded and the new
+   * message as inserted.
+   * @param messageId - identity of the pending message to replace.
+   * @param newMessage - replacement message.
+   * @returns whether the message was still pending.
+   * @throws if the replacement duplicates another pending message identity.
+   */
+  replace(messageId: MessageId, newMessage: UserMessage): boolean;
+  /**
+   * Remove one pending message and durably record its cancellation.
+   * @param messageId - identity of the pending message to remove.
+   * @returns whether the message was still pending.
+   */
+  remove(messageId: MessageId): boolean;
+  /**
+   * Apply standard splice semantics and durably record the normalized result.
+   * The durable event commits before the live projection mutates, so synchronous
+   * `session/event` observers see the pre-splice lists and can reconstruct the
+   * removed messages from the normalized coordinates.
+   * @param target - pending list to mutate.
+   * @param start - splice position.
+   * @param deleteCount - maximum number of messages to remove.
+   * @param inserted - messages to insert at the resolved position.
+   * @returns messages removed by the splice.
+   */
+  splice(target: InboxTarget$1, start: number, deleteCount: number, inserted: UserMessage[]): UserMessage[];
+  /** Locate one pending identity across both owned lists. */
+  private locate;
+  /** Commit one normalized mutation and publish its live notifications. */
+  private mutate;
+  /** Apply one normalized durable splice to the projection. */
+  private apply;
+  /** Validate one normalized splice against the current projection. */
+  private validate;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-alpha.3_a8c52ae09efda0e213edf7d94ec2cf32/node_modules/@deepseek-ai/dsh-agent/lib/types/runtime-types.d.ts
+declare module '@deepseek-ai/dsh-system-prompt' {
+  interface AssembleContext {
+    /** Agent for this assembly; absent on diagnostics. When present, `scope` must identify the same agent. */
+    agent?: Agent;
   }
 }
-/** Persisted hints used to summarize a cold Session without reading a large log. */
-interface SessionListMetadata {
-  /** Whether the checkpoint prefix contains no turn/start event. */
-  blank: boolean;
-  /** Latest source.kind=user message time in the checkpoint prefix. */
-  lastPromptAt: number | null;
-}
-declare module '@deepseek-ai/dsh-llm' {
-  interface MessageSourceMap {
-    /**
-     * The prompt's rpcId is passed through MessageSource into the `user/message` event
-     * (the client uses it to reconcile the optimistically
-     * echoed provisional message with the event stream). kind stays `'user'` — the model face
-     * carries no transport vocabulary; rpcId and the optional Host-validated browser zone are
-     * durable JSON fields passed back to the client with the event.
-     */
-    'user-rpc': {
-      kind: 'user';
-      rpcId: RpcId;
-      clientTimeZone?: string;
-    };
-  }
-}
-/**
- * One history page entry: the raw event plus the optional host-computed render
- * intent (same semantics as the mux frame's `view` slot — a pagination-time
- * derivation, never persisted).
- */
-interface HistoryEntry {
-  event: SessionEvent;
-  view?: ToolEventView;
-}
-/**
- * The projection baseline riding the history tail page: one synchronous cut
- * over every registered projection unit, read from the registry's watermark
- * cache. `asOfSeq` is the seq of the last committed event every value
- * reflects — the window tail event seq (`-1` for an empty log, mirroring
- * `session/subscribed.lastSeq`), directly comparable with
- * `session/projection` frame seqs under the client's higher-seq-wins rule. A
- * key absent from `values` means the capability is absent (its domain plugin
- * is unmounted).
- */
-interface SessionProjectionsBlock {
-  /** Seq of the last event the values reflect; -1 for an empty log. */
-  asOfSeq: number;
-  /** Whole current value per registered projection key. */
-  values: Partial<SessionProjectionMap>;
-}
-/** Browser-submitted prompt content; the host promotes image bytes to durable references. */
-type PromptContentPart = {
-  type: 'text';
-  text: string;
-} | {
-  type: 'image';
-  mediaType: ImageMediaType;
-  data: string;
-  name?: string;
-};
-/** Complete model selection for one session. */
-interface ModelSelection {
-  /** Registered provider route. */
-  provider: string;
-  /** Provider-owned model id. */
-  model: string;
-  /** Adapter-owned reasoning effort; absence preserves adapter/provider default behavior. */
-  reasoningEffort?: string;
-}
-/** One adapter-owned reasoning effort displayed for an exact model route. */
-interface ModelReasoningEffort {
-  /** Opaque value submitted back to the owning adapter. */
-  id: string;
-  /** Adapter-supplied display name. */
-  name: string;
-  /** Optional adapter-supplied description. */
-  description?: string;
-}
-/** Selectable reasoning metadata for one exact model route. */
-interface ModelReasoning {
-  /** Efforts in adapter-preferred display order. */
-  efforts: ModelReasoningEffort[];
-  /** Adapter-configured default; absence preserves the provider default. */
-  defaultEffort?: string;
-}
-/** One model displayed inside its provider group. */
-interface ModelCatalogModel {
-  /** Provider-owned model id. */
-  id: string;
-  /** Provider-supplied display name. */
-  name: string;
-  /** Optional provider-supplied description. */
-  description?: string;
-  /** Exact-route reasoning metadata when the adapter exposes it. */
-  reasoning?: ModelReasoning;
-}
-/** One provider and the models it advertised successfully. */
-interface ModelProviderGroup {
-  /** Provider route id used for requests. */
-  id: string;
-  /** Provider display name. */
-  name: string;
-  /** Models in provider-preferred order. */
-  models: ModelCatalogModel[];
-}
-/** A provider whose asynchronous catalog lookup failed. */
-interface ModelCatalogFailure {
-  /** Provider route id. */
-  id: string;
-  /** Provider display name. */
-  name: string;
-  /** Lookup failure diagnostic. */
-  message: string;
-}
-/** Detached model-directory snapshot for one session. */
-interface SessionModels {
-  /** Model selection for the session's next assembled step. */
-  current: ModelSelection;
-  /**
-   * Whether an adapter currently serves `current.provider`, and therefore
-   * whether this session can start a turn at all. Deliberately NOT derivable
-   * from `groups`: catalog membership is advisory, so a route serving a model
-   * it stopped advertising is absent from the groups yet perfectly usable,
-   * while a route whose adapter is gone can serve nothing. A surface that
-   * blocks input must read this rather than the groups.
-   */
-  routable: boolean;
-  /** Successfully loaded provider groups. */
-  groups: ModelProviderGroup[];
-  /** Provider-local failures; successful groups remain usable. */
-  failures: ModelCatalogFailure[];
-}
-/** A client-requested mutation of one still-pending queue item. */
-type QueueAction = {
-  kind: 'edit';
-  content: ContentBlock[];
-} | {
-  kind: 'remove';
-} | {
-  kind: 'steer';
-};
-/** One Session list entry. */
-interface SessionSummary {
-  sessionId: SessionId;
-  /**
-   * The later of creation and the latest human-authored prompt. Attached
-   * Sessions fold their live log; cold Sessions use a projection-cache hint or
-   * an exact small-artifact read, falling back to creation time.
-   */
-  updatedAt: number;
-  /** Status of the attached agent; always false for cold (unattached) sessions. */
-  running: boolean;
-  /**
-   * Derived conversation-not-started bit: true while no turn has run.
-   * Standalone plugin events — command lifecycle
-   * records, plan/mode, titles, goals — do not open a turn and therefore do
-   * not clear it. Clients hide blank Sessions from lists and reuse them for
-   * New Session on the same workspace. A cold Session is true only when a
-   * small-artifact read verifies that no `turn/start` exists; unavailable
-   * or oversized artifacts conservatively report false.
-   */
-  blank: boolean;
-  /** fork/spawn lineage (session.header.parentSession passthrough); absent for root sessions. */
-  parentSessionId?: SessionId;
-  /** Coarse durable origin used by navigation surfaces; never proves resumability. */
-  origin?: 'subagent';
-  /** Session working directory (header.cwd passthrough); absent when unrecorded. */
-  cwd?: string;
-  /**
-   * Agent preset this session's agent was composed from (header passthrough);
-   * absent when the deployment composes no presets. A surface offering a
-   * switch reads this to show what the session actually runs rather than what
-   * the deployment currently defaults to.
-   */
-  agentPreset?: string;
-  /**
-   * Projection baseline for this row, with zero log loads: attached sessions
-   * read the registry's live watermark cut; cold sessions read the persisted
-   * projection cache's stored rows — as stale as that session's last durable
-   * checkpoint (`asOfSeq` says exactly how stale), never wrong, and directly
-   * seedable into the client's per-session value store under its
-   * higher-seq-wins rule (a list baseline can never overwrite a newer push
-   * frame). Absent when no value is available (no registry, no cache row for
-   * a cold session, or a fail-soft cache read miss); a listing client treats
-   * absence as "no title yet", exactly like a blank session.
-   */
-  projections?: SessionProjectionsBlock;
-}
-/** One session-content search result; display metadata stays owned by `session.list`. */
-interface SessionSearchItem {
-  sessionId: SessionId;
-  /** Plain-text excerpt around the strongest matching visible message. */
-  snippet: string;
-}
-/** Session-domain unary methods (the map keys session.* of RpcMethodMap). */
-interface SessionsApi {
-  /** Lists persisted sessions (updatedAt descending). v1 returns everything; cursor is a reserved seat, unimplemented. */
-  list(request: RpcRequest<{
-    cursor?: string;
-  }>): Promise<RpcResponse<{
-    items: SessionSummary[];
-  }>>;
-  /**
-   * Searches the current user/assistant/steering message surface across
-   * sessions visible to `list`. Results contain at most 20 sessions and carry
-   * no continuation cursor; `hasMore` asks the client to refine the query.
-   */
-  search(request: RpcRequest<{
-    query: string;
-  }>, signal: AbortSignal): Promise<RpcResponse<{
-    items: SessionSearchItem[];
-    hasMore: boolean;
-  }>>;
-  /**
-   * Creates a real session and its idle agent. At most one of `workspaceId` /
-   * `cwd` is accepted; an omitted project uses the Host cwd. A caller may
-   * preallocate `sessionId`: retries with the same id and cwd return the same
-   * session, while a different cwd fails with `session-conflict`. Workspace
-   * creation attaches the session after publication; an attach failure
-   * returns `workspace-attach-failed` with the published session id.
-   *
-   * `agentPreset` names the composition the new session's agent is built
-   * from; omitted, the effective default applies — the user's stored choice
-   * where one exists, else the deployment's own. The resolved id is stored on
-   * the session header, so a later resume rebuilds the same agent. An unknown
-   * id fails with `agent-preset-not-found`, and a preset whose composition
-   * cannot be mounted fails with `agent-preset-invalid`.
-   */
-  create(request: RpcRequest<{
-    workspaceId?: WorkspaceId;
-    cwd?: string;
-    sessionId?: SessionId;
-    agentPreset?: string;
-  }>): Promise<RpcResponse<{
-    sessionId: SessionId;
-    agentPreset?: string;
-  }>>;
-  /**
-   * Reads a window of history events; page boundaries align to append-origin message
-   * boundaries: one page = all raw events owned by a whole number of such messages (including
-   * their chunk / tool events), never cut mid-message. Model-only replacement copies consume no
-   * `maxMessages`, so a compaction's `compaction/summary` record stays on the page of its replacement. The tail
-   * page (beforeSeq absent) additionally carries the in-flight
-   * partial — chunk events already emitted for the last unfinalized message.
-   * Each entry pairs the raw SessionEvent with the host-computed view (tool events whose
-   * presenter produced one, evaluated against the registry at pagination time); the client
-   * rebuilds the surface from the events with the shared fold.
-   * The tail page — and only the tail page — additionally carries `projections`
-   * when the deployment mounts the session-projection registry: every moment
-   * the client needs a fresh baseline already pulls the tail page, and
-   * loadOlder (the only beforeSeq path) is the only path that never needs one.
-   * A deployment without the registry serves histories without the block.
-   * Reading history uses an attached Session or persistence inspection and
-   * never resumes or publishes an Agent.
-   */
-  history(request: RpcRequest<{
-    sessionId: SessionId;
-    beforeSeq?: number;
-    maxMessages?: number;
-  }>): Promise<RpcResponse<{
-    events: HistoryEntry[];
-    hasMore: boolean;
-    projections?: SessionProjectionsBlock;
-  }>>;
-  /**
-   * Reads a fresh advisory model directory for an ordinary session. Provider
-   * lookups run independently; subagents reject with `agent-busy`.
-   */
-  models(request: RpcRequest<{
-    sessionId: SessionId;
-  }>): Promise<RpcResponse<SessionModels>>;
-  /**
-   * Selects the complete model selection for this session. Exact model metadata
-   * validates an optional reasoning effort, while catalog membership remains
-   * advisory. Session-backed subagents reject with `agent-busy`.
-   */
-  selectModel(request: RpcRequest<{
-    sessionId: SessionId;
-    provider: string;
-    model: string;
-    reasoningEffort?: string;
-  }>): Promise<RpcResponse<{
-    selected: ModelSelection;
-  }>>;
-  /**
-   * Renames a session: appends a `session/title` event with the `user`
-   * source, which pins the title against automatic regeneration. The
-   * normalized accepted title and the title event's seq return so the caller
-   * can settle its projection cell without waiting for the push frame. A
-   * title that normalizes to empty fails with `title-invalid`.
-   * Session-backed subagents reject with `agent-busy`.
-   */
-  rename(request: RpcRequest<{
-    sessionId: SessionId;
-    title: string;
-  }>): Promise<RpcResponse<{
-    title: string;
-    seq: number;
-  }>>;
-  /**
-   * Sends a message. content is core's ContentBlock[] verbatim; mode maps 1:1 — queue→send, steer→steer.
-   * A prompt whose content is exactly one text block starting with '/' is a slash command: the host
-   * executes it through the command registry (mode-agnostic) and it is never sent to the model. A
-   * successful command returns ok with the command slot (its success text, when the command produced
-   * one — carried for future rendering; the state change is the feedback). A usage/state error is an
-   * RPC error with code command-error; an unrecognized name is an RPC error with code unknown-command.
-   */
-  /**
-   * Forks a new session from a completed-turn prefix of the source. `atSeq`
-   * anchors the cut: the boundary is the first `turn/end` at or after it
-   * (a message's fork button passes the message seq, so the fork includes
-   * that whole turn); a boundary past the log end, or an omitted `atSeq`,
-   * falls back to the source's last completed turn. An in-log anchor whose
-   * turn is still open fails with `fork-unavailable` instead of clipping to
-   * an earlier turn. The child inherits the source cwd, latest logged model
-   * target and `parentSessionId` lineage; the seed prefix carries the source
-   * title. Reading the source uses attached state or persistence inspection
-   * without acquiring an Agent. Workspace attachment follows the source
-   * directly, or the nearest workspace-owning ancestor when the source is a
-   * subagent.
-   */
-  fork(request: RpcRequest<{
-    sessionId: SessionId;
-    atSeq?: number;
-  }>): Promise<RpcResponse<{
-    sessionId: SessionId;
-  }>>;
-  /**
-   * Sends text and temporary image bytes to an ordinary session Agent after durable host admission.
-   * Browser callers attach their current IANA zone;
-   * the Host validates, canonicalizes, and records it on that exact user message. Omission remains
-   * valid for non-browser callers. Session-backed subagents reject with `agent-busy` and use
-   * `subagent.prompt`.
-   */
-  prompt(request: RpcRequest<{
-    sessionId: SessionId;
-    mode: 'queue' | 'steer';
-    content: PromptContentPart[];
-    clientTimeZone?: string;
-  }>): Promise<RpcResponse<{
-    accepted: true;
-    command?: {
-      kind: 'success';
-      text?: string;
-    };
-  }>>;
-  /** Reads one durable image after proving that this session's log references its id. */
-  attachment(request: RpcRequest<{
-    sessionId: SessionId;
-    attachmentId: AttachmentId;
-  }>): Promise<RpcResponse<{
-    attachment: ImageAttachmentRef;
-    data: string;
-  }>>;
-  /**
-   * Edits, removes, or strictly steers one pending queued occurrence on an ordinary session.
-   * Session-backed subagents reject with `agent-busy`.
-   */
-  updateQueue(request: RpcRequest<{
-    sessionId: SessionId;
-    itemId: MessageId;
-    action: QueueAction;
-  }>): Promise<RpcResponse<{
-    accepted: true;
-  }>>;
-  /**
-   * Stops an ordinary session's active turn, preserving pending inbox work
-   * that resumes in FIFO order after cancellation settles. Session-backed
-   * subagents reject with `agent-busy`.
-   */
-  cancel(request: RpcRequest<{
-    sessionId: SessionId;
-  }>): Promise<RpcResponse<{
-    accepted: true;
-  }>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/host.d.ts
-/** One directory row of a listing: a child entry or a breadcrumb ancestor. */
-interface DirectoryEntry {
-  /** Base name shown in a browser row (a root crumb carries its full path). */
-  name: string;
-  /** Absolute host path — the client never joins path segments itself. */
-  path: string;
-  /** Hidden by the host platform's convention (dot-prefixed on POSIX); the client owns whether to show it. */
-  hidden: boolean;
-}
-/** host.listDirectory response value: one directory level plus its ancestry. */
-interface DirectoryListing {
-  /** Absolute path of the listed directory. */
-  path: string;
-  /** The host account's home directory (breadcrumb "Home" rooting). */
-  home: string;
-  /**
-   * Ancestor chain from the filesystem root to the listed directory
-   * inclusive; every crumb is a jump target (crumb `hidden` is always false).
-   */
-  crumbs: DirectoryEntry[];
-  /** Direct child directories, name-sorted; symlinks to directories included. */
-  entries: DirectoryEntry[];
-  /** True when the backend cut `entries` at its complete-result bound (the name-sorted tail is absent). */
-  truncated: boolean;
-}
-/** Host-level unary methods. */
-interface HostApi {
-  /**
-   * One-shot host snapshot. Empty payload uses the literal `{}` (extend in place when fields arrive).
-   * version = the host app's (apps/cli) package.json version; cwd = the host process working
-   * directory (root for session persistence and tool execution); provider/model = the defaults
-   * applied when a new agent doesn't specify them explicitly, absent when the host configures
-   * no explicit default (the adapter falls back internally);
-   * attachedSessions = count of currently attached sessions (those with a live agent);
-   * canOpenPath = whether this deployment can hand a path to a user-visible native desktop.
-   */
-  describe(request: RpcRequest<{}>): Promise<RpcResponse<{
-    version: string;
-    cwd: string;
-    provider?: string;
-    model?: string;
-    attachedSessions: number;
-    canOpenPath: boolean;
-  }>>;
-  /**
-   * Open the operating system's single-directory picker; cancellation returns
-   * null. Only served under the `native` capability.
-   */
-  pickDirectory(request: RpcRequest<{}>, signal: AbortSignal): Promise<RpcResponse<{
-    path: string | null;
-  }>>;
-  /**
-   * List one directory level for the in-app browser; an absent path lists the
-   * host account's home directory. Only served under the `browse` capability;
-   * unreadable or missing targets fail with `directory-unreadable`. The
-   * carrier's request signal follows the caller, stopping the backend's scan
-   * on disconnect or timeout.
-   */
-  listDirectory(request: RpcRequest<{
-    path?: string;
-  }>, signal: AbortSignal): Promise<RpcResponse<DirectoryListing>>;
-  /**
-   * Create one child directory under an existing parent (the browser's
-   * "New folder"). Only served under the `browse` capability; an existing
-   * child fails with `directory-exists`, every other filesystem failure with
-   * `directory-create-failed`.
-   */
-  createDirectory(request: RpcRequest<{
-    path: string;
-    name: string;
-  }>): Promise<RpcResponse<{
-    path: string;
-  }>>;
-  /**
-   * Open a filesystem path with the operating system's default application
-   * (Finder / Explorer / xdg-open hand-off). The browser carrier's
-   * prefix-wide trust fence covers this privileged method like every other
-   * `/api` request.
-   */
-  openPath(request: RpcRequest<{
-    path: string;
-  }>, signal: AbortSignal): Promise<RpcResponse<{
-    opened: true;
-  }>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/agent-presets.d.ts
-/** One preset the deployment can compose a session's agent from. */
-interface AgentPresetEntry {
-  /** Stable identifier, also the display name until presets carry metadata. */
-  readonly id: string;
-  /**
-   * Whether the preset ships with the deployment or was authored locally.
-   * A `user` preset is exactly as privileged as the plugins it names, so a
-   * surface offering one should say so rather than present it as vetted.
-   */
-  readonly trust: 'system' | 'user';
-  /** Whether a session that names no preset gets this one. */
-  readonly isDefault: boolean;
-  /**
-   * Display name the preset published, absent when it published none. A
-   * surface falls back to {@link id}; it is never a second identity, and it
-   * never decides trust — a locally authored preset cannot name itself into
-   * the shipped set.
-   */
-  readonly name?: string;
-  /** One sentence on what the preset is for, when it published one. */
-  readonly description?: string;
-  /**
-   * Why this preset cannot compose a session, absent when it can. A broken
-   * preset stays listed — its directory still occupies the id, so a surface
-   * must be able to show and delete it — but offering it for selection would
-   * only defer this reason to a failed session start.
-   */
-  readonly broken?: string;
-}
-/** agent-preset-domain unary methods (the map key agentPreset.* of RpcMethodMap). */
-interface AgentPresetsApi {
-  /**
-   * Lists every preset the deployment currently supplies, in root-precedence
-   * order — the roots as configured, each root's own presets sorted by id,
-   * and the first root to supply an id wins. The order is not globally
-   * sorted: a user root's preset sits in that root's block, not among the
-   * shipped ids.
-   * An empty roster means the deployment composes no presets at all, and
-   * every session shares the host composition. `authorable` reports whether
-   * the deployment configures a root new presets can be written to, and
-   * `hasDocument` whether `openDocument` can hand a preset directory to a
-   * native opener — both deployment facts rather than per-preset ones, and
-   * neither exposes a Host path.
-   */
-  list(request: RpcRequest<{}>): Promise<RpcResponse<{
-    presets: readonly AgentPresetEntry[];
-    authorable: boolean;
-    hasDocument: boolean;
-  }>>;
-  /**
-   * Recompose one session's agent from a different preset.
-   *
-   * Allowed only while the session is blank — no turn has run. Once a
-   * conversation starts, its history was produced under that preset's tools,
-   * and swapping them would leave logged tool calls the new composition cannot
-   * make; the attempt answers `agent-preset-locked`.
-   */
-  select(request: RpcRequest<{
-    sessionId: SessionId;
-    agentPreset: string;
-  }>): Promise<RpcResponse<{
-    agentPreset: string;
-  }>>;
-  /**
-   * Read one preset's composition text, for the read-only viewer.
-   *
-   * Privileged: a composition names the plugins a session runs, so reading
-   * one is reconnaissance.
-   */
-  read(request: RpcRequest<{
-    agentPreset: string;
-  }>): Promise<RpcResponse<{
-    agentPreset: string;
-    trust: 'system' | 'user';
-    content: string;
-    name?: string;
-    description?: string;
-  }>>;
-  /**
-   * Create a locally authored preset by copying an existing one whole.
-   *
-   * The only authoring write. No composition text and no path crosses the
-   * wire: `from` and `agentPreset` are ids the Host resolves against its own
-   * roots, so a copy is exactly as loadable as its source and grants nothing
-   * the roster did not already carry. The copy keeps the source's description
-   * (the file is the author's to edit afterwards) but not its name — `name`
-   * here or the id fallback is what distinguishes the rows.
-   */
-  copy(request: RpcRequest<{
-    from: string;
-    agentPreset: string;
-    name?: string;
-  }>): Promise<RpcResponse<{
-    agentPreset: string;
-  }>>;
-  /**
-   * Hand one locally authored preset's DIRECTORY to the platform opener, for
-   * editing the files that are now the only composition editor. The request
-   * carries an id, never a path — the Host resolves it — so no browser
-   * payload can select an arbitrary filesystem target. Where the deployment
-   * has no native opener (`hasDocument: false` on `list`), the reply carries
-   * the resolved directory for the surface to show as text instead. Shipped
-   * presets are refused: their install is not the user's to manage.
-   */
-  openDocument(request: RpcRequest<{
-    agentPreset: string;
-  }>, signal: AbortSignal): Promise<RpcResponse<{
-    opened: true;
-  } | {
-    opened: false;
-    path: string;
-  }>>;
-  /** Delete a locally authored preset. Shipped presets are refused. */
-  remove(request: RpcRequest<{
-    agentPreset: string;
-  }>): Promise<RpcResponse<{}>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/skills.d.ts
-/** Skill catalog row (wire projection of the host SkillSummary; provider/source vocabulary stays host-side). */
-interface SkillEntry {
-  /** Kebab-case identifier the user references as `/name` in the composer. */
-  readonly name: string;
-  /** Short routing description. */
-  readonly description: string;
-  /** Optional extra routing guidance. */
-  readonly whenToUse?: string;
-  /** False marks a user-only skill (`disable-model-invocation`): invocable here, absent from the model catalog. */
-  readonly modelInvocable: boolean;
-}
-/**
- * Skill-domain unary methods (the map key skill.* of RpcMethodMap). Listing
- * is the domain's only RPC: invocation itself is a plain `session.prompt`
- * whose leading `/name` token the host recognizes at the pre-step boundary
- * (`dsh-tool-skill` injects the rendered body there), so every client shares
- * one deterministic path with no dedicated invocation wire.
- */
-interface SkillsApi {
-  /** Lists the user-invocable skill catalog for the session's project. */
-  list(request: RpcRequest<{
-    sessionId: SessionId;
-  }>): Promise<RpcResponse<{
-    skills: readonly SkillEntry[];
-  }>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/subagents.d.ts
-/** Complete durable direct-child catalog row. */
-type SubagentListEntry = {
-  kind: 'child';
-  id: SessionId;
-  /** Whether the child Agent driver is running at the Host sampling boundary. */
-  activity: 'running' | 'inactive';
-  /** Whether a direct descendant has durable `origin: 'subagent'`. */
-  hasChildren: boolean;
-} & ({
-  mode: 'one-shot';
-  label?: string;
-} | {
-  mode: 'continuable';
-  label: string;
-}) | {
-  kind: 'diagnostic';
-  id: SessionId;
-  reason: 'corrupt' | 'unsupported' | 'unavailable';
-};
-/** Inbox identity returned once the continuation accepts one human message. */
-interface SubagentPromptReceipt {
-  messageId: MessageId;
-}
-/** Uniform acknowledgement that one interrupt request was admitted. */
-interface SubagentInterruptReceipt {
-  accepted: true;
-}
-/** Durable parent/child address that selects subagent transport in the client. */
-type SubagentAddress = {
-  parentSessionId: SessionId;
-  childSessionId: SessionId;
-} & ({
-  mode: 'one-shot';
-} | {
-  mode: 'continuable';
-});
-/** Complete direct-child catalog plus the delivery-time parent availability hint. */
-interface SubagentCatalog {
-  entries: SubagentListEntry[];
-  parentAvailable: boolean;
-}
-/** Subagent-domain unary methods. */
-interface SubagentsApi {
-  /**
-   * Lists direct session-backed children without loading either side. Parent
-   * availability is a hint; continuable prompt performs the authoritative
-   * check.
-   */
-  list(request: RpcRequest<{
-    parentSessionId: SessionId;
-  }>, signal?: AbortSignal): Promise<RpcResponse<SubagentCatalog>>;
-  /**
-   * Reads one healthy catalog child's transcript — the in-memory snapshot of
-   * a live child, the persisted log of a cold one — with ordinary
-   * message-aligned pagination and render intents, without Agent activation.
-   */
-  history(request: RpcRequest<SubagentAddress & {
-    beforeSeq?: number;
-    maxMessages?: number;
-  }>, signal?: AbortSignal): Promise<RpcResponse<{
-    events: HistoryEntry[];
-    hasMore: boolean;
-    projections?: SessionProjectionsBlock;
-  }>>;
-  /**
-   * Delivers human content to a continuable child through the exact live
-   * parent's continuation owner. Success identifies the message accepted by
-   * the child's FIFO inbox; later execution is independent of this request.
-   * Optional browser-zone provenance is validated and logged on that message.
-   */
-  prompt(request: RpcRequest<Extract<SubagentAddress, {
-    mode: 'continuable';
-  }> & {
-    content: ContentBlock[];
-    /** Optional browser zone sampled for this exact human prompt. */
-    clientTimeZone?: string;
-  }>, signal: AbortSignal): Promise<RpcResponse<SubagentPromptReceipt>>;
-  /**
-   * Interrupts a live continuable child's current turn under the address's
-   * durable direct-parent authority, without requiring a live parent Agent,
-   * consulting the catalog, or resuming anything. Fire-and-return: `accepted`
-   * acknowledges the admitted cancel signal, not target quiescence, so the
-   * child may remain visibly running briefly. Unclaimed queued follow-ups are
-   * kept and parked; an absent, idle, or already-completed target is likewise
-   * `accepted`.
-   */
-  interrupt(request: RpcRequest<Extract<SubagentAddress, {
-    mode: 'continuable';
-  }>>): Promise<RpcResponse<SubagentInterruptReceipt>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/goals.d.ts
-/** Identifies one goal across its durable revisions. */
-type GoalId = Branded<'GoalId'>;
-/** Compare-and-set identity for one exact goal revision. */
-interface GoalRef {
-  readonly id: GoalId;
-  readonly revision: number;
-}
-/**
- * Goal-domain unary methods. Every mutation resolves an ordinary session's
- * Agent and applies one CAS-guarded verb; session-backed subagents reject with
- * `agent-busy`.
- */
-interface GoalsApi {
-  /** Create and arm a goal. */
-  create(request: RpcRequest<{
-    sessionId: SessionId;
-    objective: string;
-    maxGoalRounds?: number;
-  }>): Promise<RpcResponse<{
-    ref: GoalRef;
-  }>>;
-  /** Edit objective and/or round cap without changing phase. */
-  edit(request: RpcRequest<{
-    sessionId: SessionId;
-    ref: GoalRef;
-    objective?: string;
-    maxGoalRounds?: number;
-  }>): Promise<RpcResponse<{
-    ref: GoalRef;
-  }>>;
-  /** Pause an active goal and disarm automatic continuation. */
-  pause(request: RpcRequest<{
-    sessionId: SessionId;
-    ref: GoalRef;
-  }>): Promise<RpcResponse<{
-    ref: GoalRef;
-  }>>;
-  /** Resume and arm a stopped goal. */
-  resume(request: RpcRequest<{
-    sessionId: SessionId;
-    ref: GoalRef;
-  }>): Promise<RpcResponse<{
-    ref: GoalRef;
-  }>>;
-  /** Mark a current non-complete goal complete and disarm it. */
-  complete(request: RpcRequest<{
-    sessionId: SessionId;
-    ref: GoalRef;
-  }>): Promise<RpcResponse<{
-    ref: GoalRef;
-  }>>;
-  /** Clear the current goal while retaining a durable tombstone and history. */
-  clear(request: RpcRequest<{
-    sessionId: SessionId;
-    ref: GoalRef;
-  }>): Promise<RpcResponse<{
-    cleared: true;
-  }>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/settings.d.ts
-/** One schema-declared secret slot inside a redacted namespace value. */
-interface SettingsSecretView {
-  /** Path from the section root to the removed field. */
-  path: string[];
-  /** Whether the slot currently holds a value (the value itself never rides). */
-  set: boolean;
-}
-/** Wire view of one registered settings namespace. */
-interface SettingsNamespaceView {
-  /** Namespace key (`llm-deepseek`, `llm-pi-ai`, …). */
-  ns: string;
-  /** Serialized schemastery schema envelope (`schema.toJSON()`); rehydrate with `new Schema(json)`. */
-  schema: unknown;
-  /** Redacted resolved value (schema defaults → composition base → user layer). */
-  value: unknown;
-  /** Redacted composition base layer, when the registrant declared one. */
-  base?: unknown;
-  /** Redacted raw user section, when one exists; a field's presence here marks it user-overridden. */
-  user?: unknown;
-  /** When the owner applies changes. */
-  applies: 'live' | 'restart';
-  /** Every schema-declared secret slot with its configured state. */
-  secrets: SettingsSecretView[];
-  /**
-   * Monotonic revision of the raw user section this view was read at. Send it
-   * back as `expectedRevision` on a write so a stale editor is refused rather
-   * than silently overwriting a concurrent change.
-   */
-  revision: number;
-}
-/**
- * One path-addressed edit carried by `settings.mutate`. `set` writes the
- * value at the path (creating intermediate objects); `unset` removes it. The
- * empty path addresses the section root.
- */
-type SettingsPathOpView = {
-  op: 'set';
-  path: string[];
-  value: unknown;
-} | {
-  op: 'unset';
-  path: string[];
-};
-/** Settings-domain unary methods (the map keys settings.* of RpcMethodMap). */
-interface SettingsApi {
-  /**
-   * Describe every registered namespace: redacted layered values plus the
-   * serialized schema a client renders its form from. `hasDocument` reports
-   * whether a file-backed provider owns a local document without exposing its
-   * Host path. This method is loopback-only; `writable: false` (read-only
-   * provider) tells the client to disable every write control.
-   */
-  describe(request: RpcRequest<{}>): Promise<RpcResponse<{
-    writable: boolean;
-    hasDocument: boolean;
-    namespaces: SettingsNamespaceView[];
-  }>>;
-  /**
-   * Materialize the configured local document when absent and ask the Host to
-   * hand it to the platform text-document opener. macOS forces a text editor;
-   * Linux and Windows use the desktop file association. The request carries
-   * no path, so the browser cannot choose an arbitrary Host filesystem target.
-   */
-  openDocument(request: RpcRequest<{}>, signal: AbortSignal): Promise<RpcResponse<{
-    opened: true;
-  }>>;
-  /**
-   * Merge a patch into one namespace's user layer (validate → persist →
-   * commit). Secret-role fields may be INCLUDED in the patch (write-only
-   * direction); a form that leaves a secret untouched simply omits it and the
-   * merge preserves the stored value. Responds with the namespace's new
-   * redacted view; a schema or storage rejection is `settings-rejected`.
-   */
-  update(request: RpcRequest<{
-    ns: string;
-    patch: object;
-    expectedRevision?: number;
-  }>): Promise<RpcResponse<SettingsNamespaceView>>;
-  /**
-   * Replace one namespace's user section wholesale — the removal/reset path a
-   * merge cannot express (`section: {}` resets to composition defaults). Keys
-   * absent from `section` are dropped, secrets included: a client must first
-   * fold the descriptor's `user` layer (and re-supply any secret it wants to
-   * keep) or accept the reset.
-   */
-  replace(request: RpcRequest<{
-    ns: string;
-    section: object;
-    expectedRevision?: number;
-  }>): Promise<RpcResponse<SettingsNamespaceView>>;
-  /**
-   * Apply path-addressed edits to one namespace's user section, resolved
-   * against the section as stored — NOT against whatever the caller last
-   * read. This is the removal path for any client holding the redacted
-   * descriptor: it names the field it means, so a secret the wire never
-   * returned cannot be deleted as a side effect. `replace` remains the
-   * deliberate wholesale reset.
-   */
-  mutate(request: RpcRequest<{
-    ns: string;
-    ops: SettingsPathOpView[];
-    expectedRevision?: number;
-  }>): Promise<RpcResponse<SettingsNamespaceView>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/credentials.d.ts
-/** Wire view of one credential reference's state. */
-interface CredentialView {
-  /** Whether any layer currently supplies a non-empty value. */
-  configured: boolean;
-  /** Winning layer when configured (`env`, `file`, …); provider vocabulary. */
-  source?: string;
-  /** Whether `credentials.set`/`credentials.unset` can affect this reference. */
-  writable: boolean;
-}
-/** Credentials-domain unary methods (the map keys credentials.* of RpcMethodMap). */
-interface CredentialsApi {
-  /**
-   * Describe the named references (batch): configured state, winning source,
-   * and writability — never values. An invalid reference name is a
-   * `bad-request`; an unknown-but-valid one describes as unconfigured.
-   */
-  describe(request: RpcRequest<{
-    refs: string[];
-  }>): Promise<RpcResponse<{
-    credentials: Record<string, CredentialView>;
-  }>>;
-  /**
-   * Store one credential value in the writable layer. Rejected with
-   * `credential-rejected` while a read-only layer (the live environment)
-   * shadows the reference — the write would otherwise appear to succeed while
-   * resolution keeps returning the shadowing value.
-   */
-  set(request: RpcRequest<{
-    ref: string;
-    value: string;
-  }>): Promise<RpcResponse<{}>>;
-  /**
-   * Remove one credential from the writable layer; same shadowing rejection
-   * as `set`. Unsetting an absent reference succeeds (idempotent).
-   */
-  unset(request: RpcRequest<{
-    ref: string;
-  }>): Promise<RpcResponse<{}>>;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/llm.d.ts
-/** Wire view of one configurable provider. */
-interface ConfigurableProviderView {
-  /** Provider route key (`deepseek-official`, `openai`, …). */
-  provider: string;
-  /** Human-readable name for configuration surfaces. */
-  displayName: string;
-  /** Settings namespace whose section configures this provider. */
-  settingsNs: string;
-  /** Path from that section's root to the provider's profile object (empty = whole section). */
-  settingsPath: string[];
-  /** Whether the route is currently registered (its models are requestable). */
-  active: boolean;
-  /**
-   * Whether the owning adapter knows this route only because configuration
-   * declared it. Absent when the adapter draws no such distinction, so a
-   * surface must treat absence as "unknown", not as "shipped".
-   */
-  declared?: boolean;
-}
-/** Llm-domain unary methods (the map keys llm.* of RpcMethodMap). */
-interface LlmApi {
-  /**
-   * List every configurable provider with its live/dormant state, in
-   * directory declaration order. Routes registered outside the directory
-   * (an adapter that never declared configurability) are appended with their
-   * registration identity and no settings address.
-   */
-  providers(request: RpcRequest<{}>): Promise<RpcResponse<{
-    providers: ConfigurableProviderView[];
-  }>>;
-  /**
-   * Host-scoped model catalog over every registered provider route: the
-   * settings surface's models view, needing no session. Per-provider listing
-   * failures ride `failures` without failing the sound groups.
-   */
-  models(request: RpcRequest<{}>): Promise<RpcResponse<{
-    groups: ModelProviderGroup[];
-    failures: ModelCatalogFailure[];
-  }>>;
-  /**
-   * Interrogate a provider endpoint the configuration surface is still
-   * drafting, and return the models it advertises for the user to adopt.
-   *
-   * The payload is the draft, not a stored route: `settingsNs` selects the
-   * adapter family that answers, and the rest comes from the form. `provider`
-   * names the route being edited when there is one — an adapter that already
-   * describes that route answers from its own registry, with better metadata
-   * and no network call, and needs no endpoint. A route it does not describe is
-   * asked over the wire, which is what `baseURL`, `api`, and `apiKey` are for.
-   *
-   * Nothing is written — the reply is candidates, and only a later
-   * `settings.mutate` decides what a route serves. `apiKey` is accepted here
-   * but never stored or returned; a provider whose key is already stored omits
-   * it and the endpoint answers unauthenticated or refuses.
-   */
-  discoverModels(request: RpcRequest<{
-    settingsNs: string;
-    provider?: string;
-    baseURL?: string;
-    api?: string;
-    apiKey?: string;
-  }>, signal?: AbortSignal): Promise<RpcResponse<{
-    models: DiscoveredModelView[];
-  }>>;
-}
-/** Wire view of one model an interrogated endpoint advertises. */
-interface DiscoveredModelView {
-  /** Model id the endpoint accepts. */
-  id: string;
-  /** Human-readable name when the endpoint supplies one. */
-  name?: string;
-  /** Maximum combined request and response context, when disclosed. */
-  contextWindow?: number;
-  /** Maximum output tokens, when disclosed. */
+/** Merge-extensible agent creation options. Persona belongs to system-prompt sections. */
+interface AgentOptions {
+  /** Provider route (must have a registered adapter at call time). */
+  provider?: string;
+  /** Model id interpreted by the selected provider adapter. */
+  model?: string;
+  /** Adapter-owned reasoning effort for the selected provider/model route. */
+  reasoningEffort?: ReasoningEffortId;
+  /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number;
 }
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/downloads.d.ts
-/** Host-only download surfaces (no wire envelope; absent from IApiClient). */
-interface DownloadsApi {
+/** Options for {@link Agent.cancel}. */
+interface CancelOptions {
   /**
-   * Stream one session-log ZIP — the root artifact verbatim plus each subagent
-   * descendant's — as an attachment response. The carrier's GET route answers
-   * this directly; the browser never calls it.
-   * @param request - the root session id and whether to include descendants.
-   * @param signal - cancellation for the underlying reads.
-   * @returns the ZIP attachment response; missing services answer 500 and a
-   * missing root session 404 before any byte is produced.
+   * Preserve queued and steering inbox items instead of discarding them. The
+   * active turn is still aborted, but un-started and pending work survives for a
+   * later turn and no canceled inbox splice is logged.
    */
-  sessionLog(request: {
-    sessionId: SessionId;
-    includeDescendants?: boolean;
-  }, signal: AbortSignal): Promise<Response>;
+  keepInbox?: boolean | undefined;
+}
+/**
+ * An agent's lifecycle state, emitted on every transition as `agent/status`:
+ * `idle` means no driver is active; `running` begins when waking input starts
+ * cancellable pre-step processing and lasts while the driver drains,
+ * closes, or checkpoints turns. Disposal removes the agent from its registry;
+ * it is not a third observable status.
+ */
+type AgentStatus = 'idle' | 'running';
+/** Whether and with which messages the loop enters a proposed step. */
+type PreStepDecision = {
+  kind: 'reject';
+} | {
+  kind: 'enter';
+  messages: UserMessage[];
+  /** Start a distinct model-message series before this step's admitted messages. */
+  startsRequestSeries?: true;
+};
+/** Action returned by a listener that owns model-request recovery. */
+type RequestErrorAction = {
+  kind: 'retry';
+} | undefined;
+/** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
+type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact';
+declare module './types.ts' {
+  interface Agent {
+    /** The provider route and model this agent's requests use. */
+    readonly options: AgentOptions;
+    /** The live session this agent drives; its log is the durable source of truth. */
+    readonly session: Session;
+    /** The agent-owned projection of durable pending work. */
+    readonly inbox: Inbox;
+    /** The current lifecycle state, mirrored on every `agent/status` transition. */
+    readonly status: AgentStatus;
+    /** Agent-scoped context; its contributions are agent-local, unwind on disposal, and reject registration afterward. */
+    readonly ctx: Context;
+    /**
+     * Clear queued and steering work — unless `keepInbox` — and abort the active
+     * turn or between-turn task. The first cause wins for that activity. With no
+     * active activity, cancellation is a no-op and does not arm later work.
+     * @param cause - the stable caller intent carried by the active operation signal.
+     * @param options - cancellation options; `keepInbox` preserves pending work.
+     */
+    cancel(cause: AgentCancelCause, options?: CancelOptions): void;
+    /**
+     * Resolve after the current whole-agent activity reaches quiescence. This
+     * follows replacement work started before the observed driver retires,
+     * but does not identify the settlement of any particular message.
+     * @returns fulfillment after no active driver or maintenance task remains.
+     */
+    whenIdle(): Promise<void>;
+    /**
+     * Run one non-turn maintenance task from the true idle phase. The task starts
+     * synchronously after claiming that phase; later waking input remains in the
+     * inbox until the task settles, while public status stays `idle`.
+     * `whenIdle()` follows both the task and any waking work released behind it.
+     * @param task - operation whose fulfillment or rejection is preserved, with a signal aborted by {@link cancel}.
+     * @throws synchronously when turn-driving or another maintenance task already owns the agent.
+     * @returns the task promise.
+     */
+    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;
+    /**
+     * Route identified input to an inbox boundary and optionally wake the driver.
+     * Waking input submitted after active cancellation is queued for the next
+     * turn and runs when the aborted activity converges to idle; a `disposed`
+     * cancel leaves it parked. A wake submitted while already idle always opens
+     * its turn boundary, even when its message is cleared before the driver
+     * claims ([cancel-convergence wake latch](../../../../.agents/notes/implemented/bug-fix/2026-08-07-cancel-convergence-wake-latch.md)).
+     * @param message - identified content and the source that supplied it.
+     * @param target - the preferred next-turn or next-step inbox boundary.
+     * @param wakeup - whether delivery may wake the driver.
+     */
+    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void;
+    /**
+     * Queue an ordinary follow-up turn and wake the driver. The item becomes the
+     * sole ordinary message of its own turn.
+     * @param message - identified prompt content and the source that supplied it.
+     */
+    followup(message: UserMessage): void;
+    /**
+     * Submit steering for the nearest step. An idle driver starts a turn;
+     * a running driver consumes it at its next step boundary.
+     * A rejected step leaves steering parked in the inbox until the next
+     * wake; cancellation or disposal may discard pending steering.
+     * @param message - identified steering content and the source that supplied it.
+     */
+    steer(message: UserMessage): void;
+    /**
+     * Queue model-facing context for the next pre-step without waking the
+     * driver. A running driver claims it at the nearest later step boundary;
+     * idle drivers leave it pending until follow-up or steering
+     * wakes them. It may miss a request whose pre-step already claimed its
+     * batch. Cancellation or disposal may discard pending context.
+     * @param message - identified injected context and the source that supplied it.
+     */
+    inject(message: UserMessage): void;
+  }
+}
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * A fully configured agent and live session were published. Setup is
+     * composition-only; `agent/session-start` is the first startup-driving extension point.
+     * Synchronous listener failure vetoes publication, while returned-promise
+     * rejection is reported. Detach requested during dispatch waits until every
+     * creation listener has observed the stable entry.
+     * @param payload.agent - the newly registered agent with its live session and completed setup.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/created'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+    }): void;
+    /**
+     * An agent left the registry; AgentLoop emits this after driver quiescence
+     * and scoped-registration unwind, but before session detachment. Custom
+     * registry users own their driver-ordering contract.
+     * @param payload.agent - the exact agent removed from the registry.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/disposed'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+    }): void;
+    /**
+     * Agent status changed (`idle` ⇄ `running`). A waking delivery enters
+     * `running` synchronously after reserving cancellation; `idle` means no
+     * driver remains scheduled or active.
+     * @param payload.agent - the agent whose status flipped.
+     * @param payload.status - the status just entered (the transition's destination).
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/status'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      status: AgentStatus;
+    }): void;
+    /**
+     * One message entered the live inbox.
+     * @param payload.agent - the agent whose inbox changed.
+     * @param payload.message - the inserted message.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/inbox/inserted'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      message: UserMessage;
+    }): void;
+    /**
+     * One message left the inbox inside its open turn. If the proposed step
+     * is rejected, the claimed message ends here: it is neither discarded nor
+     * re-emitted as a user/message, and the turn closes without a step.
+     * @param payload.agent - the agent whose inbox changed.
+     * @param payload.message - the claimed message.
+     * @param payload.turn - the owning turn.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/inbox/claimed'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      message: UserMessage;
+      turn: number;
+    }): void;
+    /**
+     * One message was discarded from the live inbox.
+     * @param payload.agent - the agent whose inbox changed.
+     * @param payload.message - the discarded message.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/inbox/discarded'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      message: UserMessage;
+    }): void;
+    /**
+     * The session lifecycle began, once before the first turn. Use
+     * `agent.inject()` to seed model-facing context. This is a notification, not
+     * a veto; disposal requested by a lifecycle owner is rechecked before the
+     * driver starts.
+     * @param payload.agent - the agent whose session lifecycle began.
+     * @param payload.source - why the session started (fresh startup, resume, …).
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/session-start'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      source: SessionStartSource;
+    }): void;
+    /**
+     * Reject a proposed step or replace the messages that enter it. Calling
+     * `next()` preserves the current messages.
+     * @param payload.agent - the agent proposing the step.
+     * @param payload.messages - messages removed from the inbox for this step.
+     * @param payload.turn - the turn that will own the step.
+     * @param payload.step - the step proposed by the loop.
+     * @param payload.signal - the current turn's cancellation signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode waterfall
+     */
+    'agent/pre-step'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      messages: UserMessage[];
+      turn: number;
+      step: number;
+      signal: AbortSignal;
+    }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>;
+    /**
+     * Replace the frozen call configuration. `await next()` yields the config
+     * the machine would use (agent options on the first request, the logged
+     * header afterwards); return a replacement to switch. Model-visible
+     * content must use logged channels; this waterfall cannot mutate messages.
+     * @param payload.agent - the agent making the model call.
+     * @param payload.turn - the open turn number.
+     * @param payload.step - the step whose request this is.
+     * @param payload.signal - the current turn's explicit abort signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode waterfall
+     */
+    'agent/request'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      turn: number;
+      step: number;
+      signal: AbortSignal;
+    }, next: () => Promise<LlmCallConfig>): Promise<LlmCallConfig>;
+    /**
+     * Handle one failed model-request attempt before the loop retries or closes
+     * its step. A listener returns `{ kind: 'retry' }` without calling `next()`
+     * when it owns recovery, or calls `next()` to delegate. The default
+     * `undefined` leaves the failure terminal.
+     * @param payload.agent - the agent whose request failed.
+     * @param payload.turn - the turn containing the failed request.
+     * @param payload.step - the step containing the failed request attempt.
+     * @param payload.provider - the provider selected for the failed request.
+     * @param payload.failure - serializable facts normalized at the final adapter boundary.
+     * @param payload.retryPolicy - the policy of the adapter registration that served the failed request.
+     * @param payload.signal - the turn abort signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode waterfall
+     */
+    'agent/request-error'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      turn: number;
+      step: number;
+      provider: string;
+      failure: LlmFailure;
+      retryPolicy: ResolvedRetryPolicy | undefined;
+      signal: AbortSignal;
+    }, next: () => Promise<RequestErrorAction>): Promise<RequestErrorAction>;
+    /**
+     * The turn is about to close: the model owes no response (no live tool
+     * calls, no fresh steering). Awaited before the boundary commits — a
+     * listener that objects steers (`agent.steer(...)`) and the machine
+     * re-reads its inbox: fresh steering runs another step, none closes the
+     * turn. Data decides, so listener order cannot change the outcome. The
+     * inverse control (stop a tool loop early) is data too: a tool result
+     * carrying `concludesTurn` ends the turn at its step. The conclusion
+     * never short-circuits already-submitted next-step work: same-step
+     * `additionalContexts` or racing steering still runs, and the turn
+     * closes only when that inbox drains.
+     * @param payload.agent - the agent whose turn is at its stop boundary.
+     * @param payload.turn - the turn about to close.
+     * @param payload.signal - the current turn's explicit abort signal.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode serial
+     */
+    'agent/turn-stopping'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      turn: number;
+      signal: AbortSignal;
+    }): Promise<void> | void;
+    /**
+     * A step or turn errored. The machine reports a failure here even when
+     * the error has no in-turn position for a durable record.
+     * @param payload.agent - the agent whose turn errored.
+     * @param payload.turn - the turn in which the failure surfaced.
+     * @param payload.step - the step at which the failure surfaced.
+     * @param payload.error - the failure, verbatim.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/error'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      turn: number;
+      step: number;
+      error: unknown;
+    }): void;
+  }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-host-apiproxy@0.1.0-rc.6_75a967487b33638129ad9d469d84f0d5/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/types/api/index.d.ts
-/** Root interface of the unified API. New client-request domain = one new file pair + one field here + one map row. */
-interface ApiProxy {
-  sessions: SessionsApi;
-  subagents: SubagentsApi;
-  host: HostApi;
-  workspace: WorkspaceApi;
-  skills: SkillsApi;
-  agentPresets: AgentPresetsApi;
-  events: EventsApi;
-  goals: GoalsApi;
-  settings: SettingsApi;
-  credentials: CredentialsApi;
-  llm: LlmApi;
-  /** Host-only download surfaces (GET, no wire envelope); absent from IApiClient. */
-  downloads: DownloadsApi;
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-alpha.3_a8c52ae09efda0e213edf7d94ec2cf32/node_modules/@deepseek-ai/dsh-agent/lib/types/projection.d.ts
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** The agent session's open/last turn and step boundary facts (whole value). */
+    turnBoundary: TurnBoundaryProjection;
+  }
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-system-prompt@0.0.1-rc.5_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-in_5831c9b31f51328830591aefc92a645f/node_modules/@deepseek-ai/dsh-system-prompt/lib/types/index.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    systemPrompt: SystemPrompt;
+  }
+  interface Events {
+    /**
+     * Expert waterfall over the assembled sections, contexts, tools, and variables.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): scoped listeners
+     * receive only that scope's assemblies. The returned value is authoritative.
+     * A supplied signal controls only this explicit assembly request and must not
+     * be retained to control later turns. A registered complete section is
+     * restored after this waterfall, so listeners cannot add to or replace
+     * that scope's system prompt.
+     * @param assembly - the mutable assembly built from registered providers.
+     * @param context - the caller's per-assembly context.
+     * @mode waterfall
+     */
+    'system-prompt/assemble'(this: Scoped<SystemPrompt>, assembly: PromptAssembly, context: AssembleContext, next: () => Promise<PromptAssembly>): Promise<PromptAssembly>;
+    /**
+     * Emitted when any prompt provider changes. This registry notification is
+     * unfiltered because a global change affects every scope.
+     * @mode emit
+     */
+    'system-prompt/change'(): void;
+  }
+}
+/** Merge-extensible context for one prompt assembly. */
+interface AssembleContext {
   /**
-   * Response entry for server requests; not a domain method.
-   * @param message - Client response carrying the server request's rpcId.
-   * @returns Transport receipt for the response delivery.
+   * Scope whose providers and waterfall listeners participate. When absent,
+   * only global providers and subject-less listeners participate.
    */
-  respond(message: ClientResponse): Promise<RpcReceipt>;
+  scope?: ScopeKey;
+  /** Explicit control signal for the turn that requested this assembly, when any. */
+  signal?: AbortSignal;
+}
+/** One contributed section of the system prompt (registry input). */
+interface PromptSection {
+  /** Unique name — a duplicate registration throws (see {@link SystemPrompt.section}). */
+  readonly name: string;
+  /**
+   * Sections are concatenated in ascending order. Convention: `-100` is the
+   * harness identity, `0` the deployment persona, tool guidance uses 100–199;
+   * other negative orders also render before the persona.
+   */
+  readonly order: number;
+  /**
+   * Static text or a provider evaluated at each assembly with that assembly's
+   * {@link AssembleContext}. The text may reference `{{variable}}`s — they are
+   * interpolated later, by {@link renderPrompt}.
+   */
+  readonly text: string | ((context: AssembleContext) => string);
+  /**
+   * Treat this contribution as the complete system prompt. Assembly still
+   * runs the cooperative waterfall so tools, contexts, and variables can be
+   * resolved, then restores this exact section as the sole prompt section.
+   * More than one effective complete section makes assembly fail.
+   */
+  readonly complete?: boolean;
+}
+/** Dynamic model context materialized as a durable user-role snapshot. */
+interface PromptContext {
+  /** Unique name — a duplicate registration throws (see {@link SystemPrompt.context}). */
+  readonly name: string;
+  /** Contexts are joined in ascending order. */
+  readonly order: number;
+  /** Static text or a provider evaluated for each assembly. Empty text contributes nothing. */
+  readonly text: string | ((context: AssembleContext) => string);
+}
+/** One section of an assembly: {@link PromptSection} with its text resolved. */
+interface AssembledSection {
+  /** The contributing section's unique name. */
+  name: string;
+  /** The resolved (but not yet interpolated) section text. */
+  text: string;
+}
+/** One resolved dynamic context contribution. */
+interface AssembledContext {
+  /** The contributing context's unique name. */
+  name: string;
+  /** The resolved text before variable interpolation. */
+  text: string;
+}
+/** Tool schemas visible in one assembly and their pre-restriction name set. */
+interface ToolProviderResult {
+  /** The schemas this provider contributes to THIS assembly. */
+  readonly schemas: readonly ToolSchema[];
+  /** The pre-restriction name universe for config validation (defaults to `schemas`' names). */
+  readonly knownNames?: readonly string[];
+}
+/**
+ * Merge-extensible assembled model input. Sections and contexts remain
+ * uninterpolated until rendered; tools are already in canonical order.
+ */
+interface PromptAssembly {
+  sections: AssembledSection[];
+  contexts: AssembledContext[];
+  tools: ToolSchema[];
+  variables: Record<string, string | undefined>;
+}
+/** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.persona} for its contract). */
+interface Config$3 {
+  /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
+  includeHarnessIdentity?: boolean;
+  /**
+   * Deployment-wide order-0 persona template. A scoped section named
+   * `deployment:persona` shadows it; `{{variable}}` references are strict.
+   */
+  persona?: string;
+  /**
+   * Model-facing tool names in order, with {@link TOOL_ORDER_REST} exactly once.
+   * Invalid fields fail at load and unknown names fail at assembly; known names
+   * hidden in one scope may be absent there. Omitted means lexicographic order.
+   */
+  toolOrder?: string[];
+}
+/** Registry service for the prompt inputs assembled before each model step. */
+declare class SystemPrompt extends Service {
+  static Config: Schema<Config$3>;
+  private readonly layers;
+  private readonly toolOrder;
+  constructor(ctx: Context, config: Config$3);
+  /**
+   * Register an ordered prompt section in the calling context's scope. A scoped
+   * section shadows a global section with the same name; duplicates within one
+   * layer and non-finite orders throw. Registration and disposal emit
+   * `system-prompt/change`.
+   * @param section - the section to register.
+   * @returns the exact Cordis effect disposer.
+   */
+  section(section: PromptSection): () => void;
+  /**
+   * Register ordered dynamic context in the calling context's scope. Scoped
+   * entries shadow global entries with the same name.
+   * @param context - the context contribution to register.
+   * @returns the exact Cordis effect disposer.
+   */
+  context(context: PromptContext): () => void;
+  /**
+   * Register a tool-schema provider in the calling context's scope. Global and
+   * matching scoped providers both contribute; returning the reserved
+   * {@link TOOL_ORDER_REST} name makes assembly fail.
+   * @param provider - evaluated for each assembly with its context.
+   * @returns the exact Cordis effect disposer.
+   */
+  tools(provider: (context: AssembleContext) => ToolProviderResult): () => void;
+  /**
+   * Register a prompt variable in the calling context's scope. Scoped values
+   * shadow globals; invalid or duplicate names throw. A provider may return
+   * `undefined`, but rendering a section that references that value then fails.
+   * @param name - the `[a-z][a-z0-9_]*` reference name.
+   * @param provider - evaluated for each assembly.
+   * @returns the exact Cordis effect disposer.
+   */
+  variable(name: string, provider: (context: AssembleContext) => string | undefined): () => void;
+  /**
+   * Assemble global and scoped providers, detach tool parameters, apply
+   * canonical ordering, then run the assembly waterfall. Scoped sections and
+   * variables shadow globals. The returned waterfall value is authoritative
+   * except that an effective complete section is restored afterwards as the
+   * sole prompt section.
+   * @param context - the optional scope and plugin-defined assembly fields.
+   * @returns the post-waterfall assembly with any complete prompt enforced.
+   */
+  assemble(context?: AssembleContext): Promise<PromptAssembly>;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-alpha.3_a8c52ae09efda0e213edf7d94ec2cf32/node_modules/@deepseek-ai/dsh-agent/lib/types/index.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    agents: AgentRegistry;
+    /**
+     * The agent association installed as an own property on `Agent.ctx`, or
+     * `undefined` on a plain context. Contexts derived from `Agent.ctx` inherit
+     * the association; a deliberately nested scope may carry a nearer
+     * `dsh-scope` tag while retaining it, so this field is DX context rather
+     * than the scope resolver. {@link AgentRegistry} registers a root accessor
+     * defaulting to `undefined`, and core packages below the agent layer use
+     * `scopeOf()` for layer selection instead of reading this field.
+     */
+    agent?: Agent;
+  }
+}
+/**
+ * Synchronous finalizer returned by unpublished Agent setup when its
+ * contributions need validation at the exact publication commit point.
+ */
+interface AgentSetupCommit {
+  /**
+   * Validate and commit the prepared setup immediately before publication.
+   * @throws when publication must roll the unpublished Agent back.
+   */
+  commit(): void;
+}
+/**
+ * Compose an unpublished Agent scope and optionally return its publication commit.
+ * @param agentCtx - unpublished Agent scope.
+ * @returns an optional synchronous commit invoked after setup awaits settle and immediately before publication.
+ */
+type AgentSetup = (agentCtx: Context) => AgentSetupCommit | Promise<AgentSetupCommit | void> | void;
+/**
+ * Options for programmatically creating an agent through the registry factory
+ * ({@link AgentRegistry.create}). The caller supplies the single live
+ * `sessionId` shared by the agent registry and session log (e.g. an
+ * ACP-generated id), plus optional session metadata (the validated `cwd`, fork
+ * lineage); the factory creates the session and agent under that identity.
+ */
+interface CreateAgentOptions {
+  /** The live agent/session identity. */
+  readonly sessionId: SessionId;
+  /**
+   * Session creation metadata: validated absolute `cwd`, `parentSession`
+   * fork lineage, the `seedLength` seed boundary, the coarse `origin`
+   * classification, and the `delegationDepth` recursion budget. Mirrors the
+   * `cwd`/`parentSession`/`seedLength`/`origin`/`delegationDepth` fields of
+   * {@link CreateSessionOptions.meta} in dsh-session (the internal-only
+   * `createdAt`, used when reconstructing a persisted session, is deliberately
+   * excluded — a factory caller never sets it). This is durable session data,
+   * so the session boundary validates and snapshots it before asynchronous
+   * setup begins.
+   */
+  readonly meta?: {
+    readonly cwd?: string;
+    readonly parentSession?: SessionId;
+    readonly seedLength?: number;
+    readonly origin?: 'subagent';
+    readonly delegationDepth?: number;
+    readonly agentPreset?: string;
+  };
+  /**
+   * Initial replay/fork history. A fork supplies a balanced completed-turn
+   * prefix of the parent's log. The complete seed must be contiguous from seq
+   * 0, carry only lossless-JSON data, and contain no open turn/step or dangling
+   * tool call. The factory passes it to the session's durable
+   * validator/snapshot boundary before publication.
+   */
+  readonly seed?: readonly SessionEvent[];
+  /** Per-agent options (model, …). */
+  readonly agentOptions?: AgentOptions;
+  /** Optional creation-only cancellation signal; detached before the returned handle becomes visible. */
+  readonly signal?: AbortSignal;
+  /**
+   * Creation-time composition of the agent's scoped world. The factory awaits
+   * setup after minting `agentCtx` but BEFORE inserting or announcing either
+   * the session or agent, so observers can never see a partially configured
+   * world. Setup may return an {@link AgentSetupCommit}; the factory invokes its
+   * synchronous `commit()` after every setup await settles and immediately
+   * before registry publication. This lets mutable provisioning revalidate at
+   * the exact publication boundary. Everything registered through `agentCtx`
+   * (scoped tools, prompt sections/variables, `restrict()`, listeners, awaited
+   * child plugins) exists before `session/created`, `agent/created`,
+   * `agent/session-start`, and the first prompt assembly. A setup
+   * throw/rejection, commit throw, or owner disposal rolls the scope back
+   * without publishing either id.
+   *
+   * **Setup composes, it never drives**: the callback is trusted same-process
+   * code and receives the full scoped context, so this is a contract rather
+   * than a runtime restriction. Drive the agent only after creation resolves.
+   */
+  readonly setup?: AgentSetup;
+}
+/**
+ * Options for resuming an agent on a persisted session
+ * ({@link AgentRegistry.resume}).
+ */
+interface ResumeAgentOptions {
+  /** The persisted session id to load and use as the live agent/session identity. */
+  readonly resumeSessionId: SessionId;
+  /** Per-agent options (model, …). */
+  readonly agentOptions?: AgentOptions;
+  /** Optional creation-only cancellation signal for persistence load/setup; detached before return. */
+  readonly signal?: AbortSignal;
+  /**
+   * Resume-time composition of the agent's fresh scoped world. Persistence is
+   * loaded first; the factory then mints `agentCtx` and awaits setup while the
+   * reconstructed session and agent remain unpublished. The callback has the
+   * same trusted composition-only contract and optional synchronous
+   * publication commit as {@link CreateAgentOptions.setup}: all registrations
+   * exist before either creation announcement, and rejection, commit failure,
+   * or owner disposal rolls the transaction back without publishing either id.
+   */
+  readonly setup?: AgentSetup;
+}
+/**
+ * An owned agent plus its disposer, returned by {@link AgentRegistry.create} /
+ * {@link AgentRegistry.resume}. The disposer is a CAPABILITY: among consumers,
+ * only the holder can tear this agent down. The registered factory provider is
+ * also a structural owner because the scoped agent depends on that provider's
+ * service API; provider unload stops and drains every live handle it made.
+ * `dispose()` stops the loop, awaits its exit, unregisters the agent, removes
+ * its session from the store, and finally unwinds its scoped world.
+ *
+ * `ctx.agents.get(id)` still returns a bare {@link Agent} — the handle is
+ * exposed only to the consumer owner that created it; the structural provider
+ * reaches the same teardown internally. Config-created agents (the loop's own
+ * startup) are owned by the loop fiber and never need a handle.
+ */
+interface AgentHandle {
+  agent: Agent;
+  dispose(): Promise<void>;
+}
+/**
+ * The agent-creation factory the loop implementation provides to the registry
+ * via {@link AgentRegistry.setFactory}. Kept on the `dsh-agent` interface so
+ * consumers (e.g. the ACP bridge) program against `ctx.agents` without
+ * depending on the concrete `dsh-agent-loop` package.
+ */
+interface AgentFactory {
+  /**
+   * Create a new agent on a caller-supplied session id. Async because creation
+   * awaits unpublished setup, invokes its optional synchronous commit, inserts
+   * both session and agent, emits their creation notifications in order, emits
+   * `agent/session-start`, and only then starts the loop. The sequence is
+   * rollback-covered, but notifications delivered before a later listener
+   * failure remain observable; every agent or session creation announcement
+   * that began is paired by `agent/disposed` or `session/disposed` during
+   * rollback. The owner disposes the resolved handle to stop/drain,
+   * unregister, remove the session, and unwind the scope.
+   * The registry passes a context carrying the `create()` caller's fiber and
+   * scope as `ownerCtx`. The implementation attaches the unpublished
+   * transaction and resulting lifecycle to that owner; it must not infer
+   * ownership from the factory object's registration context.
+   * @param ownerCtx - caller-bound context that owns the transaction and live handle.
+   * @param options - agent/session identity, configuration, and optional setup.
+   * @returns the owned handle after setup, both announcements, and loop start complete.
+   */
+  createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>;
+  /**
+   * Prepare a persisted session and resume an agent on it. Async because it awaits
+   * both `ctx.sessionPersistence.prepare` and the optional unpublished setup
+   * transaction; must be called after that service exists (consumers inject
+   * `sessionPersistence`). Publication follows the same setup-commit and
+   * ordered boundary as {@link createAgent}.
+   * @param ownerCtx - caller-bound context that owns load, setup, and the live handle.
+   * @param options - persisted identity, configuration, and optional setup.
+   * @returns the owned handle after setup, both announcements, and loop start complete.
+   */
+  resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>;
+}
+/**
+ * Agent service (`ctx.agents`): tracks live agents and carries the initiating
+ * Agent through one process-local asynchronous driver chain. Agent *creation*
+ * is provided by whichever plugin implements the {@link AgentFactory}
+ * (`@deepseek-ai/dsh-agent-loop`), registered via {@link setFactory}.
+ *
+ * Initiator methods provide same-process causal attribution only. Ambient
+ * presence is neither liveness proof nor authorization; subjects and owners
+ * remain explicit, as does identity at worker, process, persistence, and wire
+ * boundaries. Returned Promise boundaries drain during teardown, except a
+ * nested lineage that starts an owning-fiber unload is excluded from its own drain.
+ */
+declare class AgentRegistry extends Service {
+  private store;
+  private factory;
+  private readonly initiators;
+  private readonly initiatorRuns;
+  private initiatorState;
+  private activeInitiatorRuns;
+  private initiatorDrain;
+  private initiatorDisposal;
+  constructor(ctx: Context);
+  /**
+   * Read the Agent that initiated the inherited asynchronous driver chain.
+   * Use this optional form for logging, tracing, metrics, or host attribution
+   * that also supports agentless calls. When a parent creates a child, setup
+   * reports the causal parent while `agentCtx.agent` identifies the child.
+   * @returns the inherited Agent, or `undefined` outside an initiator boundary
+   *   and inside an explicit clearing boundary.
+   * @throws when this service instance has been disposed.
+   */
+  currentInitiator(): Agent | undefined;
+  /**
+   * Read the initiating Agent and fail when no initiator boundary is active.
+   * Use this for private helpers contractually below a driver, or for a
+   * deployment-owned outbound request whose contract forbids agentless calls.
+   * Generic or direct-call paths use optional lookup or explicit request fields.
+   * @returns the inherited Agent.
+   * @throws when no initiator is active or this service instance has been disposed.
+   */
+  requireInitiator(): Agent;
+  /**
+   * Run an operation with one exact Agent as its process-local initiator. The
+   * exact synchronous value or Promise returned by the operation is preserved.
+   * Custom drivers and test harnesses wrap their complete returned foreground
+   * lifetime.
+   * A queue or wire receiver may establish this boundary only after validating
+   * explicit identity and resolving the exact live Agent; this method does neither.
+   * Detached work remains owned by the subsystem that starts it.
+   * @param agent - initiating Agent to inherit; presence is neither liveness proof nor authorization.
+   * @param operation - synchronous or asynchronous operation to invoke.
+   * @returns the exact value returned by `operation`.
+   * @throws when the initiator scope is closing/disposed, or when `operation` throws.
+   */
+  withInitiator<T>(agent: Agent, operation: () => T): T;
+  /**
+   * Run an operation inside a boundary that hides any inherited initiating
+   * Agent. The exact synchronous value or Promise is preserved.
+   * Use this while creating lazy shared timers, queue pumps, pool maintenance,
+   * watchers, or exporters so they do not inherit the first Agent that happens
+   * to initialize them. It clears only initiator attribution, not explicit
+   * fields, and does not own or drain detached resources.
+   * @param operation - synchronous or asynchronous operation to invoke without an initiator.
+   * @returns the exact value returned by `operation`.
+   * @throws when the initiator scope is closing/disposed, or when `operation` throws.
+   */
+  withoutInitiator<T>(operation: () => T): T;
+  /**
+   * Register the agent-creation factory (the loop calls this on construction,
+   * effect-scoped). A traced Cordis service is canonicalized to its concrete
+   * target; each create/resume call is then traced through that caller's
+   * context so ownership follows the caller without stacking proxy layers.
+   * Throws if a factory is already registered. Returns the disposer; on
+   * dispose the factory slot is cleared.
+   * @param factory - the loop-owned factory {@link create}/{@link resume} delegate to.
+   * @returns the disposer that clears the factory slot. The exact
+   *   Cordis effect disposer (single-shot): composite (generator) effects may
+   *   yield it directly — exact identity nests the teardown in order.
+   */
+  setFactory(factory: AgentFactory): () => void;
+  /** Return the active creation factory. */
+  private requireFactory;
+  /**
+   * Create and publish a new agent through the registered factory.
+   * Distinct from {@link register} (which records an already-constructed
+   * agent): this constructs the agent and its session. Rejects if no factory is
+   * registered or creation/setup fails. The resolved {@link AgentHandle} lets
+   * the owner tear down exactly this agent.
+   * @param options - shared identity, session seed/metadata, and agent options.
+   * @returns the handle after setup, rollback-covered publication, and loop start complete.
+   */
+  create(options: CreateAgentOptions): Promise<AgentHandle>;
+  /**
+   * Load a persisted session and resume an agent on it through the registered
+   * factory. Rejects if no factory is registered; the factory rejects if
+   * session persistence is not configured or persistence/setup fails.
+   * @param options - persisted identity, configuration, and optional setup.
+   * @returns the handle after setup, rollback-covered publication, and loop start complete.
+   */
+  resume(options: ResumeAgentOptions): Promise<AgentHandle>;
+  /**
+   * Register a live agent. Throws if an agent with the same id is already
+   * registered. Emits `agent/created` on registration and `agent/disposed`
+   * when the calling fiber is disposed — both with the agent's scope carrier
+   * (`scopeTarget(agent, agent)`): the subject is the agent in hand, so the
+   * emits are scope-filtered regardless of which context invoked `register`
+   * (calling through `agent.ctx` scopes EFFECTS; dispatch scoping always
+   * requires passing the carrier). Returns the disposer.
+   * @param agent - the already-constructed agent to record in the store.
+   * @returns the EXACT Cordis effect disposer (single-shot; a repeat call
+   *   returns undefined without awaiting an in-flight teardown). Exact
+   *   identity is load-bearing: a composite (generator) effect that owns a
+   *   teardown ORDER — the agent factory's lifecycle chain — must yield THIS
+   *   function so Cordis nests the unregistration at that yield position;
+   *   yielding a wrapper would leave it disposing as a concurrent sibling on
+   *   owner unload, unregistering the agent (and emitting `agent/disposed`)
+   *   while its final turn is still draining.
+   */
+  register(agent: Agent): () => void;
+  /**
+   * Insert an already-constructed agent without announcing it. This is the
+   * advanced ordered-lifecycle primitive used by the async agent factory: it
+   * first completes setup while the agent is unpublished, then assigns the
+   * returned detach closure into its pre-installed composite teardown before
+   * calling {@link announce}. Ordinary callers use {@link register}.
+   * @param agent - the prepared, unpublished agent.
+   * @param owner - live agent whose scoped context created this agent, or
+   *   undefined for a top-level runtime root. This is runtime ownership, not
+   *   the resumed session's durable parent lineage.
+   * @returns an idempotent closure that removes this exact entry and emits
+   *   `agent/disposed` with listener failures contained. When called from a
+   *   synchronous `agent/created` listener, removal and disposal wait until
+   *   that creation dispatch unwinds.
+   */
+  enter(agent: Agent, owner: Agent | undefined): () => void;
+  /** Remove one exact entered agent and emit its paired disposal when announced. */
+  private detachEntered;
+  /** Emit the paired disposal edge through the entry's stable carrier. */
+  private emitDisposed;
+  /**
+   * Announce an agent previously inserted with {@link enter}.
+   * @param agent - the live inserted agent to announce.
+   * @throws if `agent` is not the exact live registry entry for its id, or its
+   *   creation announcement already began (including a reentrant call from a
+   *   creation listener).
+   */
+  announce(agent: Agent): void;
+  /**
+   * Look up a live agent.
+   * @param id - the shared agent/session id to look up.
+   * @returns the agent, or undefined when no live agent has that id.
+   */
+  get(id: SessionId): Agent | undefined;
+  /**
+   * Test whether a live agent was created through one exact parent agent's
+   * scoped context. Runtime ownership is independent of durable session
+   * lineage and remains unambiguous when unrelated providers reuse an id.
+   * @param id - the candidate child agent's shared agent/session id.
+   * @param owner - the expected runtime creator agent.
+   * @returns true only while the exact child entry is live under that owner.
+   */
+  isOwnedBy(id: SessionId, owner: Agent): boolean;
+  /**
+   * All live agents, in registration order.
+   * @returns a fresh array; mutating it does not affect the registry.
+   */
+  list(): Agent[];
+  /**
+   * All live top-level agents in registration order. A top-level agent was
+   * created without an owning agent context; durable session lineage does not
+   * affect this runtime relation, so a resumed fork may still be a root.
+   * @returns a fresh array; mutating it does not affect the registry.
+   */
+  roots(): Agent[];
+  /** Reject new initiator boundaries while inherited continuations drain. */
+  private closeInitiators;
+  /** Wait for returned-Promise boundaries, then invalidate retained references. */
+  private disposeInitiators;
+  /** Establish one tracked initiator or clearing boundary. */
+  private runWithInitiator;
+  /** Whether one unloading fiber owns this service's lifecycle. */
+  private hasLifecycleAncestor;
+  private assertInitiatorsReadable;
+  /** Exclude the boundary chain that initiated this teardown from its own drain. */
+  private releaseReentrantInitiatorRuns;
+  private releaseInitiatorRun;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-title@0.1.2-alpha.3_f6d4d75efe6f0e8a78576e08931600dd/node_modules/@deepseek-ai/dsh-session-title/lib/types/types.d.ts
+/** Identifies one session-title provider registration. */
+type SessionTitleProviderId$1 = Branded<'SessionTitleProviderId'>;
+/** Exact auxiliary model route that produced a title. */
+interface SessionTitleModelProvenance {
+  /** Registered LLM provider route. */
+  readonly provider: string;
+  /** Provider model id. */
+  readonly model: string;
+}
+/** Durable ownership record for an accepted session title. */
+type SessionTitleSource = {
+  readonly kind: 'fallback';
+} | {
+  readonly kind: 'provider';
+  readonly provider: SessionTitleProviderId$1;
+  readonly model?: SessionTitleModelProvenance;
+} | {
+  /** Explicit user rename: pins the title — automatic generation stops scheduling. */
+  readonly kind: 'user';
+};
+/** Payload of the log-only `session/title` event. */
+interface SessionTitleEventData {
+  /** Normalized non-empty title text. */
+  readonly title: string;
+  /** Exact human `user/message` seqs used to derive this title; empty for an explicit user rename. */
+  readonly messageSeqs: number[];
+  /** Whether the built-in fallback, a registered provider, or the user supplied the title. */
+  readonly source: SessionTitleSource;
+}
+/** Latest folded title plus the title event's durable envelope facts. */
+interface SessionTitleSnapshot extends SessionTitleEventData {
+  /** Seq of the latest `session/title` event. */
+  readonly eventSeq: number;
+  /** Timestamp of the latest `session/title` event. */
+  readonly updatedAt: number;
+}
+/** One eligible human text message exposed to title providers. */
+interface SessionTitleUserMessage {
+  /** Source `user/message` event seq. */
+  readonly seq: number;
+  /** Exact concatenated text-block content. */
+  readonly text: string;
+}
+/** Eligible title input stored as a bounded aggregate. */
+interface TitleInputState {
+  /** The oldest eligible message, or null before any. */
+  readonly first: SessionTitleUserMessage | null;
+  /** Total eligible messages folded so far. */
+  readonly count: number;
+  /** Seq of the newest eligible message, or null before any. */
+  readonly lastSeq: number | null;
+}
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** Latest logged title text, or null. */
+    title: string | null;
+    /** Eligible human title input. */
+    titleInput: TitleInputState;
+  }
+  interface SessionProjectionMap {
+    /**
+     * The session's current normalized title — the latest `session/title`
+     * event's text (last-wins), or `null` before the first title lands. A
+     * plain string: the shape the client list rows consume.
+     */
+    title: string | null;
+  }
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-title@0.1.2-alpha.3_f6d4d75efe6f0e8a78576e08931600dd/node_modules/@deepseek-ai/dsh-session-title/lib/types/index.d.ts
+/** Identifies one session-title provider registration. */
+type SessionTitleProviderId = Branded<'SessionTitleProviderId'>;
+/**
+ * Brand a raw provider id.
+ * @param id - stable non-empty provider identifier supplied by a plugin.
+ * @returns the same string with the session-title provider brand.
+ */
+declare function SessionTitleProviderId(id: string): SessionTitleProviderId;
+/** Required deterministic fallback and accepted-title limits. */
+interface Config$2 {
+  /** Maximum whitespace-delimited words in the built-in fallback. */
+  readonly fallbackMaxWords: number;
+  /** Maximum UTF-8 bytes in the built-in fallback. */
+  readonly fallbackMaxBytes: number;
+  /** Maximum UTF-8 bytes in any accepted title. */
+  readonly maxTitleBytes: number;
+}
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    sessionTitle: SessionTitleService;
+  }
+}
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /**
+     * Latest-wins session title snapshot. Log-only: it never enters the model
+     * surface or derived history.
+     */
+    'session/title': SessionTitleEventData;
+  }
+}
+/** Automatic generation cadence owned by a registered provider. */
+type SessionTitleAutomaticMode = 'first-prompt' | 'all-prompts';
+/** Immutable input supplied to one title-provider call. */
+interface SessionTitleProviderRequest {
+  /** Live session being titled. */
+  readonly session: Session;
+  /** All eligible human messages through this generation revision. */
+  readonly messages: readonly SessionTitleUserMessage[];
+  /** Exact current logged main-request route, when one has been recorded. */
+  readonly route?: SessionTitleModelProvenance;
+  /** Cancellation for supersession, disposal, timeout composition, or the explicit caller. */
+  readonly signal: AbortSignal;
+}
+/** Provider output before service-owned normalization and log acceptance. */
+interface SessionTitleProviderResult {
+  /** Proposed title text. */
+  readonly title: string;
+  /** Exact seqs from `request.messages` used by this result. */
+  readonly messageSeqs: readonly number[];
+  /** Auxiliary LLM route, when generation used a model. */
+  readonly model?: SessionTitleModelProvenance;
+}
+/** One optional asynchronous title implementation registered with the service. */
+interface SessionTitleProvider {
+  /** Stable id of the provider recorded with the title. */
+  readonly id: SessionTitleProviderId;
+  /** When new human prompts start automatic generation. */
+  readonly automatic: SessionTitleAutomaticMode;
+  /**
+   * Produce one title revision.
+   * @param request - message snapshot, current route, session, and cancellation.
+   * @returns proposed title plus exact input seqs and the optional provider/model route used to generate it.
+   */
+  generate(request: SessionTitleProviderRequest): Promise<SessionTitleProviderResult>;
+}
+/** Log-backed title fold plus asynchronous fallback generation. */
+declare class SessionTitleService extends Service {
+  static inject: string[];
+  static Config: Schema<Config$2>;
+  private readonly config;
+  private readonly ownerFiber;
+  private registration;
+  private readonly work;
+  private readonly lifetime;
+  private readonly inFlight;
+  constructor(ctx: Context, config: Config$2);
+  /**
+   * Read the latest folded title from one live or replayed session.
+   * @param session - session whose log is the title source of truth.
+   * @returns latest title snapshot, or `undefined` before eligible input.
+   */
+  get(session: Session): SessionTitleSnapshot | undefined;
+  /**
+   * Accept an explicit user title. Appends a `session/title` event with the
+   * `user` source, which pins the title: in-flight automatic generation is
+   * superseded and later user messages schedule none (an explicit
+   * {@link SessionTitleService.refresh} remains the deliberate unpin).
+   * @param session - exact live session to rename.
+   * @param title - raw user input; normalized before acceptance.
+   * @returns the accepted title snapshot.
+   * @throws {SessionTitleInvalidError} when the title normalizes to empty.
+   * @throws {Error} when the session is not live or the service is disposed.
+   */
+  rename(session: Session, title: string): SessionTitleSnapshot;
+  /**
+   * Explicitly retry the registered provider, or materialize the built-in
+   * fallback when no provider is registered.
+   * @param session - exact live session to refresh.
+   * @param signal - optional caller cancellation.
+   * @returns latest accepted title, or `undefined` when no eligible text exists.
+   */
+  refresh(session: Session, signal?: AbortSignal): Promise<SessionTitleSnapshot | undefined>;
+  /**
+   * Register the sole optional title provider. Disposal aborts its pending and
+   * active work before another provider may register.
+   * @param provider - provider identity, cadence, and generation function.
+   * @returns exact Cordis effect disposer, which settles after active calls quiesce.
+   */
+  register(provider: SessionTitleProvider): () => Promise<void>;
+  /** Schedule fallback creation and any provider cadence for one eligible event. */
+  private onUserMessage;
+  /** Start pending automatic work only after its exact main-request route is logged. */
+  private onRequestHeader;
+  /** Start unchanged-route work from the marked loop request after its header fold is current. */
+  private onMainRequest;
+  /** Consume one pending revision and schedule its non-blocking provider call. */
+  private startPending;
+  /** Start one tracked provider call after publishing its active revision. */
+  private startProvider;
+  /** Execute and accept one current provider revision. */
+  private runProvider;
+  /** Validate and normalize provider output against the supplied message snapshot. */
+  private validateResult;
+  /** Fail a completion whose provider, revision, session, or signal is stale. */
+  private assertCurrent;
+  /** Create and publish an active provider call from one fixed revision. */
+  private activate;
+  /** Abort older active work and reserve the next session-local revision. */
+  private supersede;
+  /** Return mutable work state for one session. */
+  private stateFor;
+  private titleInputOf;
+  /** Queue detached service work and retain it through service disposal. */
+  private defer;
+  /** Retain one promise until settlement for service and optional provider teardown. */
+  private track;
+  /** Await every current and settling promise in one lifecycle registry. */
+  private drain;
+  /** Whether the owning plugin fiber can still start or commit title work. */
+  private serviceActive;
+  /** Reject work once the owning plugin fiber has begun unloading. */
+  private assertServiceActive;
+  /** Reject malformed provider registrations before publishing an effect. */
+  private validateProvider;
+  /**
+   * Derive and append the deterministic fallback title over whatever stands
+   * (the refresh unpin path: overwriting a pinned user title is the point).
+   * Synchronous on purpose — no await may separate derivation from append, so
+   * it needs neither ensureFallback's in-flight dedup nor its liveness
+   * re-check. An underivable fallback (empty after the caps) appends nothing.
+   */
+  private appendFallback;
+  /** Create the first deterministic fallback if the session still lacks a title. */
+  private ensureFallback;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-alpha.3_bee117ed55e56dae4f83ba4a7fdf2d18/node_modules/@deepseek-ai/dsh-session-query/lib/types/cursor.d.ts
+/** Provider-owned opaque continuation token returned by session search. */
+type SessionSearchCursor = Branded<'SessionSearchCursor'>;
+/**
+ * Brand an encoded provider cursor for the public search contract.
+ * @param value - opaque encoded cursor value.
+ * @returns the same runtime string with session-search cursor identity.
+ */
+declare function SessionSearchCursor(value: string): SessionSearchCursor;
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-alpha.3_bee117ed55e56dae4f83ba4a7fdf2d18/node_modules/@deepseek-ai/dsh-session-query/lib/types/types.d.ts
+/** Whether an event is current model context, replaced context, or raw-log-only. */
+type SessionEventSurface = 'current' | 'shadowed' | 'log-only';
+/** Lightweight identity and source availability for one logical session. */
+interface SessionRecord {
+  /** Cloned session header selected from the live-preferred corpus. */
+  header: SessionHeader;
+  /** Whether the id currently exists in `ctx.sessions`. */
+  live: boolean;
+  /** Whether the active persistence backend currently materializes the id. */
+  persisted: boolean;
+}
+/** One atomic live-preferred observation of a session's current model surface. */
+interface SessionSurfaceSnapshot {
+  /** Cloned session header selected from the same corpus observation as `events`. */
+  session: SessionHeader;
+  /** Highest raw-log seq included in the observation, or `null` for an empty log. */
+  capturedThroughSeq: number | null;
+  /** Cloned current surface events in model-history order. */
+  events: SurfaceEvent[];
+}
+/** One validated detached observation of a logical session's complete raw log. */
+interface SessionLogSnapshot {
+  /** Cloned session header selected from the same observation as `events`. */
+  session: SessionHeader;
+  /** Cloned contiguous raw events after persistence repair and replay validation. */
+  events: SessionEvent[];
+}
+/** Lightweight metadata for one event within a logical session. */
+interface SessionEventRecord {
+  /** Session that owns the event. */
+  sessionId: SessionId;
+  /** Monotonic event seq within the session. */
+  seq: number;
+  /** Discriminant of the session event. */
+  type: SessionEventType;
+  /** Event timestamp in Unix epoch milliseconds. */
+  time: number;
+  /** Event placement in the folded session surface. */
+  surface: SessionEventSurface;
+}
+/** Recursive descendant node in a session-lineage trace. */
+interface SessionLineageNode {
+  /** Detached logical-corpus record for this descendant. */
+  session: SessionRecord;
+  /** Direct children, each carrying its own recursive descendants. */
+  descendants: SessionLineageNode[];
+}
+/** Known ancestry and descendants for one logical session. */
+type SessionLineageTrace = {
+  /** Detached record for the session that was traced. */
+  target: SessionRecord;
+  /** Known parents from the immediate parent outward. */
+  ancestors: SessionRecord[];
+  /** Complete known descendant trees rooted at the target's direct children. */
+  descendants: SessionLineageNode[];
+} & ({
+  /** The complete parent chain is present in the logical corpus. */
+  complete: true;
+  /** Detached record at the top of the complete lineage. */
+  root: SessionRecord;
+} | {
+  /** The parent chain leaves the visible logical corpus. */
+  complete: false;
+  /** First parent id that is not present in the logical corpus. */
+  unresolvedParentId: SessionId;
+});
+/** Request for direct surface replacements and relationships to cited source events around one event. */
+interface SessionEventTraceRequest {
+  /** Session that owns the target event. */
+  sessionId: SessionId;
+  /** Target event seq. */
+  seq: number;
+}
+/** Direct surface replacements and relationships to cited source events for one event. */
+interface SessionEventTrace {
+  /** Lightweight target record. */
+  target: SessionEventRecord;
+  /** Immediate positional replacement event, when the target was shadowed. */
+  replacedBy?: number;
+  /** Positional replacers from the immediate replacement to the final replacement. */
+  replacementChain: number[];
+  /** Surface nodes directly removed when the target itself performed a replacement. */
+  replacedEventSeqs: number[];
+  /** Earlier events cited directly as sources, in their recorded order. */
+  sourceEventSeqs: number[];
+  /** Later events that directly cite the target as a source, in log order. */
+  derivedEventSeqs: number[];
+}
+/** Event relationships bound to the same session-header observation. */
+interface SessionEventTraceObservation extends SessionEventTrace {
+  /** Cloned header selected with the event log used for the trace. */
+  session: SessionHeader;
+}
+/** Request for one event plus raw neighboring log context. */
+interface SessionEventReadRequest {
+  /** Session that owns the target event. */
+  sessionId: SessionId;
+  /** Target event seq. */
+  seq: number;
+  /** Number of preceding raw events to include. */
+  before?: number;
+  /** Number of following raw events to include. */
+  after?: number;
+}
+/** Full target event and a bounded raw-log window. */
+interface SessionEventWindow {
+  /** Cloned header for the live-preferred source read. */
+  session: SessionHeader;
+  /** Full cloned target event. */
+  target: SessionEvent;
+  /** Full cloned events from `startSeq` through `endSeq`. */
+  events: SessionEvent[];
+  /** First seq included in `events`. */
+  startSeq: number;
+  /** Last seq included in `events`. */
+  endSeq: number;
+}
+/** Latest folded title bound to the same session-header observation. */
+interface SessionTitleObservation {
+  /** Cloned header selected with the event log used for the title fold. */
+  session: SessionHeader;
+  /** Latest title snapshot, absent when the observed log has no title. */
+  title?: SessionTitleSnapshot;
+}
+/** One ordered result from a batch title observation. */
+type SessionTitleObservationResult = {
+  /** Requested session id. */
+  sessionId: SessionId;
+  /** Successful atomic header/title observation. */
+  status: 'fulfilled';
+  /** Header and optional latest title from one logical source. */
+  value: SessionTitleObservation;
+} | {
+  /** Requested session id. */
+  sessionId: SessionId;
+  /** Operational failure isolated to this session. */
+  status: 'rejected';
+  /** Original failure from logical-source resolution or title folding. */
+  reason: unknown;
+};
+/** Inclusive numeric interval used by time and sequence filters. */
+interface SessionResultRange {
+  /** Inclusive lower bound. */
+  from?: number;
+  /** Inclusive upper bound. */
+  to?: number;
+}
+/** Source availability predicates understood by logical-session filters. */
+type SessionAvailability = 'live' | 'persisted';
+/**
+ * One logical-session predicate. A filter array is ANDed; `values` within a
+ * clause are ORed.
+ */
+type SessionResultFilter = {
+  kind: 'id';
+  values: readonly SessionId[];
+} | {
+  kind: 'cwd';
+  values: readonly (string | null)[];
+} | ({
+  kind: 'created-at';
+} & SessionResultRange) | {
+  kind: 'parent';
+  values: readonly (SessionId | null)[];
+} | {
+  kind: 'availability';
+  values: readonly SessionAvailability[];
+};
+/**
+ * One event predicate. A filter array is ANDed; list-valued clauses are ORed.
+ * Text is a literal, case-insensitive, whitespace-flexible semantic-text scan.
+ */
+type SessionEventResultFilter = ({
+  kind: 'seq';
+} & SessionResultRange) | ({
+  kind: 'time';
+} & SessionResultRange) | {
+  kind: 'type';
+  values: readonly SessionEventType[];
+} | {
+  kind: 'surface';
+  values: readonly SessionEventSurface[];
+} | {
+  kind: 'text';
+  text: string;
+};
+/** Event predicates a full-text provider can apply before relevance ranking. */
+type SessionEventMetadataFilter = Exclude<SessionEventResultFilter, {
+  kind: 'text';
+}>;
+/** Searchable semantic document derived from one session event. */
+interface SessionEventSearchDocument extends SessionEventRecord {
+  /** First-party semantic text used by scan filters and full-text indexes. */
+  text: string;
+}
+/** One cursor-paginated result page. */
+interface SessionSearchPage<T> {
+  /** Results for this page in contract-defined order. */
+  items: readonly T[];
+  /** Opaque continuation cursor, absent on the final page. */
+  nextCursor?: SessionSearchCursor;
+}
+/** Event-search results bound to the indexed target-session observation. */
+interface SessionEventSearchPage extends SessionSearchPage<SessionEventSearchHit> {
+  /** Cloned target header from the same indexed generation as `items`. */
+  session: SessionHeader;
+}
+/** Controls shared by cross-session and within-session search calls. */
+interface SessionSearchExecContext {
+  /** Abort caller waiting and interrupt provider work where supported. */
+  signal?: AbortSignal;
+}
+/** Cross-session full-text search request. */
+interface SessionSearchRequest {
+  /** Full-text query interpreted as data, never executable FTS syntax. */
+  query: string;
+  /** Logical-session predicates applied before event ranking. */
+  sessionFilters?: readonly SessionResultFilter[];
+  /** Event predicates applied before event ranking. */
+  eventFilters?: readonly SessionEventMetadataFilter[];
+  /** Maximum sessions in this page. */
+  limit?: number;
+  /** Opaque cursor returned for the identical normalized request. */
+  cursor?: SessionSearchCursor;
+}
+/** Within-session full-text search request. */
+interface SessionEventSearchRequest {
+  /** Session whose live-preferred logical log is searched. */
+  sessionId: SessionId;
+  /** Full-text query interpreted as data, never executable FTS syntax. */
+  query: string;
+  /** Event predicates applied before ranking. */
+  filters?: readonly SessionEventMetadataFilter[];
+  /** Maximum events in this page. */
+  limit?: number;
+  /** Opaque cursor returned for the identical normalized request. */
+  cursor?: SessionSearchCursor;
+}
+/** One event full-text search hit with a bounded plain-text excerpt. */
+interface SessionEventSearchHit extends SessionEventRecord {
+  /** Plain text excerpt selected around the match. */
+  snippet: string;
+}
+/** One grouped cross-session hit, ranked by its strongest matching event. */
+interface SessionSearchHit extends SessionRecord {
+  /** Strongest matching event for this session. */
+  bestMatch: SessionEventSearchHit;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-alpha.3_bee117ed55e56dae4f83ba4a7fdf2d18/node_modules/@deepseek-ai/dsh-session-query/lib/types/config.d.ts
+/** Backend-independent configuration inherited by every session-query implementation. */
+interface Config$1 {
+  /** Maximum accepted raw read context on either side. Defaults to 50. */
+  readWindowMax?: number;
+  /** Maximum concurrent persisted-log inspections in one batch read. Defaults to 4. */
+  persistedInspectConcurrency?: number;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-persistence@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-_2ff43853e8ac4ca42afd9d351eece7e6/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/revision.d.ts
+/**
+ * Backend-owned token that identifies both one storage source and one revision
+ * of a persisted session log.
+ */
+type SessionPersistenceRevision = Branded<'SessionPersistenceRevision'>;
+/**
+ * Brand a backend revision for the provider-neutral persistence contract.
+ * @param value - backend-owned opaque revision representation.
+ * @returns the same runtime string with persistence-revision identity.
+ */
+declare function SessionPersistenceRevision(value: string): SessionPersistenceRevision;
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-persistence@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-_2ff43853e8ac4ca42afd9d351eece7e6/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/index.d.ts
+/** Lightweight immutable source identity returned without loading a full log. */
+interface SessionPersistenceSnapshot {
+  /** Detached metadata for one materialized session. */
+  header: SessionHeader;
+  /** Opaque source-qualified token that changes whenever this stored log changes. */
+  revision: SessionPersistenceRevision;
+}
+/** Immutable logical session prepared from persistence or a live owner. */
+interface SessionInspection {
+  /** Validated immutable session metadata. */
+  readonly meta: SessionHeader;
+  /** Validated contiguous logical event log. */
+  readonly events: readonly SessionEvent[];
+}
+/** A borrowed exact Session source returned from a cold materialization or concurrent live owner. */
+type BorrowedSessionSource = Disposable & ({
+  /** A reusable unpublished Session is pinned until this observation is disposed. */
+  readonly source: 'prepared';
+  /** Immutable header and logical event prefix observed together. */
+  readonly inspection: SessionInspection;
+  /** Durable revision represented by the prepared source. */
+  readonly revision: SessionPersistenceRevision;
+  /** Exact unpublished Session retained for a later {@link prepare}. */
+  readonly preparedSession: Session;
+} | {
+  /** A live Session won source resolution while the persistence read was starting. */
+  readonly source: 'live';
+  /** Immutable live header and event prefix observed together. */
+  readonly inspection: SessionInspection;
+});
+/** A backend's own raw artifact text for one session, verbatim. */
+interface SessionRawArtifact {
+  /** The session header parsed from the artifact's own first line. */
+  readonly meta: SessionHeader;
+  /** The artifact's base filename on disk, without any physical encoding suffix. */
+  readonly filename: string;
+  /** The artifact's full text content, decoded from the backend's physical encoding. */
+  readonly content: string;
+}
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    sessionPersistence: SessionPersistence;
+  }
+}
+/**
+ * A backend-resolved, per-session local artifact location. The path is an
+ * absolute target path and can name an artifact that has not materialized yet.
+ * Consumers must treat it as a location hint, never as an authorization token.
+ */
+interface SessionLocation {
+  /** Backend-specific artifact kind, for example `jsonl`. */
+  readonly kind: string;
+  /** Absolute path to this session's backend-owned artifact. */
+  readonly path: string;
+}
+/**
+ * Durable append-only session storage. Implementations preserve contiguous,
+ * losslessly JSON-serializable events; {@link append} resolves only after
+ * durability, and {@link load} balances a complete interrupted tail without
+ * rewriting committed events.
+ */
+declare abstract class SessionPersistence extends Service {
+  constructor(ctx: Context);
+  /**
+   * Resolve this backend's independent local artifact for a session without
+   * reading, creating, flushing, or otherwise materializing it. A backend
+   * that does not own one artifact per Session returns `undefined`.
+   * @param meta - the immutable session header whose artifact is requested.
+   * @returns the backend-specific absolute location, when one exists.
+   */
+  abstract locate(meta: SessionHeader): SessionLocation | undefined;
+  /**
+   * Whether this backend exposes one verbatim raw artifact per session.
+   * A backend that declares `true` must override {@link readRaw}.
+   */
+  abstract readonly supportsRawArtifacts: boolean;
+  /**
+   * Read a session's backend-owned artifact text verbatim — the exact durable
+   * bytes the backend wrote (decoded from its physical encoding, e.g. a
+   * decompressed JSONL). The returned `content` is the raw text, not a
+   * reconstruction from parsed events, so it preserves backend-specific
+   * serialization (chunk packing, key order, line breaks). Callers first test
+   * {@link supportsRawArtifacts}; `undefined` then means only that the requested
+   * session has no materialized artifact.
+   * @param _id - the persisted session to read (unused by the default: no
+   * per-session artifact).
+   * @param signal - optional cancellation for backend read work.
+   * @returns the raw artifact plus its parsed header, or `undefined` when the
+   * session is absent.
+   * @throws when this backend does not expose per-session raw artifacts.
+   */
+  readRaw(_id: SessionId, signal?: AbortSignal): Promise<SessionRawArtifact | undefined>;
+  /**
+   * Register a new session's metadata. A backend MAY defer the physical write
+   * until the first {@link append} (lazy materialization), in which case a
+   * created-but-never-appended session is absent from {@link list}
+   * — abandoned sessions leave nothing behind.
+   * @param meta - the immutable header (id, version, cwd, lineage) to record.
+   */
+  abstract create(meta: SessionHeader): Promise<void>;
+  /**
+   * Ensure a live session has a durable header even when it has no events.
+   * Ordinary sessions remain lazily materialized; lifecycle frontends call
+   * this only when an empty session itself is a durable resumable resource.
+   * @param _session - exact live session whose registered header is materialized.
+   */
+  ensureMaterialized(_session: Session): Promise<void>;
+  /**
+   * Durably persist a batch of events. Honors the append-only and contiguous-
+   * seq contracts: the first event's `seq` MUST equal the stored next-seq
+   * (after `load` has durably closed any interrupted turn). Rejects non-JSON-
+   * serializable `event.data` with an error naming the offending event type.
+   * @param id - the session the batch belongs to.
+   * @param events - the contiguous batch to persist, in seq order.
+   */
+  abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>;
+  /**
+   * Prepare the exact unpublished Session used by resume. Implementations may
+   * reuse object graphs retained by an earlier {@link inspect} after confirming
+   * their durable revision is still current; disposal releases an unpublished
+   * reservation. Revision retries require the durable log to remain unchanged
+   * for one read/check round trip; continuous external writers may delay completion.
+   * @param id - persisted session to prepare.
+   * @param signal - optional cancellation for preparation work.
+   * @returns one owned unpublished Session preparation.
+   */
+  prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation>;
+  /**
+   * Load an immutable balanced logical view and commit any required cold
+   * recovery. A complete interrupted final turn is preserved and durably
+   * closed with missing tool errors plus any open step and turn boundaries;
+   * only a torn final record is discarded. Unknown versions and corruption in
+   * the committed prefix reject. Implementations MUST NOT crash-repair an
+   * identity still bound to a live Session: a balanced live log may return as a
+   * durable snapshot, while an open live turn rejects. Returned values may be
+   * shared with immutable live or prepared state and must not be mutated.
+   * Revision-based implementations may wait for one stable read/check round trip.
+   * @param id - the persisted session to reload.
+   * @returns the header and a log ending on a balanced `turn/end`.
+   */
+  abstract load(id: SessionId): Promise<SessionInspection>;
+  /**
+   * Inspect an immutable logical session without committing recovery or
+   * publishing it. A cold complete interrupted turn receives synthetic closers
+   * in memory and a torn physical tail remains untouched. An already-live
+   * Session instead yields its current immutable snapshot, which may contain an
+   * open turn and its `session/end-seed` boundary. Coordinator-backed
+   * implementations retain the exact cold unpublished Session for bounded
+   * reuse by a later {@link prepare}. A stale ready source is reloaded; a source
+   * already committing or reserved for resume remains exclusive, and inspection
+   * may borrow its immutable view. Callers borrow only the immutable header and
+   * log. Continuous external writers may delay revision convergence.
+   * @param id - the persisted session to inspect.
+   * @param signal - optional cancellation for queued and backend read work.
+   * @returns the validated header and current logical event log.
+   */
+  abstract inspect(id: SessionId, signal?: AbortSignal): Promise<SessionInspection>;
+  /**
+   * Borrow one exact inspection while retaining any reusable prepared source.
+   * A cold observation must pin the exact prepared Session that a later
+   * {@link prepare} reserves. Implementations must not degrade this operation
+   * to a detached {@link inspect} result.
+   * @param id - persisted session to observe.
+   * @param signal - optional cancellation for preparation work.
+   * @returns a disposable immutable observation.
+   */
+  abstract borrowSession(id: SessionId, signal?: AbortSignal): Promise<BorrowedSessionSource>;
+  /**
+   * Read the stored events from `fromSeq` onward — the read-from-seq
+   * primitive for read models that resume from a watermark (e.g. a persisted
+   * projection cache folding only the tail past its checkpoint). Unlike
+   * {@link inspect}, it is a detached physical suffix read: no preparation
+   * cache, torn-tail truncation, synthetic closers, or coordinator-state
+   * publication. Only events from the valid contiguous stored prefix are
+   * returned, so a torn fragment never reaches the caller. `fromSeq` at or
+   * beyond the stored prefix returns an empty event list (never an error).
+   * A backend whose medium can seek by seq may read only the suffix;
+   * sequential media such as JSONL still parse the whole artifact and skip
+   * forward. The primitive bounds what is returned and refolded, not every
+   * backend's physical read.
+   * @param id - the persisted session to read.
+   * @param fromSeq - first event seq to include; a non-negative safe integer.
+   * @param signal - optional cancellation for queued and backend read work.
+   * @returns the header and the stored events with `seq >= fromSeq`.
+   */
+  abstract readFrom(id: SessionId, fromSeq: number, signal?: AbortSignal): Promise<{
+    meta: SessionHeader;
+    events: SessionEvent[];
+  }>;
+  /**
+   * Lightweight listing from metadata, without a full-log parse.
+   * @param signal - optional cancellation for backend listing work.
+   * @returns one header per materialized session.
+   */
+  abstract list(signal?: AbortSignal): Promise<SessionHeader[]>;
+  /**
+   * List materialized sessions with cheap per-log change tokens.
+   *
+   * Repeated observations of an unchanged log return the same revision. A
+   * successful mutating {@link load} repair changes the next listed revision.
+   * Revisions also distinguish independently backed stores so backend-local
+   * counters cannot compare equal across different persistence sources.
+   * @param signal - optional cancellation for backend snapshot-listing work.
+   * @returns one header and opaque revision per materialized session without loading full logs.
+   */
+  abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]>;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-projection@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-a_44d1fd464ad259eab2a8e659fb57e1c1/node_modules/@deepseek-ai/dsh-session-projection/lib/types/index.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    sessionProjections: SessionProjectionRegistry;
+  }
+}
+/**
+ * One domain's state-driven computation unit: a pure synchronous fold plus
+ * declarations and an optional client view — never an opaque getter. The framework drives
+ * `apply` on every committed session event; the domain holds no
+ * subscriptions and owns only the computation. All functions MUST be
+ * synchronous (an async unit would tear the carriers' consistency cut), and
+ * `state` MUST be plain JSON (the persisted-cache precondition).
+ */
+interface ProjectionDefinition<K extends keyof SessionProjectionStateMap, S extends SessionProjectionStateMap[K] = SessionProjectionStateMap[K]> {
+  /** The projection key this unit owns (its `SessionProjectionStateMap` entry). */
+  key: K;
+  /** Validates persisted state before it seeds a fold. */
+  stateSchema: ZodType<S>;
+  /**
+   * State for the empty log and its immutable Session metadata.
+   * @param header - immutable metadata for the Session being projected.
+   * @returns the initial state.
+   */
+  init(header: SessionHeader): NoInfer<S>;
+  /**
+   * Pure transition: previous state + one committed event → next state. A
+   * unit uninterested in an event MUST return the same state reference — an
+   * unchanged reference (`Object.is`) produces zero downstream work.
+   * @param state - the state covering all prior events.
+   * @param event - the next committed session event.
+   * @returns the next state (same reference when the event is not the unit's).
+   */
+  apply(state: NoInfer<S>, event: SessionEvent): NoInfer<S>;
+  /** Client view. Omit for host-only units. */
+  wire?: K extends keyof SessionProjectionMap ? {
+    /** Validates the wire payload before it leaves the host. */
+    viewSchema: ZodType<SessionProjectionMap[K]>;
+    /**
+     * State → wire payload (the read-side projection). The live drive keeps
+     * the two latest raw results and compares them with `Object.is`; an
+     * object-valued view must reuse its reference to suppress publication
+     * across internal-only state changes.
+     * @param state - the current state.
+     * @returns the whole current value for this unit's key.
+     */
+    view(state: NoInfer<S>): SessionProjectionMap[K];
+  } : never;
+  /**
+   * Persisted-cache invalidation version: bump whenever the serialized state fields or the
+   * fold semantics change, so persisted `(sessionId, key, ver, seq, val)`
+   * rows from an older unit are discarded instead of being forward-applied
+   * into garbage. Non-negative integer.
+   */
+  stateVersion: number;
+}
+/**
+ * Change-feed listener: one unit's raw `view` result changed by `Object.is`
+ * for one session. `value` is the schema-validated output; `seq` is the
+ * unit's watermark at emission (the seq of the event that caused the change).
+ */
+type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: number) => void;
+/**
+ * One consistent read cut over every registered client-visible unit for one session.
+ * `asOfSeq` is the shared watermark — the seq of the last event every value
+ * reflects (`-1` for an empty log).
+ */
+interface ProjectionSnapshot {
+  /** Seq of the last event the values reflect; -1 for an empty log. */
+  asOfSeq: number;
+  /** Whole current client value per registered key. */
+  values: Partial<SessionProjectionMap>;
+}
+/**
+ * One unit's checkpoint: its internal state (plain JSON by the unit
+ * contract), the seq of the last event folded into it, and the unit
+ * `stateVersion` that produced it — the persisted projection-cache row
+ * `(sessionId, key, ver, seq, val)` minus the two outer keys. A row is
+ * never authoritative, only a fold shortcut: `restore` discards it on a
+ * version mismatch or when it claims events past the stored log end.
+ */
+interface ProjectionCheckpointRow {
+  /** The registering unit's `stateVersion` at fold time. */
+  ver: number;
+  /** Seq of the last event folded into `val`; -1 for the empty log. */
+  seq: number;
+  /** The unit's internal state — plain JSON per the unit contract. */
+  val: unknown;
+}
+/** Checkpoint rows keyed by projection key (one session's persisted cache value). */
+type ProjectionCheckpoint = Record<string, ProjectionCheckpointRow>;
+/**
+ * `ctx.sessionProjections`: the projection unit table and its drive. The
+ * service subscribes to `session/event` once; every committed event passes
+ * every registered unit's `apply` (eager drive). A changed state reference
+ * computes the next client view; the change feed is notified only when its
+ * raw result changes by `Object.is`.
+ * Cells build lazily — a unit registered after events flowed, or a session
+ * older than the registry, folds `init` over the in-memory log on first
+ * touch (event or read). Registration is an effect (disposer rides the
+ * calling fiber): an unloaded domain plugin's key disappears from snapshots
+ * and clients read it as capability absence. A host reader either declares
+ * `sessionProjections` in its plugin `inject` or fails explicitly when the
+ * registry or required key is absent. Contributors may preserve optional
+ * registration through `ctx.inject(['sessionProjections'], ...)`. Registrants sharing a key
+ * share one unit and are counted: the same tool package mounted in N agent
+ * presets registers N times, and the key survives until the last one
+ * unloads.
+ */
+declare class SessionProjectionRegistry extends Service {
+  private readonly registrations;
+  private readonly listeners;
+  /**
+   * Create and install the registry as `ctx.sessionProjections`.
+   * @param ctx - Cordis context that owns the service.
+   */
+  constructor(ctx: Context);
+  /**
+   * Register one domain's unit. The registration is an effect on the calling
+   * context's fiber: disposing the fiber (or calling the returned disposer)
+   * removes the key — and the unit's cached cells — from subsequent drives
+   * and snapshots.
+   * @param definition - key, state schema, pure unit functions, and stateVersion.
+   * @returns the exact disposer that unregisters this unit.
+   */
+  register<K extends keyof SessionProjectionMap, S extends SessionProjectionStateMap[K]>(definition: Omit<ProjectionDefinition<K, S>, 'wire'> & {
+    wire: NonNullable<ProjectionDefinition<K, S>['wire']>;
+  }): () => void;
+  /**
+   * Register one host-only unit. Its state is omitted from client snapshots
+   * and always checkpointed like every other unit.
+   * @param definition - key, state schema, pure unit functions, and stateVersion.
+   * @returns the exact disposer that unregisters this unit.
+   */
+  register<K extends Exclude<keyof SessionProjectionStateMap, keyof SessionProjectionMap>, S extends SessionProjectionStateMap[K]>(definition: Omit<ProjectionDefinition<K, S>, 'wire'>): () => void;
+  /**
+   * Subscribe to the change feed. The registration is an effect on the
+   * calling context's fiber.
+   * @param listener - called once per client-visible unit whose raw view changed by `Object.is`, per committed event.
+   * @returns the exact disposer that unsubscribes.
+   */
+  onChanged(listener: ProjectionChangeListener): () => void;
+  /**
+   * Read one unit's current host state after materializing every registered
+   * unit at the Session cursor. Unrelated wire views are not produced.
+   * The returned value is live; callers must not mutate it.
+   * @param session - the session whose state is read.
+   * @param key - the registered unit key.
+   * @returns current state, or `undefined` when the key is not registered.
+   */
+  stateOf<K extends keyof SessionProjectionStateMap>(session: Session, key: K): SessionProjectionStateMap[K] | undefined;
+  /**
+   * One consistent cut over every registered client-visible unit for one session, read from
+   * the watermark cache (missing cells fold lazily over the in-memory log).
+   * Fully synchronous — every value and `asOfSeq` reflect the same log
+   * position. Each value passes its unit's `viewSchema` before leaving.
+   * @param session - the session whose projection values are read.
+   * @param keys - optional client-visible outputs; state materialization remains complete.
+   * @returns the snapshot; `values` is empty when no selected client-visible unit is registered.
+   */
+  snapshot(session: Session, keys?: readonly Extract<keyof SessionProjectionMap, string>[]): ProjectionSnapshot;
+  /**
+   * Read only already-materialized client-visible cells without folding history.
+   * Values may trail the live Session and are therefore hints, not a complete
+   * baseline. Missing cells are omitted.
+   * @param session - attached Session whose cached cells are inspected.
+   * @param keys - optional wire keys to view.
+   * @returns the lowest common cached cut, or `undefined` when no wire cell exists.
+   */
+  cachedSnapshot(session: Session, keys?: readonly Extract<keyof SessionProjectionMap, string>[]): ProjectionSnapshot | undefined;
+  /**
+   * State-level checkpoint of every persisted unit for one session, read
+   * from the watermark cache (missing cells fold lazily over the in-memory
+   * log). This is the write side of the persisted projection cache: the
+   * returned rows are the `(key → {ver, seq, val})` part of the durable
+   * `(sessionId, key, ver, seq, val)`
+   * rows. Every `val` is a DETACHED structured clone — never the live
+   * cell reference: the watermark cache is this registry's authoritative
+   * mutable state, and a caller reaching the live reference could corrupt
+   * every subsequent snapshot and frame through it (plain JSON by the unit
+   * contract, so the clone is total).
+   * @param session - the session whose unit states are checkpointed.
+   * @returns one row per registered key.
+   */
+  checkpoint(session: Session): ProjectionCheckpoint;
+  /**
+   * The stored seq a {@link restore} tail read over `checkpoint` must start
+   * at: one event BELOW the lowest usable watermark (a row is usable when
+   * its `ver` matches the live unit's `stateVersion`; an absent or mismatched row
+   * pulls the floor to `0` — that key must refold the full log). The
+   * one-below anchor is load-bearing: the tail then proves how far the
+   * stored log still extends, so {@link restore} can detect a log that
+   * shrank below a row's watermark (crash-repair truncation) instead of
+   * serving the stale row as current — an empty tail read from the anchor
+   * yields an end below every watermark and the restore rejects for a full
+   * re-read.
+   * @param checkpoint - persisted rows for one session (possibly stale or empty).
+   * @returns the seq to hand the persistence `readFrom`, or `undefined`
+   *   when no unit is registered (no read needed — {@link restore} would
+   *   serve empty values regardless).
+   */
+  restoreFloor(checkpoint: ProjectionCheckpoint): number | undefined;
+  /**
+   * View a checkpoint's rows without any log read: for every registered
+   * client-visible unit whose row's `ver` matches, serve the schema-validated
+   * `view` of the schema-validated stored state; mismatched, malformed, or absent rows leave their key
+   * absent (a cold or listing consumer treats it as not-yet-available and a
+   * fuller read path refolds it). The zero-I/O rung of the read ladder —
+   * values are as stale as their rows, never wrong.
+   * @param checkpoint - persisted rows for one session (possibly stale or empty).
+   * @param keys - optional wire keys to view.
+   * @returns whole values per key with a usable row; empty when none.
+   */
+  viewCheckpoint(checkpoint: ProjectionCheckpoint, keys?: readonly Extract<keyof SessionProjectionMap, string>[]): Partial<SessionProjectionMap>;
+  /**
+   * Cold read: fold every persisted unit over a stored log suffix, seeding
+   * each from its checkpoint row when usable — the one read recipe (cached
+   * state + forward tail replay + `view`) applied without a live `Session`.
+   * Call with the events returned by a persistence
+   * `readFrom(id, restoreFloor(checkpoint))` and that same floor as
+   * `baseSeq`; the floor's one-below anchor makes the supplied end honest,
+   * so a shrunk log is detected here. A row is usable iff its
+   * `ver` matches the live unit's `stateVersion`, it does not predate `baseSeq`
+   * (`seq >= baseSeq - 1`), and it does not claim events past the
+   * supplied end (`seq <= endSeq`); an unusable row is discarded
+   * and its key refolds from `init` — which is only sound over the full
+   * log, so a discarded row with `baseSeq > 0` throws (the caller re-reads
+   * from seq 0, e.g. after a crash-repair truncation shrank the log below
+   * a row's watermark).
+   * @param checkpoint - persisted rows for one session (possibly stale or empty).
+   * @param events - the stored events with `seq >= baseSeq`, in seq order.
+   * @param baseSeq - the seq `events` starts at (its first event's seq when non-empty).
+   * @param header - immutable metadata for the Session being restored.
+   * @returns the snapshot cut at the supplied log end (`asOfSeq` is the last
+   *   supplied event's seq, `baseSeq - 1` for an empty tail) plus the
+   *   refreshed checkpoint rows at that cut, ready for a durable write-back.
+   */
+  restore(checkpoint: ProjectionCheckpoint, events: readonly SessionEvent[], baseSeq: number, header: SessionHeader): {
+    snapshot: ProjectionSnapshot;
+    checkpoint: ProjectionCheckpoint;
+  };
+  /**
+   * Restore an exact cut and install its states on the supplied prepared Session.
+   * A later publication reuses these cells; ordinary live reads and event drive
+   * advance any constructor-owned suffix exactly once.
+   * @param session - exact prepared Session that owns the restored log prefix.
+   * @param checkpoint - persisted rows for this Session lifecycle.
+   * @param events - exact events at the observation cut.
+   * @param baseSeq - first supplied event sequence.
+   * @returns all projection values at the supplied cut.
+   */
+  hydrate(session: Session, checkpoint: ProjectionCheckpoint, events: readonly SessionEvent[], baseSeq: number): ProjectionSnapshot;
+  /** Materialize every registered unit cell at the Session's current cursor. */
+  private materializeCells;
+  /** Fold one unit from init over `events`, producing a cell watermarked at the last folded event. */
+  private buildCell;
+  /** Read (or lazily build, folding the full in-memory log) one unit's cell. */
+  private cellFor;
+  /** Advance one existing cell through a contiguous Session prefix. */
+  private advanceCell;
+  /** Eager drive: pass one committed event through every unit; notify on changed raw view references. */
+  private drive;
+  /** Return one schema-validated wire value. */
+  private viewCell;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-alpha.3_bee117ed55e56dae4f83ba4a7fdf2d18/node_modules/@deepseek-ai/dsh-session-query/lib/types/observation.d.ts
+/** One exact immutable Session cut retained for the caller's read lifetime. */
+interface SessionObservation extends Disposable {
+  /** Whether the cut came from an attached Session or a retained preparation. */
+  readonly source: 'live' | 'prepared';
+  /** Immutable Session identity metadata. */
+  readonly header: SessionHeader;
+  /** Immutable contiguous events at {@link cursor}. */
+  readonly events: readonly SessionEvent[];
+  /** Last observed event seq, or -1 for an empty log. */
+  readonly cursor: number;
+  /** Durable source revision for a cold prepared observation. */
+  readonly revision?: SessionPersistenceRevision;
+  /** Exact projection baseline at {@link cursor}, when the registry is mounted. */
+  readonly projections?: ProjectionSnapshot;
+  /**
+   * Retain the same immutable cut for another Host owner.
+   * @returns an independently disposable lease over this observation.
+   */
+  retain(): SessionObservation;
+}
+/** Projection work and cancellation requested for one exact observation. */
+interface SessionObservationOptions {
+  /** Optional cancellation while resolving a cold source. */
+  readonly signal?: AbortSignal;
+  /** Whether to compute every projection or leave projection state untouched. */
+  readonly projectionMode?: 'all' | 'none';
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-alpha.3_bee117ed55e56dae4f83ba4a7fdf2d18/node_modules/@deepseek-ai/dsh-session-query/lib/types/index.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    sessionQuery: SessionQueryEngine;
+  }
+}
+/**
+ * Unified live-preferred session query service.
+ *
+ * Exact reads, filters, and traces are backend-independent concrete behavior.
+ * A backend implements full-text observation, reconciliation, ranking, cursor
+ * generations, and query execution on the same `ctx.sessionQuery` service.
+ */
+declare abstract class SessionQueryEngine extends Service {
+  static inject: string[];
+  private readonly _readWindowMax;
+  private readonly _corpus;
+  private readonly _observations;
+  constructor(ctx: Context, config?: Config$1);
+  /**
+   * Observe one exact live or prepared Session without a persistence listing preflight.
+   * @param sessionId - logical Session identity.
+   * @param options - cancellation and projection selection for this read.
+   * @returns a caller-owned observation lease.
+   */
+  observeSession(sessionId: SessionId, options?: SessionObservationOptions): Promise<SessionObservation>;
+  /**
+   * Search the live-preferred logical corpus and group by session.
+   * @param request - query text, metadata filters, page size, and cursor.
+   * @param exec - optional cancellation control.
+   * @returns session hits ranked by their strongest matching event.
+   */
+  abstract searchSessions(request: SessionSearchRequest, exec?: SessionSearchExecContext): Promise<SessionSearchPage<SessionSearchHit>>;
+  /**
+   * Search events within one live-preferred logical session.
+   * @param request - target session, query text, filters, page size, and cursor.
+   * @param exec - optional cancellation control.
+   * @returns matching event hits and their target header from one indexed generation.
+   */
+  abstract searchEvents(request: SessionEventSearchRequest, exec?: SessionSearchExecContext): Promise<SessionEventSearchPage>;
+  /**
+   * List the complete logical corpus using live-preferred records.
+   * @param signal - optional cancellation for persistence listing.
+   * @returns deterministic newest-first cloned session records.
+   */
+  listSessions(signal?: AbortSignal): Promise<SessionRecord[]>;
+  /**
+   * Read and replay-validate one complete logical session log without making it live.
+   * @param sessionId - live or persisted session id to read.
+   * @returns cloned header and complete raw event log from one observation.
+   * @throws when persistence, header compatibility, or replay validation fails.
+   */
+  readSession(sessionId: SessionId): Promise<SessionLogSnapshot>;
+  /**
+   * Filter the complete logical corpus with provider-independent predicates.
+   * @param filters - ANDed session metadata and availability clauses.
+   * @param signal - optional cancellation for persistence listing.
+   * @returns matching cloned records in deterministic newest-first order.
+   */
+  filterSessions(filters: readonly SessionResultFilter[], signal?: AbortSignal): Promise<SessionRecord[]>;
+  /**
+   * Fold the latest log-backed title from one live-preferred logical session.
+   * @param sessionId - live or persisted session id to read.
+   * @param signal - optional cancellation for source resolution and title folding.
+   * @returns latest title snapshot, or `undefined` when the log has no title event.
+   */
+  readTitle(sessionId: SessionId, signal?: AbortSignal): Promise<SessionTitleSnapshot | undefined>;
+  /**
+   * Fold the latest title and return its source header from one corpus observation.
+   * @param sessionId - live or persisted session id to read.
+   * @param signal - optional cancellation for source resolution and title folding.
+   * @returns cloned source header and optional latest title snapshot.
+   */
+  readTitleSnapshot(sessionId: SessionId, signal?: AbortSignal): Promise<SessionTitleObservation>;
+  /**
+   * Fold titles for unique sessions from one cancellable corpus observation.
+   *
+   * Results preserve first-occurrence input order. Operational failures stay
+   * isolated per session, while cancellation rejects the complete operation.
+   * @param sessionIds - live or persisted session ids to observe.
+   * @param signal - optional cancellation shared by all source reads.
+   * @returns one fulfilled or rejected result per unique requested id.
+   */
+  readTitleSnapshots(sessionIds: readonly SessionId[], signal?: AbortSignal): Promise<SessionTitleObservationResult[]>;
+  /**
+   * List lightweight raw-log event records for one logical session.
+   * @param sessionId - live-preferred session id to read.
+   * @returns event records in ascending seq order.
+   */
+  listEvents(sessionId: SessionId): Promise<SessionEventRecord[]>;
+  /**
+   * Scan first-party semantic event documents with provider-independent filters.
+   * @param sessionId - live-preferred session id to scan.
+   * @param filters - ANDed metadata and literal-text predicates.
+   * @returns matching semantic documents in ascending seq order.
+   */
+  filterEvents(sessionId: SessionId, filters: readonly SessionEventResultFilter[]): Promise<SessionEventSearchDocument[]>;
+  private _filterSessions;
+  private _filterEvents;
+  /**
+   * Read one session's complete current model surface from one corpus observation.
+   * @param sessionId - live-preferred session id to read.
+   * @returns cloned header, current surface, and the last sequence number included in the raw-log capture.
+   * @throws when source resolution fails or the session surface is invalid.
+   */
+  readSurface(sessionId: SessionId): Promise<SessionSurfaceSnapshot>;
+  /**
+   * Trace known ancestry and descendants from one corpus observation.
+   * @param sessionId - logical session id to trace.
+   * @param signal - optional cancellation for persistence listing.
+   * @returns a complete lineage or the first parent that could not be resolved.
+   * @throws when corpus resolution fails, the target is absent, or its known ancestry cycles.
+   */
+  traceSession(sessionId: SessionId, signal?: AbortSignal): Promise<SessionLineageTrace>;
+  /**
+   * Trace one event's direct positional replacements and cited source events.
+   * @param request - target session id and event seq.
+   * @param signal - optional cancellation for persisted source resolution.
+   * @returns source header, direct links, and the target's positional replacement chain.
+   * @throws when source resolution fails, the target is absent, or surface/source-event validation fails.
+   */
+  traceEvent(request: SessionEventTraceRequest, signal?: AbortSignal): Promise<SessionEventTraceObservation>;
+  /**
+   * Read one full event plus a bounded raw-log context window.
+   * @param request - target session/seq and context sizes.
+   * @param signal - optional cancellation for persisted source resolution.
+   * @returns cloned target and neighboring events.
+   */
+  readEvent(request: SessionEventReadRequest, signal?: AbortSignal): Promise<SessionEventWindow>;
+  private _readEvent;
+  private _readWindow;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-alpha.3_2b04d62505425c479b58ef585be9fb63/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/agent.d.ts
+/** Failures produced while resolving one ordinary Session identity to its live Agent. */
+type ApiSessionAgentError = RemoteError<'session/not-found' | 'session/agent-busy' | 'gateway/internal'>;
+/** Result of resolving one ordinary Session identity to its live Agent. */
+type ApiSessionAgentResult = {
+  readonly agent: Agent;
+} | {
+  readonly error: ApiSessionAgentError;
+};
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-file-reference@0.1.2-alpha.3_@deepseek-ai+cordis@4.0.1_@deepseek-ai+ds_d845c559f5b8163c4477b18685630bd6/node_modules/@deepseek-ai/dsh-file-reference/lib/types/types.d.ts
+/**
+ * Public file-reference discovery records. This module contains types only so
+ * generated Remote clients can consume it without Host runtime code.
+ * @module @deepseek-ai/dsh-file-reference/types
+ */
+/** One path-only completion candidate inside the target session cwd. */
+interface FileReferenceCandidate {
+  /** User-facing path accepted by normal prompts and filesystem tools. */
+  path: string;
+  /** Directories keep completion open; files finish the mention. */
+  kind: 'file' | 'directory';
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-alpha.3_2b04d62505425c479b58ef585be9fb63/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/file-references.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host owner of the `fileReferences` Remote namespace. */
+    sessionFileReferences: SessionFileReferences;
+  }
+}
+/** Host Remote adapter over the composed file-reference provider. */
+declare class SessionFileReferences extends TypertRemoteService {
+  static inject: string[];
+  /** @param ctx - Host context carrying the selected file-reference provider. */
+  constructor(ctx: Context);
+  /**
+   * List file and directory candidates for one Agent's working directory.
+   * @param agent - target Agent resolved from the Session identity on the wire.
+   * @param query - path text following `@` or `@"`.
+   * @param signal - caller cancellation.
+   * @returns deterministic path-only candidates from the composed provider.
+   */
+  list(agent: Agent, query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]>;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-alpha.3_2b04d62505425c479b58ef585be9fb63/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/skill-catalog.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host owner of the Session-addressed `skills` Remote namespace. */
+    sessionSkillCatalog: SessionSkillCatalog;
+  }
+}
+/** Host service backing `ctx.remote.skills` without activating a cold Agent. */
+declare class SessionSkillCatalog extends TypertRemoteService {
+  static inject: string[];
+  /** @param ctx - Host context carrying Session reads and optional skill/preset services. */
+  constructor(ctx: Context);
+  /**
+   * List the user-invocable skills visible to one Session composition.
+   * @param request - Session identity whose cwd and preset select the catalog view.
+   * @param signal - caller lifetime carried by the Remote transport; admitted catalog reads retain their existing completion semantics.
+   * @returns user-invocable skill metadata without loading skill bodies.
+   * @throws RemoteError when the Session cannot be inspected or no registry can serve it.
+   */
+  list(request: SkillListRequest, signal: AbortSignal): Promise<SkillListValue>;
+  /** Resolve a live or standing preset scope without creating an Agent. */
+  private scopeFor;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-alpha.3_2b04d62505425c479b58ef585be9fb63/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/index.d.ts
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Host Session business API and Remote namespace owner. */
+    sessionController: SessionController;
+  }
+}
+/** Session Controller deployment policy. */
+interface Config {
+  /** Maximum cold Session artifact size eligible for one full projection observation. */
+  readonly coldBlankProbeMaxBytes?: number;
+  /** Override platform desktop-opener detection. */
+  readonly nativeOpen?: boolean;
+}
+/** Host integrations replaceable by direct unit tests. */
+interface SessionControllerInternals {
+  /** Native default-application handoff. */
+  readonly openPath?: (path: string, signal: AbortSignal) => Promise<void>;
+  /** Native handoff availability probe. */
+  readonly canOpenPath?: () => boolean;
+}
+/** Host service backing the generated `ctx.remote.session` namespace. */
+declare class SessionController extends TypertRemoteService {
+  static inject: string[];
+  static Config: Schema<Config>;
+  private readonly agents;
+  private readonly commands;
+  private readonly controlState;
+  private readonly history;
+  private readonly listState;
+  private readonly openPath;
+  private readonly canOpenPath;
+  private readonly promotions;
+  /**
+   * @param ctx - Host context containing the Session capability assembly.
+   * @param config - cold-list observation policy.
+   */
+  constructor(ctx: Context, config: Config, internals?: SessionControllerInternals);
+  private promote;
+  /**
+   * Resolve or resume one ordinary Session for another Host API domain.
+   * @param sessionId - Session identity whose Agent owns the operation.
+   * @returns the live Agent or the stable Session-domain failure.
+   */
+  resolveAgent(sessionId: SessionId): Promise<ApiSessionAgentResult>;
+  /**
+   * Inspect one attached or persisted Session without activating its Agent.
+   * @param sessionId - durable Session identity.
+   * @param signal - optional caller cancellation for persistence reads.
+   * @returns the current attached state or persisted header and event prefix.
+   */
+  inspect(sessionId: SessionId, signal?: AbortSignal): Promise<{
+    meta: SessionHeader;
+    events: SessionEvent[];
+  }>;
+  /**
+   * Read all visible Session rows without resuming an Agent.
+   * @param _request - reserved empty list request.
+   * @param signal - cancellation for persistence reads.
+   * @returns visible Session summaries ordered by activity.
+   */
+  list(_request: SessionListRequest, signal: AbortSignal): Promise<SessionListValue>;
+  /**
+   * Search visible Session content without resuming an Agent.
+   * @param request - literal message-content query.
+   * @param signal - cancellation for list and search reads.
+   * @returns authorized bounded Session search results.
+   */
+  search(request: SessionSearchRequest$1, signal: AbortSignal): Promise<SessionSearchValue>;
+  /**
+   * Create or idempotently adopt one ordinary Session.
+   * @param request - requested identity, location, and Agent preset.
+   * @returns the Session identity and resolved preset when configured.
+   */
+  create(request: SessionCreateRequest): Promise<SessionCreateValue>;
+  /**
+   * Select one Session-local model after explicitly resuming the Session.
+   * @param request - Session identity and requested model selection.
+   * @returns the normalized selection installed for the Session.
+   */
+  selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>;
+  /**
+   * Describe every currently routable model for Host-generation selectors.
+   * @returns provider-grouped models, the deployment default, and isolated provider failures.
+   */
+  modelCatalog(): Promise<ModelCatalog>;
+  /**
+   * Report whether this deployment can hand a Session workspace path to a native desktop.
+   * @returns true when the matching open operation is available.
+   */
+  canOpenWorkspacePath(): boolean;
+  /**
+   * Open one path prepared by a Session-aware caller on the Host desktop.
+   * @param request - path after best-effort Session workspace resolution.
+   * @param signal - caller lifetime; abort terminates the native command.
+   * @returns confirmation after the native opener accepts the path.
+   * @throws RemoteError when the request is invalid, cancelled, or the opener fails.
+   */
+  openWorkspacePath(request: SessionOpenWorkspacePathRequest, signal: AbortSignal): Promise<SessionOpenWorkspacePathValue>;
+  /**
+   * Rename one Session after explicitly resuming it.
+   * @param request - Session identity and proposed title.
+   * @returns the accepted title and durable event sequence.
+   */
+  rename(request: SessionRenameRequest): Promise<SessionRenameValue>;
+  /**
+   * Fork one cold-readable completed-turn prefix into a new Session.
+   * @param request - source Session and optional event anchor.
+   * @returns the new Session identity.
+   */
+  fork(request: SessionForkRequest): Promise<SessionForkValue>;
+  /**
+   * Admit one prompt after explicitly resuming its Session.
+   * @param request - Session identity, prompt content, source metadata, and delivery mode.
+   * @param signal - caller cancellation before prompt admission begins.
+   * @returns acknowledgement that the Agent accepted the prompt.
+   */
+  prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>;
+  /**
+   * Read one image proven reachable from the addressed Session log.
+   * @param request - Session and attachment identities used for authorization.
+   * @returns the durable attachment reference and base64-encoded bytes.
+   */
+  attachment(request: SessionAttachmentRequest): Promise<SessionAttachmentValue>;
+  /**
+   * Mutate one still-pending queue occurrence on a live Agent.
+   * @param request - Session, queue item, and requested mutation.
+   * @returns acknowledgement that the queue mutation was applied.
+   */
+  updateQueue(request: SessionUpdateQueueRequest): SessionUpdateQueueValue;
+  /**
+   * Cancel one active Agent turn without dropping its pending inbox.
+   * @param request - Session whose active Agent turn is cancelled.
+   * @returns acknowledgement that cancellation was requested.
+   */
+  cancel(request: SessionCancelRequest): SessionCancelValue;
+  /**
+   * Read one cold-safe, message-aligned Session history page.
+   * @param request - durable address, backward cursor, and page budget.
+   * @param signal - cancellation for persistence reads.
+   * @returns one chronological page.
+   */
+  page(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage>;
+  /**
+   * Follow one Session log from its opening or resume cursor.
+   * @param request - durable address and last committed sequence already held by the caller.
+   * @param signal - cancellation owned by the Remote stream carrier.
+   * @returns a complete opening snapshot followed by gap-free event frames.
+   */
+  follow(request: SessionFollowRequest, signal: AbortSignal): AsyncIterable<SessionFollowFrame>;
+  /**
+   * Stream a complete live-control baseline followed by replacement frames.
+   * @param signal - cancellation owned by the Remote stream carrier.
+   * @returns one complete baseline followed by live replacement frames.
+   */
+  control(signal: AbortSignal): AsyncIterable<SessionControlFrame>;
 }
 //#endregion
 //#region src/bridge/rpc.d.ts
-/** The dsh api surface the bridge actually consumes. */
+/** Shape the bridge history readers consume (pre-0.1.2 convention). */
+interface BridgeHistory {
+  events: HistoryEntry[];
+  hasMore: boolean;
+  projections?: SessionProjectionsBlock;
+}
+/**
+ * The dsh 0.1.2 host API surface the bridge actually consumes. Each field is
+ * the host-side Cordis service that owns the @Remote business methods; the
+ * bridge calls them in-process (no gateway, no browser transport).
+ */
 interface BridgeApi {
-  sessions: Pick<ApiProxy['sessions'], 'list' | 'search' | 'create' | 'fork' | 'history' | 'models' | 'rename' | 'prompt' | 'cancel' | 'selectModel'>;
-  host: Pick<ApiProxy['host'], 'describe'>;
-  llm: Pick<ApiProxy['llm'], 'models'>;
-  agentPresets: Pick<ApiProxy['agentPresets'], 'list' | 'select'>;
-  goals: Pick<ApiProxy['goals'], 'create' | 'edit' | 'pause' | 'resume' | 'complete' | 'clear'>;
-  skills: Pick<ApiProxy['skills'], 'list'>;
-  events: Pick<ApiProxy['events'], 'mux' | 'host'>;
-  respond: ApiProxy['respond'];
+  sessionController: Pick<SessionController, 'list' | 'search' | 'create' | 'selectModel' | 'modelCatalog' | 'rename' | 'fork' | 'prompt' | 'cancel' | 'page' | 'follow' | 'control' | 'resolveAgent'> & {
+    /**
+     * Optional bridge-level history contract used by unit fixtures. Real hosts
+     * omit it; `call('session.history')` then reads through follow/page.
+     */
+    history?: (request: {
+      sessionId?: string;
+      maxMessages?: number;
+      beforeSeq?: number;
+    }, signal?: AbortSignal) => Promise<BridgeHistory>;
+    /**
+     * Optional bridge-level session-model read used by unit fixtures. Real
+     * hosts omit it; `call('session.models')` then derives from modelCatalog.
+     */
+    models?: (request: {
+      sessionId?: string;
+    }) => Promise<{
+      current: {
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      };
+    }>;
+  };
+  agentPresets: {
+    list(): Promise<Array<{
+      id: string;
+      name?: string;
+      description?: string;
+      broken?: string;
+    }>>;
+    select(agent: Agent, agentPreset: string): Promise<string>;
+    defaultId: string;
+  };
+  goals: {
+    create(agent: Agent, request: unknown): Promise<unknown>;
+    edit(agent: Agent, ref: unknown, request: unknown): Promise<unknown>;
+    pause(agent: Agent, ref: unknown): Promise<unknown>;
+    resume(agent: Agent, ref: unknown): Promise<unknown>;
+    complete(agent: Agent, ref: unknown): Promise<unknown>;
+    clear(agent: Agent, ref: unknown): Promise<unknown>;
+  };
+  sessionSkillCatalog: {
+    list(request: unknown, signal?: AbortSignal): Promise<unknown>;
+  };
   /**
    * dsh human-command registry (`ctx.commands`). Optional so unit fixtures and
    * older hosts without the registry still type-check; the oc profile always
@@ -3635,7 +6231,7 @@ interface BridgeCommandExecution {
   };
 }
 interface BridgeCommands {
-  execute(agent: unknown, line: string, signal: AbortSignal): Promise<BridgeCommandExecution | undefined>;
+  execute(agent: unknown, line: string, images: readonly unknown[], signal: AbortSignal): Promise<BridgeCommandExecution | undefined>;
 }
 interface BridgeAgents {
   get(sessionId: string): unknown;
@@ -3859,6 +6455,10 @@ declare class InteractionState {
   lockedAgentNoticeSeen(sessionId: string, agent: string): boolean;
   markLockedAgentNotice(sessionId: string, agent: string): void;
   private static lockedAgentKey;
+  /** Pending approval decisions keyed by rpcId (answerer → HTTP reply). */
+  readonly pendingApprovals: Map<string, (outcome: 'allowed-once' | 'rejected') => void>;
+  /** Pending question decisions keyed by rpcId (answerer → HTTP reply). */
+  readonly pendingQuestions: Map<string, (answer: unknown | undefined) => void>;
   registerApproval(entry: PermissionEntry): PermissionEntry;
   registerQuestion(entry: QuestionEntry): QuestionEntry;
   permissionByOpenCodeId(id: string): PermissionEntry | undefined;
@@ -3895,6 +6495,8 @@ interface SseClient {
   res: ServerResponse;
   controller: AbortController;
   closed: boolean;
+  /** Optional per-connection session filter (attach `?sessionID=`). */
+  filter?: (event: BridgeGlobalEvent) => boolean;
 }
 /** Registry of active SSE connections plus the encoder/cleanup logic. */
 declare class SseHub {
@@ -3904,7 +6506,7 @@ declare class SseHub {
   private pending;
   private nextId;
   constructor(log: (message: string) => void);
-  add(res: ServerResponse): SseClient;
+  add(res: ServerResponse, filter?: (event: BridgeGlobalEvent) => boolean): SseClient;
   remove(client: SseClient): void;
   send(client: SseClient, event: BridgeGlobalEvent): void;
   /** Fan one event batch out to every connected SSE client. */
@@ -3947,6 +6549,10 @@ interface BridgeRouter {
   ctx: BridgeRouteContext;
   match(method: string, pathname: string): Route | undefined;
   startSse(req: BridgeRequest, res: ServerResponse): void;
+  /** Feed one translated bridge frame to all SSE clients (host-side pump). */
+  feed(frame: BridgeFrame): Promise<void>;
+  /** Feed one host lifecycle frame to all SSE clients. */
+  feedHostFrame(frame: BridgeHostFrame): void;
   /** Change the bridge working directory (e.g. from an attach `--dir`). */
   setCwd(directory: string): void;
   /** Warm the session-list cache in the background after startup. */
