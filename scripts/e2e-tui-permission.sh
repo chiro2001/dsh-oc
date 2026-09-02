@@ -120,14 +120,18 @@ echo "  dialog 1 shown (once)"
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-always-dialog.txt"
 echo "  dialog 2 shown (always)"
-tmux send-keys -t "$E2E_TUI_SESSION" Right
+# The TUI may still be settling its key bindings when the dialog first
+# renders; a dropped `Right` would confirm the default "once" and silently
+# lose the grant. Settle before the arrow so the selection lands on always.
 sleep 1
+tmux send-keys -t "$E2E_TUI_SESSION" Right
+sleep 2
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 sleep 1
 e2e_tui_capture "$E2E_RUN_DIR/perm-always-confirm.txt"
 if grep -qa 'This will allow\|Confirm' "$E2E_RUN_DIR/perm-always-confirm.txt"; then
   tmux send-keys -t "$E2E_TUI_SESSION" Enter
-  sleep 1
+  sleep 2
 fi
 AUTO_OK="1"
 deadline=$((SECONDS + 90))
@@ -329,14 +333,15 @@ done
 echo "  session $SID"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-always-dialog.txt"
-tmux send-keys -t "$E2E_TUI_SESSION" Right
 sleep 1
+tmux send-keys -t "$E2E_TUI_SESSION" Right
+sleep 2
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 sleep 1
 e2e_tui_capture "$E2E_RUN_DIR/perm-mini-always-confirm.txt"
 if grep -qa 'This will allow\|Confirm' "$E2E_RUN_DIR/perm-mini-always-confirm.txt"; then
   tmux send-keys -t "$E2E_TUI_SESSION" Enter
-  sleep 1
+  sleep 2
 fi
 AUTO_OK="1"
 deadline=$((SECONDS + 90))
