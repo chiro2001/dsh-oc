@@ -78,7 +78,7 @@ wait_reply_count() {
   while (( SECONDS < deadline )); do
     local text
     text="$(curl -s "$bridge/session/$sid/message" | jq -r '[.. | objects | select(has("text")) | .text] | join(" ")' 2>/dev/null || true)"
-    if [[ "$(grep -o 'mock response recovered' <<<"$text" | wc -l)" -ge "$n" ]]; then
+    if [[ "$(grep -o 'mock response recovered' <<<"$text" | wc -l | tr -d ' ')" -ge "$n" ]]; then
       return 0
     fi
     sleep 1
@@ -142,7 +142,7 @@ while (( SECONDS < deadline )); do
     break
   fi
   local_text="$(curl -s "$E2E_BRIDGE_URL/session/$SID/message" | jq -r '[.. | objects | select(has("text")) | .text] | join(" ")' 2>/dev/null || true)"
-  if [[ "$(grep -o 'mock response recovered' <<<"$local_text" | wc -l)" -ge 1 ]]; then
+  if [[ "$(grep -o 'mock response recovered' <<<"$local_text" | wc -l | tr -d ' ')" -ge 1 ]]; then
     break
   fi
   sleep 0.3
@@ -302,7 +302,7 @@ tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
 curl -s "$E2E_BRIDGE_URL/permission" | jq -e 'length == 0' >/dev/null
 e2e_tui_capture "$E2E_RUN_DIR/perm-mini-reply.txt"
-REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-reply.txt" | wc -l)"
+REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-reply.txt" | wc -l | tr -d ' ')"
 if [[ "$REPLY_COUNT" != "1" ]]; then
   echo "e2e: mini rendered the reply $REPLY_COUNT times (expected 1)" >&2
   exit 1
@@ -352,7 +352,7 @@ while (( SECONDS < deadline )); do
     break
   fi
   local_text="$(curl -s "$E2E_BRIDGE_URL/session/$SID/message" | jq -r '[.. | objects | select(has("text")) | .text] | join(" ")' 2>/dev/null || true)"
-  if [[ "$(grep -o 'mock response recovered' <<<"$local_text" | wc -l)" -ge 1 ]]; then
+  if [[ "$(grep -o 'mock response recovered' <<<"$local_text" | wc -l | tr -d ' ')" -ge 1 ]]; then
     break
   fi
   sleep 0.3
@@ -365,7 +365,7 @@ wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
 SAVED="$(curl -s "$E2E_BRIDGE_URL/api/permission/saved")"
 jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "\($s):bash")' <<<"$SAVED" >/dev/null
 e2e_tui_capture "$E2E_RUN_DIR/perm-mini-always-reply.txt"
-REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-always-reply.txt" | wc -l)"
+REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-always-reply.txt" | wc -l | tr -d ' ')"
 if [[ "$REPLY_COUNT" != "1" ]]; then
   echo "e2e: mini always rendered the reply $REPLY_COUNT times (expected 1)" >&2
   exit 1
@@ -483,7 +483,7 @@ tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_reply_count "$E2E_BRIDGE_URL" "$SID" 1
 curl -s "$E2E_BRIDGE_URL/question" | jq -e 'length == 0' >/dev/null
 e2e_tui_capture "$E2E_RUN_DIR/perm-mini-question-reply.txt"
-REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-question-reply.txt" | wc -l)"
+REPLY_COUNT="$(grep -o 'mock response recovered' "$E2E_RUN_DIR/perm-mini-question-reply.txt" | wc -l | tr -d ' ')"
 if [[ "$REPLY_COUNT" != "1" ]]; then
   echo "e2e: mini question rendered the reply $REPLY_COUNT times (expected 1)" >&2
   exit 1
