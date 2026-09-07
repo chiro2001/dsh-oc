@@ -1,4 +1,9 @@
-import type { RpcError } from '@deepseek-ai/dsh-host-apiproxy/api'
+/** Structural view of a dsh 0.1.2 Remote failure (RemoteError). */
+export interface RpcError {
+  code: string
+  message: string
+  details: unknown
+}
 
 /**
  * opencode-compatible JSON error envelope.
@@ -67,6 +72,15 @@ const CLIENT_FIXABLE = new Set<string>([
   'settings-conflict',
   'credential-rejected',
   'attachment-error',
+  'session/attachment-invalid',
+  'session/model-unavailable',
+  'agent-preset/invalid',
+  'agent-preset/read-only',
+  'gateway/bad-request',
+  'workspace/invalid-path',
+  'settings/rejected',
+  'session/invalid-time-zone',
+  'session/title-invalid',
   'directory-unreadable',
   'directory-exists',
   'directory-create-failed',
@@ -80,6 +94,13 @@ const CLIENT_FIXABLE = new Set<string>([
 /** Codes that mean the session/turn is currently owned by another actor. */
 const CONFLICT_CODES = new Set<string>([
   'agent-busy',
+  'session/agent-busy',
+  'session/conflict',
+  'session/steer-unavailable',
+  'session/fork-unavailable',
+  'agent-preset/conflict',
+  'settings/conflict',
+  'workspace/name-conflict',
   'fork-unavailable',
   'steer-unavailable',
   'session-conflict',
@@ -89,7 +110,7 @@ const CONFLICT_CODES = new Set<string>([
   'subagent-not-resumable',
   'subagent-unauthorized',
   'subagent-delivery-unavailable',
-  'agent-preset-locked',
+  'agent-preset/locked',
 ])
 
 /**
@@ -97,11 +118,19 @@ const CONFLICT_CODES = new Set<string>([
  * and `details` are preserved inside `data` so diagnostics never disappear.
  */
 export function rpcErrorToHttp(error: RpcError): HttpError {
+  // Keep the OpenCode-facing attachment contract stable across the dsh 0.1.2
+  // rename. The host now emits `session/attachment-invalid`, while existing
+  // TUI/e2e consumers (and the v1 bridge contract) recognize `attachment-error`.
+  const publicCode = error.code === 'session/attachment-invalid'
+    ? 'attachment-error'
+    : error.code
   const data: Record<string, unknown> = {
-    code: error.code,
+    code: publicCode,
     details: error.details,
   }
-  if (error.code === 'session-not-found') {
+  if (error.code === 'session-not-found' || error.code === 'session/not-found'
+    || error.code === 'agent-preset/not-found' || error.code === 'workspace/not-found'
+    || error.code === 'session/queue-item-not-found' || error.code === 'subagent/not-found') {
     return notFound(error.message, data)
   }
   if (CONFLICT_CODES.has(error.code)) {

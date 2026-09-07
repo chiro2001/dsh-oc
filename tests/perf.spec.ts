@@ -115,7 +115,7 @@ describe('perf session generator', () => {
     expect(byType('todo/write')).toHaveLength(2)
 
     // The detached dsh Session API itself accepts the log back (restore path).
-    expect(() => Session.fromRestore(SessionId(log.id), log.events as never, log.header as never)).not.toThrow()
+    expect(() => Session.fromRestore(SessionId(log.id), log.events as never, log.header as never, 0 as never)).not.toThrow()
   })
 
   it('serializes header-first JSONL and round-trips through zstd', async () => {

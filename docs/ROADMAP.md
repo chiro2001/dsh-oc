@@ -3,6 +3,27 @@
 > 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读 `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
 > 基线：`main` 当前为协议补全阶段版本（2026-08-16，权限/vcs/fs/lifecycle 已合入）。
 
+## 当前候选收敛（0.2.0-rc.1，2026-09-07）
+
+本候选面向 dsh `>=0.1.2-rc.1`，是一次 ABI breaking minor。PR #1/#2/#3
+没有原样合入；其模型/preset、队列、approval/question、subagent/history
+语义与 dsh 0.1.2 host-services 迁移重新整合。
+
+当前已落地并有 targeted regression：
+
+- `sessionController`、`agentPresets`、`goals`、`sessionSkillCatalog`、
+  `agents`、`sessions`、`sessionProjections` 直连；旧 apiProxy 仅保留在历史文档。
+- status 热路径消费 `api-session/status/activity` 内存状态，冷启动最多一次
+  `session.list` seed；SSE `Last-Event-ID` 使用事件数/字节双上限 ring，重连
+  回放后补当前 status/control snapshot。
+- OpenTUI native 临时文件隔离到 dsh-owned per-PID 目录并清理；安全 I/O
+  monitor 默认 observe-only，owned process group 才允许显式清理。
+- dsh-dcp rc.6 `session.events` getter shim 是临时兼容边界，待上游 dcp
+  完成 dsh 0.1.2 迁移后移除。
+
+本地候选阶段未宣称完整发布门禁：artifact audit、full e2e、真实 TUI 与远端
+full-SHA 安装/回滚留给独立发布验证。
+
 ## 协议补全记录（2026-08-16）
 
 以下 SDK v2 端点已从 stub/缺失升级为真实实现，全部有单测 + e2e：

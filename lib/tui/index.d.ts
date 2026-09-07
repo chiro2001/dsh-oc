@@ -81,6 +81,23 @@ interface BinaryResolverDeps {
   download?: (options: DownloadOpenCodeOptions) => Promise<string>;
 }
 //#endregion
+//#region src/tui/temp.d.ts
+declare function opencodeTuiTempDir(dshHome: string, pid?: number): string;
+/** Whether a process id still belongs to a live process. Injectable in tests. */
+declare function processAlive(pid: number): boolean;
+/**
+ * Remove only the native files known to be produced by OpenTUI's Bun loader.
+ * Unknown files are deliberately left untouched because this directory also
+ * hosts download transaction files used by the binary resolver.
+ */
+declare function cleanupOpenCodeNativeTemp(directory: string): number;
+/**
+ * Prepare this run's isolated OpenTUI temp directory and reap directories
+ * left by dsh processes that are no longer alive. The liveness check is
+ * injectable so cleanup behavior stays deterministic in unit tests.
+ */
+declare function prepareOpenCodeTemp(dshHome: string, pid?: number, isAlive?: (pid: number) => boolean): string;
+//#endregion
 //#region src/help.d.ts
 /**
  * `dsh --profile oc --help` and TUI `/help` output; kept deliberately static
@@ -273,5 +290,5 @@ declare class OcTuiService extends Service {
   private fail;
 }
 //#endregion
-export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_BRANDING_PLUGIN, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, brandingSourceDir, buildChildEnv, exitNoteEnabled, filterSupportedArgs, helpRequested, installSignalForwarding, ocExitNote, ocHelp, prepareOpenCodeConfig, prepareOpenCodeTuiState, requestExit, resolveAssetUrl, resolveOpenCodeBinary, resolveTuiDir, startOpenCodeTui, tuiDirFromArgs, tuiSessionFromArgs, tuiTimestampsEnabled };
+export { type BinaryResolverDeps, type BinarySource, DSH_OC_TUI_TIMESTAMPS, OPENCODE_BRANDING_PLUGIN, OPENCODE_CONFIG_FILE, OPENCODE_KV_FILE, OPENCODE_NETWORK_SAFETY_ENV, OPENCODE_TUI_FILE, OcTuiConfig, OcTuiService, OcTuiService as default, ResolveBinaryInput, type ResolvedBinary, RunningTui, SignalListener, SignalProcessLike, SpawnTui, StartTuiOptions, TimerClearer, TimerHandle, TimerSetter, TuiChild, brandingSourceDir, buildChildEnv, cleanupOpenCodeNativeTemp, exitNoteEnabled, filterSupportedArgs, helpRequested, installSignalForwarding, ocExitNote, ocHelp, opencodeTuiTempDir, prepareOpenCodeConfig, prepareOpenCodeTemp, prepareOpenCodeTuiState, processAlive, requestExit, resolveAssetUrl, resolveOpenCodeBinary, resolveTuiDir, startOpenCodeTui, tuiDirFromArgs, tuiSessionFromArgs, tuiTimestampsEnabled };
 //# sourceMappingURL=index.d.ts.map

@@ -21,7 +21,7 @@
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { join } from 'node:path'
 import { constants, zstdCompressSync } from 'node:zlib'
-import { CallId, MessageId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, MessageId } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
 
 /** Encode one path segment exactly like dsh-session-persistence-jsonl. */
@@ -137,6 +137,7 @@ export function makeSessionLog({
       version: SESSION_FORMAT_VERSION,
       id,
       createdAt,
+      isSeeded: false,
       ...(cwd === undefined ? {} : { cwd }),
       ...(parentSession === undefined ? {} : { parentSession }),
       delegationDepth: delegationDepth ?? 0,
@@ -191,7 +192,7 @@ export function makeSessionLog({
         message: {
           id: MessageId(assistantId),
           role: 'assistant',
-          content: [{ type: 'tool-call', id: CallId(callId), name: 'bash', arguments: argumentsJson }],
+          content: [{ type: 'tool-call', id: ToolCallId(callId), name: 'bash', arguments: argumentsJson }],
           source: { kind: 'model', provider: 'deepseek-official', model: 'mock-model' },
         },
         usage: { inputTokens: 160, outputTokens: 24 },
@@ -199,7 +200,7 @@ export function makeSessionLog({
       session.append('tool/call', {
         turn,
         step,
-        callId: CallId(callId),
+        callId: ToolCallId(callId),
         name: 'bash',
         arguments: argumentsJson,
       })
@@ -211,11 +212,11 @@ export function makeSessionLog({
           role: 'user',
           content: [{
             type: 'tool-result',
-            toolCallId: CallId(callId),
+            toolCallId: ToolCallId(callId),
             content: [{ type: 'text', text: 'perf-tool-output\n' }],
             isError: false,
           }],
-          source: { kind: 'tool', callId: CallId(callId) },
+          source: { kind: 'tool', callId: ToolCallId(callId) },
         },
       }, { surfaceOp: 'append' })
     } else {
@@ -236,7 +237,7 @@ export function makeSessionLog({
   }
 
   const header = session.header
-  const events = session.events
+  const events = session.snapshotEvents()
   const headerLine = { type: 'session', ...header }
   const text = `${JSON.stringify(headerLine)}\n${events.map((event) => JSON.stringify(event)).join('\n')}\n`
   return { id, header, events, text, bytes: Buffer.byteLength(text) }

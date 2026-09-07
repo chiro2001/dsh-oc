@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildChildEnv,
   brandingSourceDir,
+  cleanupOpenCodeNativeTemp,
   DSH_OC_TUI_TIMESTAMPS,
   exitNoteEnabled,
   filterSupportedArgs,
@@ -17,6 +18,7 @@ import {
   OPENCODE_BRANDING_PLUGIN,
   OPENCODE_NETWORK_SAFETY_ENV,
   prepareOpenCodeConfig,
+  prepareOpenCodeTemp,
   prepareOpenCodeTuiState,
   requestExit,
   resolveTuiDir,
@@ -212,8 +214,38 @@ describe('buildChildEnv', () => {
       XDG_DATA_HOME: '/home/dsh/opencode/data',
       XDG_STATE_HOME: '/home/dsh/opencode/state',
       XDG_CACHE_HOME: '/home/dsh/opencode/cache',
+      TMPDIR: `/home/dsh/opencode/tmp/tui-${process.pid}`,
+      TMP: `/home/dsh/opencode/tmp/tui-${process.pid}`,
+      TEMP: `/home/dsh/opencode/tmp/tui-${process.pid}`,
     })
     expect(env.OPENCODE_CONFIG_CONTENT).toBeUndefined()
+  })
+
+  it('isolates and cleans known Bun/OpenTUI native temp files', () => {
+    const home = tmpDir('opentui-temp')
+    const current = prepareOpenCodeTemp(home, 4242, () => false)
+    writeFileSync(join(current, '.0123456789abcdef-00000000.so'), 'native')
+    writeFileSync(join(current, '.0123456789abcdef-00000000.dylib'), 'native')
+    writeFileSync(join(current, '.0123456789abcdef-00000000.dll'), 'native')
+    writeFileSync(join(current, '.0123456789abcdef-00000000.node'), 'native')
+    writeFileSync(join(current, 'download-transaction'), 'keep')
+
+    expect(cleanupOpenCodeNativeTemp(current)).toBe(4)
+    expect(existsSync(join(current, 'download-transaction'))).toBe(true)
+    expect(cleanupOpenCodeNativeTemp(current)).toBe(0)
+  })
+
+  it('reaps a dead prior TUI temp directory without touching a live one', () => {
+    const home = tmpDir('opentui-temp-reap')
+    const root = join(home, 'opencode', 'tmp')
+    mkdirSync(join(root, 'tui-100'), { recursive: true })
+    mkdirSync(join(root, 'tui-200'), { recursive: true })
+
+    const current = prepareOpenCodeTemp(home, 300, pid => pid === 200)
+
+    expect(current).toBe(join(root, 'tui-300'))
+    expect(existsSync(join(root, 'tui-100'))).toBe(false)
+    expect(existsSync(join(root, 'tui-200'))).toBe(true)
   })
 
   it('overrides parent-provided auto-update switches with the hardcoded safe values', () => {

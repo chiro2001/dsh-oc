@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
-import type { MessageConvertOptions } from './convert/message.js'
+import type { MessageConvertOptions, V1MessageEntry } from './convert/message.js'
 import { DEFAULT_AGENT, projectIdFor, safeJsonParse } from './convert/common.js'
 import { opencodeToolName, type ToolCallInfo } from './convert/tool.js'
 import type { InteractionState } from './state.js'
@@ -195,12 +195,12 @@ export function streamPart(
  * assistant message with a text part. The message is intentionally
  * ephemeral — dsh history is not touched, so no model turn is triggered.
  */
-export function commandResultEvents(
+export function commandResultMessage(
   deps: TranslateDeps,
   sessionId: string,
   text: string,
   options: { status?: 'busy' | 'idle'; parentID?: string } = {},
-): BridgeGlobalEvent[] {
+): { events: BridgeGlobalEvent[]; entry: V1MessageEntry } {
   const directory = directoryFor(sessionId, deps)
   const project = projectIdFor(directory)
   const events: BridgeGlobalEvent[] = []
@@ -217,10 +217,7 @@ export function commandResultEvents(
   const created = Date.now()
   const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
   const agent = deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
-  events.push(
-    makeEvent(directory, 'message.updated', {
-      sessionID: sessionId,
-      info: {
+  const info: Record<string, unknown> = {
         id,
         sessionID: sessionId,
         role: 'assistant',
@@ -233,24 +230,37 @@ export function commandResultEvents(
         path: { cwd: directory, root: directory },
         cost: 0,
         tokens: zeroTokens(),
-      },
-    }, project),
-  )
-  events.push(
-    makeEvent(directory, 'message.part.updated', {
-      sessionID: sessionId,
-      part: {
+      }
+  const part: Record<string, unknown> = {
         id: partId,
         sessionID: sessionId,
         messageID: id,
         type: 'text',
         text,
         time: { start: created },
-      },
-      time: created,
-    }, project),
-  )
-  return events
+      }
+  events.push(makeEvent(directory, 'message.updated', { sessionID: sessionId, info }, project))
+  events.push(makeEvent(directory, 'message.part.updated', {
+    sessionID: sessionId,
+    part,
+    time: created,
+  }, project))
+  return {
+    events,
+    entry: {
+      info: info as unknown as V1MessageEntry['info'],
+      parts: [part as unknown as V1MessageEntry['parts'][number]],
+    },
+  }
+}
+
+export function commandResultEvents(
+  deps: TranslateDeps,
+  sessionId: string,
+  text: string,
+  options: { status?: 'busy' | 'idle'; parentID?: string } = {},
+): BridgeGlobalEvent[] {
+  return commandResultMessage(deps, sessionId, text, options).events
 }
 
 /** Visible agent-error message used by the host-level error path. */

@@ -19,8 +19,11 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
                   └─ DSH Agent/Session/Tools/LLM/Approval/Questions
 ```
 
-仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.1.0-rc.1`（未发布
+仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.2.0-rc.1`（未发布
 registry，安装/更新走 GitHub 源 `#main` / `#develop`）。
+
+当前候选对应 dsh `>=0.1.2-rc.1`。PR #1/#2/#3 没有原样合入；本候选将其
+有效语义与 dsh 0.1.2 host-services 迁移重新整合，详见 CHANGELOG。
 
 ## 代码结构
 
@@ -82,6 +85,8 @@ bash scripts/update-local-install.sh [ref]
                                           # 更新本地 dsh profile 安装并校验 resolved commit/version
 bash scripts/e2e-real-queued-order.sh     # manual：真实模型排队错序 wire/面板证据
 bash scripts/e2e-minimal-server-repro.sh  # 官方最小 server 归因：脚本化事件 → 官方 TUI 渲染顺序
+scripts/monitor-process-io.sh --pid <pid> --log <tsv> # 默认 observe-only 的 I/O/RSS/CPU 观察
+tests/e2e/fake-opencode-idle.sh           # fake attach 空闲无 EOF 忙循环回归
  ```
 
 本地直连 dsh profile（实时验证）：`dsh plugin --profile oc add .`；改代码后
@@ -118,6 +123,9 @@ dsh --profile oc --help                                            # 验证版�
   `1.18.18`）；启动时 `resolveOpenCodeBinary` + `verifyOpenCodeVersion` 双重
   校验，显式 `DSH_OC_OPENCODE_BIN` 版本不匹配会直接报错，不回退到 PATH 上
   的其它版本。
+- OpenTUI 1.18.18/Bun 的 native 临时文件泄漏由 dsh-oc 隔离到
+  `$DSH_HOME/opencode/tmp/tui-<pid>`；正常退出清理，下一次启动回收已退出
+  dsh 进程目录。不会搜索任意用户插件缓存，也不会关闭官方版本/完整性校验。
 - 解析优先级：`DSH_OC_OPENCODE_BIN` → `$DSH_HOME/opencode/bin/<version>`
   → PATH 上版本匹配的 `opencode` → 官方 npm 平台包（惰性安装，npm integrity
   校验）→ profile 内 `opencode-ai` 包 → GitHub Release 惰性下载。
@@ -142,6 +150,15 @@ dsh --profile oc --help                                            # 验证版�
   比较）；改动 bridge SSE/历史转换时至少跑
   `e2e-recovery-consistency.sh` + `e2e-recovery-crash.sh` +
   `e2e-recovery-sse-reconnect.sh`。
+
+- **status 热路径**：官方 TUI 等待回合时会高频轮询 `/session/status`；bridge
+  从 dsh `api-session/status`/`api-session/activity` 维护内存 authoritative map，
+  冷启动最多一次有界 `session.list` seed，避免每秒扫描全量持久化 session。
+- **SSE 断线契约**：`SseHub` 保留受事件数/序列化字节双上限约束的 ring，消费
+  `Last-Event-ID` 严格回放其后的事件；游标淘汰或未知时记录告警并回放当前
+  status/control snapshot。每连接不触发 history/list 扫描。
+- **兼容边界**：dsh-dcp rc.6 仍读取已移除的 `session.events`，bridge 暂时
+  安装 `snapshotEvents()` getter shim；dcp 升级到兼容 dsh 0.1.2 后删除。
 
 ## 自测门槛（提交/合并前必须全绿）
 

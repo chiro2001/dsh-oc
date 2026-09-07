@@ -50,7 +50,6 @@ const replayContext = rawEvents === undefined
       }
     })()
 
-const ok = (value) => ({ rpcId: 'rpc-1', result: { ok: true, value } })
 const item = {
   sessionId,
   updatedAt: 2000,
@@ -65,87 +64,66 @@ const item = {
 }
 
 const api = {
-  sessions: {
-    list: async () => ok({ items: [item] }),
-    search: async () => ok({ items: [], hasMore: false }),
-    create: async () => ok({ sessionId }),
-    fork: async () => ok({ sessionId }),
-    // Empty durable history: the live mux feed below is the only source, so
-    // the TUI must build the conversation from streaming events (this is
-    // where the transient render-order race lives).
-    history: async () => ok({ events: [], hasMore: false }),
-    models: async () => ok({
+  sessionController: {
+    list: async () => ({ items: [item] }),
+    search: async () => ({ items: [], hasMore: false }),
+    create: async () => ({ sessionId }),
+    fork: async () => ({ sessionId }),
+    // Empty durable history: the scripted session/event feed below is the
+    // only conversation source, so the TUI must build the surface from the
+    // exact SSE order we control.
+    history: async () => ({ events: [], hasMore: false }),
+    models: async () => ({
       current: { provider: 'deepseek-official', model: 'mock-model' },
-      routable: true,
-      groups: [],
+    }),
+    modelCatalog: async () => ({
+      default: { provider: 'deepseek-official', model: 'mock-model' },
+      routableProviders: ['deepseek-official'],
+      groups: [{
+        id: 'deepseek-official',
+        name: 'DeepSeek',
+        models: [{ id: 'mock-model', name: 'Mock Model' }],
+      }],
       failures: [],
     }),
-    rename: async () => ok({ title: 't', seq: 1 }),
-    prompt: async () => ok({ accepted: true }),
-    cancel: async () => ok({ accepted: true }),
-    selectModel: async () => ok({
+    rename: async () => ({ title: 't', seq: 1 }),
+    prompt: async () => ({ accepted: true }),
+    cancel: async () => ({ accepted: true }),
+    selectModel: async () => ({
       selected: { provider: 'deepseek-official', model: 'mock-model', reasoningEffort: 'off' },
     }),
-  },
-  host: {
-    describe: async () => ok({
-      version: '0.1.0-rc.6',
-      cwd: process.cwd(),
-      attachedSessions: 0,
-      canOpenPath: false,
-    }),
-  },
-  agentPresets: {
-    list: async () => ok({ presets: [], authorable: false, hasDocument: false }),
-    select: async () => ok({ agentPreset: 'standard' }),
-  },
-  goals: {
-    create: async () => ok({ ref: { id: 'g1', revision: 1 } }),
-    edit: async () => ok({ ref: { id: 'g1', revision: 2 } }),
-    pause: async () => ok({ ref: { id: 'g1', revision: 3 } }),
-    resume: async () => ok({ ref: { id: 'g1', revision: 4 } }),
-    complete: async () => ok({ ref: { id: 'g1', revision: 5 } }),
-    clear: async () => ok({ cleared: true }),
-  },
-  skills: { list: async () => ok({ skills: [] }) },
-  llm: { models: async () => ok({ groups: [], failures: [] }) },
-  events: {
-    mux: async function* () {
-      if (rawEvents !== undefined) {
-        // Keep the SSE connection open forever: the bridge tears the
-        // connection down when the mux stream ends, but raw replay feeds
-        // events externally through the hub.
-        await new Promise(() => {})
-        return
-      }
-      // The TUI validates the attached session from its first session.updated.
+    page: async () => ({ records: [], hasMore: false }),
+    follow: async function* () {
       yield {
-        rpcId: 'rpc-session',
-        payload: {
-          type: 'session/event',
-          sessionId,
-          event: {
-            type: 'session',
-            seq: -1,
-            time: Date.now(),
-            createdAt: Date.now(),
-            cwd: process.cwd(),
-            title: 'Minimal Server Session',
-          },
-        },
-      }
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
-      for (const event of events) {
-        yield {
-          rpcId: `rpc-${event.seq ?? 0}`,
-          payload: { type: 'session/event', sessionId, event },
-        }
-        await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
+        type: 'snapshot',
+        header: {},
+        cursor: -1,
+        records: [],
+        hasMore: false,
+        projections: { asOfSeq: -1, values: {} },
       }
     },
-    host: async function* () {},
+    control: async function* () {},
+    resolveAgent: async () => ({ agent: { id: session } }),
   },
-  respond: async () => ({ accepted: true }),
+  agentPresets: {
+    list: async () => [],
+    select: async () => 'standard',
+    defaultId: 'standard',
+  },
+  goals: {
+    create: async () => ({ id: 'g1', revision: 1 }),
+    edit: async () => ({ id: 'g1', revision: 2 }),
+    pause: async () => ({ id: 'g1', revision: 3 }),
+    resume: async () => ({ id: 'g1', revision: 4 }),
+    complete: async () => ({ id: 'g1', revision: 5 }),
+    clear: async () => ({ cleared: true }),
+  },
+  sessionSkillCatalog: { list: async () => ({ skills: [] }) },
+  commands: undefined,
+  agents: undefined,
+  sessions: undefined,
+  sessionProjections: undefined,
 }
 
 const router = createBridgeRouter(api, {
@@ -154,6 +132,43 @@ const router = createBridgeRouter(api, {
 })
 const server = await startBridgeServer(router)
 process.stdout.write(`READY ${server.url}\n`)
+
+const feedScriptedEvents = async () => {
+  if (rawEvents !== undefined) return
+  // The official TUI opens SSE after its bootstrap HTTP calls. Wait for that
+  // client before emitting the scripted live feed; otherwise a shared-host
+  // pump would legitimately broadcast before any observer exists and this
+  // renderer-attribution harness would test startup loss instead of ordering.
+  const clientDeadline = Date.now() + 30_000
+  while (router.ctx.hub.size === 0 && Date.now() < clientDeadline) {
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25))
+  }
+  // Give the client time to finish the attach/session hydration after opening
+  // SSE. This keeps the renderer repro about message ordering, not whether
+  // the first live frame raced the TUI's initial sync.
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, Math.max(delayMs, 1000)))
+  await router.feed({
+    type: 'session/event',
+    sessionId,
+    event: {
+      type: 'session',
+      seq: -1,
+      time: Date.now(),
+      data: { createdAt: Date.now(), cwd: process.cwd(), title: 'Minimal Server Session' },
+    },
+  })
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
+  for (const event of events) {
+    await router.feed({
+      type: 'session/event',
+      sessionId,
+      event,
+    })
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, delayMs))
+  }
+}
+
+void feedScriptedEvents()
 
 if (rawEvents !== undefined) {
   // Raw replay mode: broadcast the recorded bridge SSE events verbatim to

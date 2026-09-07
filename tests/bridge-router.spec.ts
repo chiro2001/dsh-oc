@@ -3,12 +3,21 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { createBridgeRouter, hostSessionAddedEvents, type BridgeRouter } from '../src/bridge/router.js'
-import { extractParams, matchPattern, seedProjectionState } from '../src/bridge/router.js'
+import { createBridgeRouter, hostSessionAddedEvents, recordSessionSummaries, type BridgeRouter } from '../src/bridge/router.js'
+import { installSessionEventsCompat, installSessionEventsOnLiveSessions } from '../src/bridge/index.js'
+import {
+  extractParams,
+  historyCacheKey,
+  matchPattern,
+  seedDerivedHistoryPage,
+  seedProjectionState,
+} from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import type { BridgeApi } from '../src/bridge/rpc.js'
+import { expandRecord } from '../src/bridge/rpc.js'
+import type { BridgeHostFrame, ToolEventView } from '../src/bridge/dsh-types.js'
+import { InteractionState } from '../src/bridge/state.js'
 import {
   errRpc,
   fakeApi,
@@ -17,7 +26,6 @@ import {
   okRpc,
   sessionEvent,
 } from './helpers.js'
-import type { ClientResponse } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 const servers: BridgeServerHandle[] = []
 const tempDirs: string[] = []
@@ -107,6 +115,50 @@ const STARTUP_GET_ROUTES = [
 ] as const
 
 describe('bridge router: startup GET routes', () => {
+  it('does not seed a 100-message cache from a partial default history window', () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    seedDerivedHistoryPage(router.ctx, 's-partial', {
+      events: Array.from({ length: 50 }, () => ({ event: sessionEvent('turn/start', { turn: 1 }) })) as never,
+      hasMore: true,
+    }, {})
+    expect(router.ctx.state.getHistoryCache(historyCacheKey('s-partial', 100), 1000)).toBeUndefined()
+  })
+
+  it('expands packed chunk rows with the final dt end time', () => {
+    const [entry] = expandRecord({
+      type: 'chunks',
+      event: {
+        type: 'chunkrow/text-chunks',
+        seq: 10,
+        time: 100,
+        data: { turn: 1, step: 1, index: 0, dt: [10, 20], texts: ['a', 'b', 'c'] },
+      },
+    } as never)
+    expect(entry?.event.time).toBe(130)
+    expect((entry?.event as { time0?: number }).time0).toBe(100)
+  })
+
+  it('bridges the removed Session.events getter for older profile plugins', () => {
+    class SessionFixture {
+      snapshotEvents(): readonly unknown[] {
+        return [{ type: 'turn/start' }]
+      }
+    }
+    const session = new SessionFixture()
+    expect(installSessionEventsCompat(session)).toBe(true)
+    expect((session as unknown as { events: unknown[] }).events).toEqual([{ type: 'turn/start' }])
+    expect(installSessionEventsCompat(session)).toBe(false)
+  })
+
+  it('installs the compatibility getter on every live session during bridge init', () => {
+    class SessionFixture {
+      snapshotEvents(): readonly unknown[] { return [] }
+    }
+    const sessions = { list: () => [new SessionFixture(), new SessionFixture()] }
+    expect(installSessionEventsOnLiveSessions(sessions)).toBe(1)
+    expect((sessions.list()[0] as unknown as { events: unknown[] }).events).toEqual([])
+  })
+
   it('answers every PROTOCOL §3 boot route with 2xx JSON', async () => {
     const { server } = await boot(fakeApi())
     for (const path of STARTUP_GET_ROUTES) {
@@ -163,10 +215,10 @@ describe('bridge router: startup GET routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         create: async (request) => {
-          calls.push({ method: 'session.create', payload: request.payload })
+          calls.push({ method: 'session.create', payload: request })
           return okRpc({ sessionId: 'created' as never })
         },
       },
@@ -192,9 +244,15 @@ describe('bridge router: startup GET routes', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      llm: {
-        ...base.llm,
-        models: async () => okRpc({
+      agentPresets: {
+        ...base.agentPresets,
+        defaultId: undefined as never,
+      },
+      sessionController: {
+        ...base.sessionController,
+        modelCatalog: async () => okRpc({
+          default: { provider: 'deepseek-official', model: 'deepseek-chat' },
+          routableProviders: ['deepseek-official'],
           groups: [{
             id: 'deepseek-official',
             name: 'DeepSeek',
@@ -212,14 +270,14 @@ describe('bridge router: startup GET routes', () => {
         name: 'build',
         mode: 'primary',
         permission: [],
-        model: { providerID: 'deepseek', modelID: 'mock-model' },
+        model: { providerID: 'deepseek', modelID: 'deepseek-chat' },
       },
     ])
     const v2 = await request(server, 'GET', '/api/agent')
     expect(v2.status).toBe(200)
     expect(v2.body).toMatchObject({
       location: { directory: '/work' },
-      data: [{ id: 'build', mode: 'primary', hidden: false, model: { id: 'mock-model', providerID: 'deepseek' } }],
+      data: [{ id: 'build', mode: 'primary', hidden: false, model: { id: 'deepseek-chat', providerID: 'deepseek' } }],
     })
   })
 
@@ -228,15 +286,12 @@ describe('bridge router: startup GET routes', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'standard', trust: 'system', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async () => okRpc({ agentPreset: 'minimal' }),
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async () => 'minimal',
       },
     }
     const { server } = await boot(api)
@@ -315,7 +370,7 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: { ...base.sessions, list: async () => okRpc({ items: [item] }) },
+      sessionController: { ...base.sessionController, list: async () => okRpc({ items: [item] }) },
     }
     const { server } = await boot(api)
     const v1 = await request(server, 'GET', '/session')
@@ -332,13 +387,96 @@ describe('bridge router: session routes', () => {
     expect(v2.body).toMatchObject({ data: [{ id: 's1', title: 'Session One' }], cursor: {} })
   })
 
+  it('serves repeated status polls from memory instead of rescanning the corpus', async () => {
+    let listCalls = 0
+    const items = Array.from({ length: 1000 }, (_, index) => ({
+      ...item,
+      sessionId: `s-${index}` as never,
+      cwd: index % 2 === 0 ? '/work' : '/other',
+      running: index === 6,
+      updatedAt: index,
+    }))
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        list: async () => {
+          listCalls++
+          return okRpc({ items })
+        },
+      },
+    }
+    const { server, router } = await boot(api)
+    for (let index = 0; index < 100; index++) {
+      const result = await request(server, 'GET', '/session/status?directory=/work')
+      expect(result.status).toBe(200)
+      expect((result.body as Record<string, unknown>)['s-6']).toEqual({ type: 'busy' })
+    }
+    expect(listCalls).toBe(1)
+    expect(router.ctx.state.sessionStatusRequests).toBe(100)
+    expect(router.ctx.state.sessionStatusSeeds).toBe(1)
+
+    router.feedHostFrame({ type: 'host/session-status', sessionId: 's-6', running: false })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const idle = await request(server, 'GET', '/session/status?directory=/work')
+    expect((idle.body as Record<string, unknown>)['s-6']).toEqual({ type: 'idle' })
+    expect(listCalls).toBe(1)
+  })
+
+  it('tracks turn start/end edges in the authoritative status map', async () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's-turn',
+      event: sessionEvent('turn/start', { turn: 1 }, 10, 100),
+    })
+    expect(router.ctx.state.sessionRunningFor('s-turn')).toBe(true)
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's-turn',
+      event: sessionEvent('turn/end', { turn: 1 }, 11, 200),
+    })
+    expect(router.ctx.state.sessionRunningFor('s-turn')).toBe(false)
+    expect(router.ctx.state.sessionStatusUpdatedAtFor('s-turn')).toBe(200)
+  })
+
+  it('rejects stale host status edges but lets a later equal-time edge win', async () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's-race',
+      event: sessionEvent('turn/start', { turn: 1 }, 10, 200),
+    })
+
+    router.feedHostFrame({ type: 'host/session-status', sessionId: 's-race', running: false, updatedAt: 100 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(router.ctx.state.sessionRunningFor('s-race')).toBe(true)
+    expect(router.ctx.state.sessionStatusUpdatedAtFor('s-race')).toBe(200)
+
+    // Strictly older edges are ignored; equal timestamps preserve the
+    // serialized queue order, so this later edge is authoritative.
+    router.feedHostFrame({ type: 'host/session-status', sessionId: 's-race', running: false, updatedAt: 200 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(router.ctx.state.sessionRunningFor('s-race')).toBe(false)
+    expect(router.ctx.state.sessionStatusUpdatedAtFor('s-race')).toBe(200)
+
+    router.feedHostFrame({
+      type: 'host/session-added',
+      sessionId: 's-race',
+      summary: { sessionId: 's-race', running: true, cwd: '/work' } as never,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(router.ctx.state.sessionRunningFor('s-race')).toBe(false)
+  })
+
   it('warms real session titles from history projections into the list', async () => {
     let historyCalls = 0
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [{ ...item, projections: undefined }] }),
         history: async () => {
           historyCalls += 1
@@ -363,8 +501,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({
           items: [
             { ...item, projections: undefined },
@@ -388,8 +526,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         create: async () => okRpc({ sessionId: 's-new' as never }),
       },
     }
@@ -417,8 +555,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [],
           hasMore: false,
@@ -437,8 +575,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [],
           hasMore: false,
@@ -478,10 +616,10 @@ describe('bridge router: session routes', () => {
     ]
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async (request) => {
-          const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
+          const payload = request as { maxMessages?: number; beforeSeq?: number }
           let window = events
           const beforeSeq = payload.beforeSeq
           if (beforeSeq !== undefined) {
@@ -530,8 +668,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [
             { event: makeUserEvent('hello', 'm-user', 1000) },
@@ -601,10 +739,10 @@ describe('bridge router: session routes', () => {
     ]
     const api: BridgeApi = {
       ...fakeApi(),
-      sessions: {
-        ...fakeApi().sessions,
+      sessionController: {
+        ...fakeApi().sessionController,
         history: async (request) => {
-          const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
+          const payload = request as { maxMessages?: number; beforeSeq?: number }
           let window = events
           const beforeSeq = payload.beforeSeq
           if (beforeSeq !== undefined) {
@@ -650,10 +788,10 @@ describe('bridge router: session routes', () => {
     ]
     const api: BridgeApi = {
       ...fakeApi(),
-      sessions: {
-        ...fakeApi().sessions,
+      sessionController: {
+        ...fakeApi().sessionController,
         history: async (request) => {
-          const payload = request.payload as { maxMessages?: number; beforeSeq?: number }
+          const payload = request as { maxMessages?: number; beforeSeq?: number }
           let window = events
           const beforeSeq = payload.beforeSeq
           if (beforeSeq !== undefined) {
@@ -695,8 +833,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [
             { event: makeUserEvent('hello', 'dsh-user-1', 1000) },
@@ -720,13 +858,32 @@ describe('bridge router: session routes', () => {
     expect(router.ctx.state.takePromptMessageId('s1', 'dsh-user-1')).toBe('msg_user_1')
     router.ctx.state.recordAssistantId('s1', 'dsh-tool', 'msg_tool_1')
     router.ctx.state.recordAssistantId('s1', 'dsh-text', 'msg_text_1')
+    router.ctx.state.setAssistantMessageCreatedAt('s1', 'msg_tool_1', 1050)
+    router.ctx.state.setAssistantMessageCreatedAt('s1', 'msg_text_1', 1150)
+    router.ctx.state.markAssistantPending('s1', 'msg_tool_1')
 
     const v1 = await request(server, 'GET', '/session/s1/message')
     expect(v1.status).toBe(200)
-    const v1Body = v1.body as Array<{ info: { id: string; role: string; parentID?: string } }>
+    const v1Body = v1.body as Array<{ info: { id: string; role: string; parentID?: string; time?: { created?: number } } }>
     expect(v1Body[0]?.info.id).toBe('msg_user_1')
     expect(v1Body[1]?.info.parentID).toBe('msg_user_1')
     expect(v1Body[2]?.info.parentID).toBe('msg_tool_1')
+    expect((v1Body[1]?.info.time as { created?: number }).created).toBe(1050)
+    expect((v1Body[2]?.info.time as { created?: number }).created).toBe(1150)
+    expect((v1Body[1]?.info.time as { completed?: number }).completed).toBeUndefined()
+
+    const v2 = await request(server, 'GET', '/api/session/s1/message')
+    const v2Body = v2.body as { data: Array<{ id: string; type?: string; time?: { created?: number; completed?: number } }> }
+    expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')).toMatchObject({
+      type: 'assistant',
+      time: { created: 1050 },
+    })
+    expect(v2Body.data.find((entry) => entry.id === 'msg_text_1')).toMatchObject({
+      type: 'assistant',
+      time: { created: 1150 },
+    })
+    expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.created).toBe(1050)
+    expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.completed).toBeUndefined()
 
     const ids = new Set(v1Body.map((entry) => entry.info.id))
     for (const entry of v1Body) {
@@ -741,7 +898,7 @@ describe('bridge router: session routes', () => {
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
     const api = {
       ...base,
-      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, other] }) },
+      sessionController: { ...base.sessionController, list: async () => okRpc({ items: [item, other] }) },
     }
     const { server } = await boot(api)
 
@@ -763,7 +920,7 @@ describe('bridge router: session routes', () => {
     const sub = { ...item, sessionId: 's-sub' as never, cwd: '/work/sub' }
     const api = {
       ...base,
-      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, sub] }) },
+      sessionController: { ...base.sessionController, list: async () => okRpc({ items: [item, sub] }) },
     }
     const { server } = await boot(api, '/work')
     const result = await request(server, 'GET', '/session?directory=sub')
@@ -776,8 +933,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => {
           calls.push('list')
           return okRpc({ items: [item] })
@@ -804,8 +961,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => {
           calls.push('list')
           return okRpc({ items: [item] })
@@ -830,11 +987,11 @@ describe('bridge router: session routes', () => {
     const s6 = { ...item, sessionId: 's6' as never }
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [item, s2, s3, s4, s5, s6] }),
         history: async (request) => {
-          historyCalls.push(String((request.payload as { sessionId?: string }).sessionId))
+          historyCalls.push(String((request as { sessionId?: string }).sessionId))
           return okRpc({ events: [], hasMore: false })
         },
       },
@@ -850,8 +1007,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => {
           historyCalls.push('history')
           return okRpc({ events: [], hasMore: false })
@@ -871,10 +1028,10 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async (request) => {
-          const maxMessages = (request.payload as { maxMessages?: number }).maxMessages
+          const maxMessages = (request as { maxMessages?: number }).maxMessages
           historyCalls.push(maxMessages === undefined ? 'tail' : String(maxMessages))
           return okRpc({ events: [], hasMore: false })
         },
@@ -899,8 +1056,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => {
           listCalls += 1
           await new Promise((resolve) => setTimeout(resolve, 20))
@@ -925,8 +1082,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => {
           historyCalls += 1
           await new Promise((resolve) => setTimeout(resolve, 20))
@@ -949,8 +1106,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => {
           historyCalls += 1
           return okRpc({ events: [{ event: makeUserEvent('hi') }], hasMore: false })
@@ -968,8 +1125,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => {
           historyCalls += 1
           return okRpc({ events: [{ event: makeUserEvent('hi') }], hasMore: false })
@@ -989,8 +1146,8 @@ describe('bridge router: session routes', () => {
     const fresh = { ...item, sessionId: 's-fresh' as never }
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => {
           listCalls += 1
           const value = listCalls === 1 ? stale : fresh
@@ -1022,11 +1179,11 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [item] }),
       },
-      skills: {
+      sessionSkillCatalog: {
         list: async () => okRpc({
           skills: [{
             name: 'code-review',
@@ -1066,14 +1223,14 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async (request) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
       },
-      skills: {
+      sessionSkillCatalog: {
         list: async () => okRpc({
           skills: [{ name: 'code-review', description: 'Review code', modelInvocable: true }],
         }),
@@ -1107,7 +1264,7 @@ describe('bridge router: session routes', () => {
       const base = fakeApi()
       const api: BridgeApi = {
         ...base,
-        sessions: { ...base.sessions, list: async () => okRpc({ items: [item] }) },
+        sessionController: { ...base.sessionController, list: async () => okRpc({ items: [item] }) },
       }
       const { server } = await boot(api)
       const v1 = await request(server, 'GET', '/skill')
@@ -1132,11 +1289,11 @@ describe('bridge router: session routes', () => {
     const searchCalls: Array<{ method: string; payload: unknown }> = []
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [item, other] }),
         search: async (request) => {
-          searchCalls.push({ method: 'session.search', payload: request.payload })
+          searchCalls.push({ method: 'session.search', payload: request })
           return okRpc({
             items: [{ sessionId: 's2' as never, snippet: 'needle found' }],
             hasMore: false,
@@ -1159,7 +1316,7 @@ describe('bridge router: session routes', () => {
     const other = { ...item, sessionId: 's2' as never, cwd: '/other' }
     const api = {
       ...base,
-      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, other] }) },
+      sessionController: { ...base.sessionController, list: async () => okRpc({ items: [item, other] }) },
     }
     const { server } = await boot(api)
     const result = await request(server, 'GET', '/api/session?order=asc')
@@ -1176,7 +1333,7 @@ describe('bridge router: session routes', () => {
     const s3 = { ...item, sessionId: 's3' as never }
     const api = {
       ...base,
-      sessions: { ...base.sessions, list: async () => okRpc({ items: [item, s2, s3] }) },
+      sessionController: { ...base.sessionController, list: async () => okRpc({ items: [item, s2, s3] }) },
     }
     const { server } = await boot(api)
 
@@ -1223,7 +1380,7 @@ describe('bridge router: session routes', () => {
     }
     const api = {
       ...base,
-      sessions: { ...base.sessions, list: async () => okRpc({ items: [child, parent] }) },
+      sessionController: { ...base.sessionController, list: async () => okRpc({ items: [child, parent] }) },
     }
     const { server, router } = await boot(api)
     const v1 = await request(server, 'GET', '/session')
@@ -1265,8 +1422,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({
           items: [{
             sessionId: 's1' as never,
@@ -1306,18 +1463,15 @@ describe('bridge router: session routes', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'standard', trust: 'system', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async () => okRpc({ agentPreset: 'minimal' }),
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async () => 'minimal',
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         create: async () => okRpc({ sessionId: 'fresh-1' as never }),
       },
     }
@@ -1349,35 +1503,24 @@ describe('bridge router: session routes', () => {
   })
 
   it('pushes host/session-added subagent children over the SSE stream', async () => {
-    const api = fakeApi({
-      events: {
-        mux: async function* () {
-          return
-        },
-        host: async function* () {
-          yield {
-            rpcId: 'host-1' as never,
-            payload: {
-              type: 'host/session-added',
-              sessionId: 'child-1' as never,
-              blank: true,
-              cwd: '/work',
-              origin: 'subagent',
-              parentSessionId: 'parent-1' as never,
-              agentPreset: 'minimal',
-            },
-          } as never
-          return
-        },
-      },
-    })
-    const { server } = await boot(api)
+    const { server, router } = await boot(fakeApi())
     const controller = new AbortController()
     const response = await fetch(server.url + '/global/event', { signal: controller.signal })
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
     let text = ''
     const deadline = Date.now() + 5000
+    // dsh 0.1.2: host lifecycle frames are fed through feedHostFrame, which
+    // broadcasts the derived `session.updated` to all SSE clients.
+    router.feedHostFrame({
+      type: 'host/session-added',
+      sessionId: 'child-1',
+      blank: true,
+      cwd: '/work',
+      origin: 'subagent',
+      parentSessionId: 'parent-1',
+      agentPreset: 'minimal',
+    } as unknown as BridgeHostFrame)
     while (Date.now() < deadline) {
       const { value, done } = await reader.read()
       if (done) break
@@ -1395,8 +1538,8 @@ describe('bridge router: session routes', () => {
     const history = [makeUserEvent('hello'), makeAssistantEvent([{ type: 'text', text: 'hi back' }])]
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [item] }),
         history: async () => okRpc({ events: history.map((event) => ({ event })), hasMore: false }),
       },
@@ -1432,12 +1575,132 @@ describe('bridge router: session routes', () => {
     expect((await request(server, 'GET', '/api/session/s1/message/nope')).status).toBe(404)
   })
 
+  it('closes the rc.1 follow iterator after reading the history snapshot', async () => {
+    let returned = false
+    const base = fakeApi()
+    const item = {
+      sessionId: 's-follow' as never,
+      updatedAt: 1,
+      running: false,
+      blank: true,
+      cwd: '/work',
+      projections: undefined,
+    }
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        list: async () => okRpc({ items: [item] }),
+        history: undefined,
+        follow: () => ({
+          [Symbol.asyncIterator]() {
+            return {
+              next: async () => ({
+                done: false,
+                value: {
+                  type: 'snapshot',
+                  header: {},
+                  cursor: 0,
+                  records: [],
+                  hasMore: false,
+                  projections: { asOfSeq: 0, values: {} },
+                },
+              }),
+              return: async () => {
+                returned = true
+                return { done: true, value: undefined }
+              },
+            }
+          },
+        } as never),
+      },
+    }
+    const { server } = await boot(api)
+    const response = await request(server, 'GET', '/session/s-follow')
+    expect(response.status).toBe(200)
+    expect(returned).toBe(true)
+  })
+
+  it('uses a subagent address for child history reads', async () => {
+    let address: unknown
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        history: undefined,
+        follow: (request) => {
+          address = request.address
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: 'snapshot',
+                header: {},
+                cursor: -1,
+                records: [],
+                hasMore: false,
+                projections: { asOfSeq: -1, values: {} },
+              }
+            },
+          } as never
+        },
+      },
+    }
+    const { server, router } = await boot(api)
+    recordSessionSummaries(router.ctx, [{
+      sessionId: 'child-1' as never,
+      updatedAt: 1,
+      running: false,
+      blank: false,
+      origin: 'subagent',
+      parentSessionId: 'parent-1' as never,
+      projections: { asOfSeq: 0, values: { subagent: { mode: 'one-shot' } } } as never,
+    }])
+    const result = await request(server, 'GET', '/session/child-1/message')
+    expect(result.status).toBe(200)
+    expect(address).toEqual({
+      kind: 'subagent',
+      parentSessionId: 'parent-1',
+      childSessionId: 'child-1',
+      mode: 'one-shot',
+    })
+  })
+
+  it('uses page when the backward cursor equals the follow snapshot cursor', async () => {
+    let pageCalled = false
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        history: undefined,
+        follow: () => ({
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'snapshot', header: {}, cursor: 5, records: [], hasMore: true,
+              projections: { asOfSeq: 5, values: {} },
+            }
+          },
+        } as never),
+        page: async (request) => {
+          pageCalled = request.beforeSeq === 5
+          return { records: [], hasMore: false }
+        },
+      },
+    }
+    const { server } = await boot(api)
+    const cursor = Buffer.from(JSON.stringify({ v: 1, beforeSeq: 5 }), 'utf8').toString('base64url')
+    const result = await request(server, 'GET', `/api/session/s-page/message?cursor=${cursor}`)
+    expect(result.status).toBe(200)
+    expect(pageCalled).toBe(true)
+  })
+
   it('reports the active session through /api/session/active', async () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [{
           sessionId: 'new-session' as never,
           updatedAt: Date.now(),
@@ -1461,8 +1724,8 @@ describe('bridge router: session routes', () => {
     const states = [{ running: true }, { running: false }]
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [{
           sessionId: 's1' as never,
           updatedAt: Date.now(),
@@ -1481,9 +1744,11 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      llm: {
-        ...base.llm,
-        models: async () => okRpc({
+      sessionController: {
+        ...base.sessionController,
+        modelCatalog: async () => okRpc({
+          default: { provider: 'deepseek-official', model: 'deepseek-chat' },
+          routableProviders: ['deepseek-official'],
           groups: [{
             id: 'deepseek-official',
             name: 'DeepSeek',
@@ -1491,9 +1756,6 @@ describe('bridge router: session routes', () => {
           }],
           failures: [],
         }),
-      },
-      sessions: {
-        ...base.sessions,
         list: async () => okRpc({ items: [item] }),
         history: async () => okRpc({ events: [{ event: makeUserEvent('hello') }], hasMore: false }),
       },
@@ -1516,9 +1778,11 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      llm: {
-        ...base.llm,
-        models: async () => okRpc({
+      sessionController: {
+        ...base.sessionController,
+        modelCatalog: async () => okRpc({
+          default: { provider: 'deepseek-official', model: 'deepseek-chat' },
+          routableProviders: ['deepseek-official'],
           groups: [{
             id: 'deepseek-official',
             name: 'DeepSeek',
@@ -1529,16 +1793,10 @@ describe('bridge router: session routes', () => {
           }],
           failures: [],
         }),
-      },
-      sessions: {
-        ...base.sessions,
         list: async () => okRpc({ items: [item] }),
         history: async () => okRpc({ events: [{ event: makeUserEvent('hello') }], hasMore: false }),
         models: async () => okRpc({
           current: { provider: 'deepseek-official', model: 'deepseek-v4-pro' },
-          routable: true,
-          groups: [],
-          failures: [],
         }),
       },
     }
@@ -1559,9 +1817,11 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      llm: {
-        ...base.llm,
-        models: async () => okRpc({
+      sessionController: {
+        ...base.sessionController,
+        modelCatalog: async () => okRpc({
+          default: { provider: 'deepseek-official', model: 'deepseek-chat' },
+          routableProviders: ['deepseek-official'],
           groups: [{
             id: 'deepseek-official',
             name: 'DeepSeek',
@@ -1572,9 +1832,6 @@ describe('bridge router: session routes', () => {
           }],
           failures: [],
         }),
-      },
-      sessions: {
-        ...base.sessions,
         prompt: async () => okRpc({ accepted: true }),
       },
     }
@@ -1626,20 +1883,20 @@ describe('bridge router: session routes', () => {
     }
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         create: async (request) => {
-          calls.push({ method: 'session.create', payload: request.payload })
+          calls.push({ method: 'session.create', payload: request })
           return okRpc({ sessionId: 'new-session' as never })
         },
         fork: async (request) => {
-          calls.push({ method: 'session.fork', payload: request.payload })
+          calls.push({ method: 'session.fork', payload: request })
           forkCreated = true
           return okRpc({ sessionId: 'fork-session' as never })
         },
         rename: async (request) => {
-          calls.push({ method: 'session.rename', payload: request.payload })
-          return okRpc({ title: request.payload.title, seq: 3 })
+          calls.push({ method: 'session.rename', payload: request })
+          return okRpc({ title: request.title, seq: 3 })
         },
         list: async () => okRpc({ items: forkCreated ? [child] : [item] }),
         history: async () => okRpc({ events: [], hasMore: false }),
@@ -1691,10 +1948,10 @@ describe('bridge router: session routes', () => {
     }
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         fork: async (request) => {
-          calls.push({ method: 'session.fork', payload: request.payload })
+          calls.push({ method: 'session.fork', payload: request })
           children.push({
             ...childBase,
             projections: {
@@ -1705,8 +1962,8 @@ describe('bridge router: session routes', () => {
           return okRpc({ sessionId: 'fork-session' as never })
         },
         rename: async (request) => {
-          calls.push({ method: 'session.rename', payload: request.payload })
-          return okRpc({ title: request.payload.title, seq: 3 })
+          calls.push({ method: 'session.rename', payload: request })
+          return okRpc({ title: request.title, seq: 3 })
         },
         list: async () => okRpc({ items: [item, ...children] }),
         history: async () => okRpc({
@@ -1758,15 +2015,15 @@ describe('bridge router: session routes', () => {
     const calls: Array<{ method: string; payload: unknown }> = []
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         fork: async (request) => {
-          calls.push({ method: 'session.fork', payload: request.payload })
+          calls.push({ method: 'session.fork', payload: request })
           return okRpc({ sessionId: 'fork-session' as never })
         },
         rename: async (request) => {
-          calls.push({ method: 'session.rename', payload: request.payload })
-          return okRpc({ title: request.payload.title, seq: 3 })
+          calls.push({ method: 'session.rename', payload: request })
+          return okRpc({ title: request.title, seq: 3 })
         },
         list: async () => okRpc({ items: [] }),
         history: async () => okRpc({
@@ -1844,20 +2101,20 @@ describe('bridge router: session routes', () => {
     const calls: Array<{ method: string; payload: unknown }> = []
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [item] }),
         history: async () => okRpc({ events: [], hasMore: false }),
         rename: async (request) => {
-          calls.push({ method: 'session.rename', payload: request.payload })
+          calls.push({ method: 'session.rename', payload: request })
           return okRpc({ title: 'renamed', seq: 3 })
         },
         prompt: async (request) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
-        cancel: async (request) => {
-          calls.push({ method: 'session.cancel', payload: request.payload })
+        cancel: (request) => {
+          calls.push({ method: 'session.cancel', payload: request })
           return okRpc({ accepted: true })
         },
       },
@@ -1935,10 +2192,10 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async (request) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
       },
@@ -1968,10 +2225,10 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
-        prompt: async (request: { payload: unknown }) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+      sessionController: {
+        ...base.sessionController,
+        prompt: async (request) => {
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
       },
@@ -2051,10 +2308,10 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async (request) => {
-          calls.push({ method: 'session.history', payload: request.payload })
+          calls.push({ method: 'session.history', payload: request })
           return okRpc({ events: [], hasMore: false })
         },
       },
@@ -2094,10 +2351,10 @@ describe('bridge router: session routes', () => {
     ]
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async (request) => {
-          calls.push({ method: 'session.history', payload: request.payload })
+          calls.push({ method: 'session.history', payload: request })
           return okRpc({ events, hasMore: true })
         },
       },
@@ -2140,8 +2397,8 @@ describe('bridge router: session routes', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [
             { event: sessionEvent('todo/write', { todos: [{ content: 'a', status: 'in_progress' }] }, 1, 100) },
@@ -2230,8 +2487,8 @@ describe('bridge router: session routes', () => {
     }
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [
             {
@@ -2284,7 +2541,18 @@ describe('bridge router: catalog routes', () => {
 
   it('serves providers/models to v1 and v2', async () => {
     const base = fakeApi()
-    const api = { ...base, llm: { ...base.llm, models: async () => okRpc({ groups, failures: [] }) } }
+    const api = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        modelCatalog: async () => okRpc({
+          default: { provider: 'deepseek-official', model: 'deepseek-chat' },
+          routableProviders: ['deepseek-official'],
+          groups,
+          failures: [],
+        }),
+      },
+    }
     const { server } = await boot(api)
     const configProviders = await request(server, 'GET', '/config/providers')
     expect(configProviders.body).toMatchObject({ providers: [{ id: 'deepseek' }], default: {} })
@@ -2327,17 +2595,22 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      llm: { ...base.llm, models: async () => okRpc({ groups, failures: [] }) },
-      agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'standard', trust: 'system', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
+      sessionController: {
+        ...base.sessionController,
+        modelCatalog: async () => okRpc({
+          default: { provider: 'deepseek-official', model: 'deepseek-chat' },
+          routableProviders: ['deepseek-official'],
+          groups,
+          failures: [],
         }),
-        select: async () => okRpc({ agentPreset: 'minimal' }),
+      },
+      agentPresets: {
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async () => 'minimal',
       },
     }
     const { server } = await boot(api)
@@ -2391,8 +2664,8 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     }
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [item] }),
         history: async () => okRpc({ events: [], hasMore: false }),
         models: async () => okRpc({
@@ -2402,7 +2675,7 @@ describe('bridge router: model variants, agent presets and /preset', () => {
           failures: [],
         }),
         selectModel: async (request) => {
-          calls.push({ method: 'session.selectModel', payload: request.payload })
+          calls.push({ method: 'session.selectModel', payload: request })
           return okRpc({
             selected: {
               provider: 'deepseek-official',
@@ -2440,8 +2713,8 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const calls: Array<{ method: string; payload: unknown }> = []
     let currentVariant: string | undefined = 'high'
     const api = fakeApi({
-      sessions: {
-        ...fakeApi().sessions,
+      sessionController: {
+        ...fakeApi().sessionController,
         models: async () => okRpc({
           current: {
             provider: 'deepseek-official',
@@ -2453,8 +2726,8 @@ describe('bridge router: model variants, agent presets and /preset', () => {
           failures: [],
         }),
         selectModel: async (request) => {
-          calls.push({ method: 'session.selectModel', payload: request.payload })
-          currentVariant = (request.payload as { reasoningEffort?: string }).reasoningEffort
+          calls.push({ method: 'session.selectModel', payload: request })
+          currentVariant = (request as { reasoningEffort?: string }).reasoningEffort
           return okRpc({
             selected: { provider: 'deepseek-official', model: 'mock-model', reasoningEffort: currentVariant },
           })
@@ -2490,21 +2763,18 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [{ id: 'minimal', trust: 'system', isDefault: true }],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async () => okRpc({ agentPreset: 'minimal' }),
+        ...base.agentPresets,
+        list: async () => okRpc([{ id: 'minimal', name: 'Minimal' }]),
+        select: async () => 'minimal',
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         create: async (request) => {
-          calls.push({ method: 'session.create', payload: request.payload })
+          calls.push({ method: 'session.create', payload: request })
           return okRpc({ sessionId: 'new-session' as never })
         },
         selectModel: async (request) => {
-          calls.push({ method: 'session.selectModel', payload: request.payload })
+          calls.push({ method: 'session.selectModel', payload: request })
           return okRpc({
             selected: {
               provider: 'deepseek-official',
@@ -2542,10 +2812,10 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const calls: Array<{ method: string; payload: unknown }> = []
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         selectModel: async (request) => {
-          calls.push({ method: 'session.selectModel', payload: request.payload })
+          calls.push({ method: 'session.selectModel', payload: request })
           return okRpc({
             selected: {
               provider: 'deepseek-official',
@@ -2555,7 +2825,7 @@ describe('bridge router: model variants, agent presets and /preset', () => {
           })
         },
         prompt: async (request) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
       },
@@ -2587,21 +2857,18 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'standard', trust: 'system', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async (request) => {
-          calls.push({ method: 'agentPreset.select', payload: request.payload })
-          return okRpc({ agentPreset: 'standard' })
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async (_agent, agentPreset) => {
+          calls.push({ method: 'agentPreset.select', payload: { agentPreset } })
+          return agentPreset
         },
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async () => okRpc({ accepted: true }),
       },
     }
@@ -2645,18 +2912,15 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [{ id: 'minimal', trust: 'system', isDefault: true }],
-          authorable: false,
-          hasDocument: false,
-        }),
+        ...base.agentPresets,
+        list: async () => okRpc([{ id: 'minimal', name: 'Minimal' }]),
         select: async () => {
           selects += 1
-          return okRpc({ agentPreset: 'minimal' })
+          return 'minimal'
         },
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async () => okRpc({ accepted: true }),
       },
     }
@@ -2674,18 +2938,15 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'standard', trust: 'system', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async () => errRpc('agent-preset-locked', 'agent preset is fixed'),
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async () => errRpc('agent-preset/locked', 'agent preset is fixed'),
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async () => okRpc({ accepted: true }),
       },
     }
@@ -2726,24 +2987,21 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'router-standard', trust: 'user', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'router-standard', name: 'Router Standard' },
+        ]),
         select: async () => {
           selects += 1
           // The first (blank-session) switch succeeds; any later re-select on
           // a started session is refused by dsh.
-          if (selects === 1) return okRpc({ agentPreset: 'router-standard' })
-          return errRpc('agent-preset-locked', 'session has already produced turns')
+          if (selects === 1) return 'router-standard'
+          return errRpc('agent-preset/locked', 'session has already produced turns')
         },
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async () => okRpc({ accepted: true }),
       },
     }
@@ -2800,21 +3058,18 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'router-standard', trust: 'user', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'router-standard', name: 'Router Standard' },
+        ]),
         select: async () => {
           selects += 1
-          return errRpc('agent-preset-locked', 'session has already produced turns')
+          return errRpc('agent-preset/locked', 'session has already produced turns')
         },
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         list: async () => okRpc({ items: [item] }),
         prompt: async () => okRpc({ accepted: true }),
       },
@@ -2849,27 +3104,23 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     expect(notices.filter((text) => text.includes('Agent switch locked'))).toHaveLength(0)
   })
 
-  it('switches blank-session agents and maps agent-preset-locked to 409', async () => {
+  it('switches blank-session agents and maps agent-preset/locked to 409', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: false },
-            { id: 'standard', trust: 'system', isDefault: true },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async (request) => {
-          calls.push({ method: 'agentPreset.select', payload: request.payload })
-          const payload = request.payload as { agentPreset?: string }
-          if (payload.agentPreset === 'standard') {
-            return errRpc('agent-preset-locked', 'session has already produced turns')
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async (_agent, agentPreset) => {
+          calls.push({ method: 'agentPreset.select', payload: { sessionId: 's1', agentPreset } })
+          if (agentPreset === 'standard') {
+            return errRpc('agent-preset/locked', 'session has already produced turns')
           }
-          return okRpc({ agentPreset: 'minimal' })
+          return agentPreset
         },
       },
     }
@@ -2892,17 +3143,15 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: false },
-            { id: 'standard', trust: 'system', isDefault: true },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async (request) => {
-          calls.push({ method: 'agentPreset.select', payload: request.payload })
-          return okRpc({ agentPreset: 'minimal' })
+        ...base.agentPresets,
+        defaultId: 'standard',
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async (_agent, agentPreset) => {
+          calls.push({ method: 'agentPreset.select', payload: { sessionId: 's1', agentPreset } })
+          return agentPreset
         },
       },
     }
@@ -2935,26 +3184,67 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     })
   })
 
+  it('suppresses only the matching stale /preset prompt, then permits a later Tab switch', async () => {
+    const base = fakeApi()
+    const selects: string[] = []
+    const api: BridgeApi = {
+      ...base,
+      agentPresets: {
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async (_agent, agentPreset) => {
+          selects.push(agentPreset)
+          return agentPreset
+        },
+      },
+      sessionController: {
+        ...base.sessionController,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    }
+    const { server, router } = await boot(api)
+    router.ctx.state.setSessionAgent('s1', 'minimal')
+    const switched = await request(server, 'POST', '/session/s1/command', {
+      command: 'preset',
+      arguments: 'standard',
+    })
+    expect(switched.status).toBe(200)
+
+    const stale = await request(server, 'POST', '/session/s1/message', {
+      agent: 'minimal',
+      parts: [{ type: 'text', text: 'first prompt' }],
+    })
+    expect(stale.status).toBe(200)
+    expect(selects).toEqual(['standard'])
+
+    const laterTab = await request(server, 'POST', '/session/s1/message', {
+      agent: 'minimal',
+      parts: [{ type: 'text', text: 'later Tab selection' }],
+    })
+    expect(laterTab.status).toBe(200)
+    expect(selects).toEqual(['standard', 'minimal'])
+  })
+
   it('inherits the last selected preset into newly created sessions', async () => {
     const base = fakeApi()
     const createCalls: Array<{ agentPreset?: string }> = []
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'standard', trust: 'system', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async () => okRpc({ agentPreset: 'standard' }),
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async () => 'standard',
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         create: async (request) => {
-          createCalls.push(request.payload as { agentPreset?: string })
+          createCalls.push(request as { agentPreset?: string })
           return okRpc({ sessionId: 's-new' as never })
         },
       },
@@ -2975,15 +3265,12 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: true },
-            { id: 'standard', trust: 'system', isDefault: false },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async () => okRpc({ agentPreset: 'standard' }),
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async () => 'standard',
       },
     }
     const { server, router } = await boot(api)
@@ -3015,23 +3302,20 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [
-            { id: 'minimal', trust: 'system', isDefault: false },
-            { id: 'standard', trust: 'system', isDefault: true },
-          ],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async (request) => {
-          calls.push({ method: 'agentPreset.select', payload: request.payload })
-          return okRpc({ agentPreset: 'minimal' })
+        ...base.agentPresets,
+        list: async () => okRpc([
+          { id: 'minimal', name: 'Minimal' },
+          { id: 'standard', name: 'Standard' },
+        ]),
+        select: async (_agent, agentPreset) => {
+          calls.push({ method: 'agentPreset.select', payload: { sessionId: 's1', agentPreset } })
+          return agentPreset
         },
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async (request) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
       },
@@ -3072,10 +3356,10 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const calls: Array<{ method: string; payload: unknown }> = []
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async (request) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
       },
@@ -3104,15 +3388,12 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const api: BridgeApi = {
       ...base,
       agentPresets: {
-        list: async () => okRpc({
-          presets: [{ id: 'minimal', trust: 'system', isDefault: true }],
-          authorable: false,
-          hasDocument: false,
-        }),
-        select: async () => okRpc({ agentPreset: 'minimal' }),
+        ...base.agentPresets,
+        list: async () => okRpc([{ id: 'minimal', name: 'Minimal' }]),
+        select: async () => 'minimal',
       },
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async () => {
           throw new Error('session.prompt must not be called for /preset')
         },
@@ -3136,7 +3417,7 @@ describe('bridge router: error mapping', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: { ...base.sessions, history: async () => errRpc('session-not-found', 'missing', { sessionId: 'x' }) },
+      sessionController: { ...base.sessionController, history: async () => errRpc('session-not-found', 'missing', { sessionId: 'x' }) },
     }
     const { server } = await boot(api)
     const result = await request(server, 'GET', '/session/x')
@@ -3152,7 +3433,7 @@ describe('bridge router: error mapping', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: { ...base.sessions, prompt: async () => errRpc('agent-busy', 'busy', { reason: 'x' }) },
+      sessionController: { ...base.sessionController, prompt: async () => errRpc('agent-busy', 'busy', { reason: 'x' }) },
     }
     const { server } = await boot(api)
     const result = await request(server, 'POST', '/session/s1/message', { parts: [{ type: 'text', text: 'x' }] })
@@ -3164,7 +3445,7 @@ describe('bridge router: error mapping', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: { ...base.sessions, rename: async () => errRpc('title-invalid', 'bad title', { sessionId: 's1' }) },
+      sessionController: { ...base.sessionController, rename: async () => errRpc('title-invalid', 'bad title', { sessionId: 's1' }) },
     }
     const { server } = await boot(api)
     const result = await request(server, 'PATCH', '/session/s1', { title: ' ' })
@@ -3183,13 +3464,29 @@ describe('bridge router: error mapping', () => {
 })
 
 describe('bridge router: permission and question replies', () => {
+  it('uses the dsh cancellation outcome when pending approval state is stopped', () => {
+    const state = new InteractionState()
+    const outcomes: string[] = []
+    state.pendingApprovals.set('rpc-stop', (outcome) => { outcomes.push(outcome) })
+    state.registerApproval({
+      opencodeId: 'p-stop', rpcId: 'rpc-stop', sessionId: 's1', approvalId: 'a-stop', toolName: 'bash',
+    })
+    state.registerQuestion({
+      opencodeId: 'q-stop', rpcId: 'q-rpc-stop', sessionId: 's1',
+      items: [{ id: 'q1', question: 'stop?', options: [] }],
+    })
+    state.clearPendingInteractions()
+    expect(outcomes).toEqual(['cancelled'])
+    expect(state.pendingApprovals.size).toBe(0)
+    expect(state.permissions.size).toBe(0)
+    expect(state.questions.size).toBe(0)
+  })
+
   it('lists, replies, and removes pending permissions', async () => {
-    const responses: ClientResponse[] = []
-    const base = fakeApi({ respond: async (message) => {
-      responses.push(message)
-      return { accepted: true }
-    } })
+    const outcomes: string[] = []
+    const base = fakeApi()
     const { server, router } = await boot(base)
+    router.ctx.state.pendingApprovals.set('rpc-p1', (outcome) => { outcomes.push(outcome) })
     router.ctx.state.registerApproval({
       opencodeId: 'p1',
       rpcId: 'rpc-p1',
@@ -3203,20 +3500,15 @@ describe('bridge router: permission and question replies', () => {
     const replied = await request(server, 'POST', '/permission/p1/reply', { reply: 'once' })
     expect(replied.status).toBe(200)
     expect(replied.body).toBe(true)
-    expect(responses[0]?.result).toMatchObject({
-      ok: true,
-      value: { sessionId: 's1', approvalId: 'a1', outcome: 'allowed-once' },
-    })
+    expect(outcomes).toEqual(['allowed-once'])
     expect((await request(server, 'GET', '/permission')).body).toEqual([])
   })
 
   it('degrades always to allowed-once', async () => {
-    const responses: ClientResponse[] = []
-    const base = fakeApi({ respond: async (message) => {
-      responses.push(message)
-      return { accepted: true }
-    } })
+    const outcomes: string[] = []
+    const base = fakeApi()
     const { server, router } = await boot(base)
+    router.ctx.state.pendingApprovals.set('rpc-p2', (outcome) => { outcomes.push(outcome) })
     router.ctx.state.registerApproval({
       opencodeId: 'p2',
       rpcId: 'rpc-p2',
@@ -3225,16 +3517,14 @@ describe('bridge router: permission and question replies', () => {
       toolName: 'edit',
     })
     await request(server, 'POST', '/permission/p2/reply', { reply: 'always' })
-    expect(responses[0]?.result).toMatchObject({ ok: true, value: { outcome: 'allowed-once' } })
+    expect(outcomes).toEqual(['allowed-once'])
   })
 
   it('answers v2 permission reply with 204', async () => {
-    const responses: ClientResponse[] = []
-    const base = fakeApi({ respond: async (message) => {
-      responses.push(message)
-      return { accepted: true }
-    } })
+    const outcomes: string[] = []
+    const base = fakeApi()
     const { server, router } = await boot(base)
+    router.ctx.state.pendingApprovals.set('rpc-p3', (outcome) => { outcomes.push(outcome) })
     router.ctx.state.registerApproval({
       opencodeId: 'p3',
       rpcId: 'rpc-p3',
@@ -3246,16 +3536,14 @@ describe('bridge router: permission and question replies', () => {
     expect(listed.body).toMatchObject({ data: [{ id: 'p3', action: 'bash' }] })
     const reply = await request(server, 'POST', '/api/session/s1/permission/p3/reply', { reply: 'reject' })
     expect(reply.status).toBe(204)
-    expect(responses[0]?.result).toMatchObject({ ok: true, value: { outcome: 'rejected' } })
+    expect(outcomes).toEqual(['rejected'])
   })
 
   it('answers the SDK permission alias route with the response field', async () => {
-    const responses: ClientResponse[] = []
-    const base = fakeApi({ respond: async (message) => {
-      responses.push(message)
-      return { accepted: true }
-    } })
+    const outcomes: string[] = []
+    const base = fakeApi()
     const { server, router } = await boot(base)
+    router.ctx.state.pendingApprovals.set('rpc-p4', (outcome) => { outcomes.push(outcome) })
     router.ctx.state.registerApproval({
       opencodeId: 'p4',
       rpcId: 'rpc-p4',
@@ -3266,7 +3554,7 @@ describe('bridge router: permission and question replies', () => {
     const replied = await request(server, 'POST', '/session/s1/permissions/p4', { response: 'always' })
     expect(replied.status).toBe(200)
     expect(replied.body).toBe(true)
-    expect(responses[0]?.result).toMatchObject({ ok: true, value: { outcome: 'allowed-once' } })
+    expect(outcomes).toEqual(['allowed-once'])
     const saved = await request(server, 'GET', '/api/permission/saved')
     expect((saved.body as { data: Array<{ id: string; sessionID: string; action: string; resource: string }> }).data)
       .toMatchObject([{
@@ -3339,12 +3627,10 @@ describe('bridge router: permission and question replies', () => {
   })
 
   it('replies and rejects questions on v1 and v2', async () => {
-    const responses: ClientResponse[] = []
-    const base = fakeApi({ respond: async (message) => {
-      responses.push(message)
-      return { accepted: true }
-    } })
+    const answers: unknown[] = []
+    const base = fakeApi()
     const { server, router } = await boot(base)
+    router.ctx.state.pendingQuestions.set('rpc-q1', (answer) => { answers.push(answer) })
     router.ctx.state.registerQuestion({
       opencodeId: 'q1',
       rpcId: 'rpc-q1',
@@ -3356,11 +3642,9 @@ describe('bridge router: permission and question replies', () => {
     const reply = await request(server, 'POST', '/question/q1/reply', { answers: [['Yes']] })
     expect(reply.status).toBe(200)
     expect(reply.body).toBe(true)
-    expect(responses[0]?.result).toMatchObject({
-      ok: true,
-      value: { sessionId: 's1', answer: { answers: [{ id: 'dq1', selected: ['Yes'] }] } },
-    })
+    expect(answers[0]).toMatchObject([{ id: 'dq1', selected: ['Yes'] }])
 
+    router.ctx.state.pendingQuestions.set('rpc-q2', (answer) => { answers.push(answer) })
     router.ctx.state.registerQuestion({
       opencodeId: 'q2',
       rpcId: 'rpc-q2',
@@ -3369,8 +3653,9 @@ describe('bridge router: permission and question replies', () => {
     })
     const reject = await request(server, 'POST', '/question/q2/reject')
     expect(reject.status).toBe(200)
-    expect(responses[1]?.result).toMatchObject({ ok: false, error: { code: 'cancelled' } })
+    expect(answers[1]).toBeUndefined()
 
+    router.ctx.state.pendingQuestions.set('rpc-q3', (answer) => { answers.push(answer) })
     router.ctx.state.registerQuestion({
       opencodeId: 'q3',
       rpcId: 'rpc-q3',
@@ -3381,7 +3666,9 @@ describe('bridge router: permission and question replies', () => {
     expect(v2List.body).toMatchObject({ data: [{ id: 'q3' }] })
     const v2Reply = await request(server, 'POST', '/api/session/s1/question/q3/reply', { answers: [['Y']] })
     expect(v2Reply.status).toBe(204)
+    expect(answers[2]).toMatchObject([{ id: 'dq3', selected: ['Y'] }])
 
+    router.ctx.state.pendingQuestions.set('rpc-q4', (answer) => { answers.push(answer) })
     router.ctx.state.registerQuestion({
       opencodeId: 'q4',
       rpcId: 'rpc-q4',
@@ -3390,6 +3677,7 @@ describe('bridge router: permission and question replies', () => {
     })
     const v2Reject = await request(server, 'POST', '/api/session/s1/question/q4/reject')
     expect(v2Reject.status).toBe(204)
+    expect(answers[3]).toBeUndefined()
   })
 
   it('returns 404 for unknown permission/question ids', async () => {
@@ -3494,8 +3782,8 @@ describe('bridge router: /goal command and goal todo merge', () => {
     const base = fakeApi()
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [],
           hasMore: false,
@@ -3504,8 +3792,8 @@ describe('bridge router: /goal command and goal todo merge', () => {
       },
       goals: {
         ...base.goals,
-        complete: async (request) => {
-          calls.push({ method: 'goal.complete', payload: request.payload })
+        complete: async (agent, ref) => {
+          calls.push({ method: 'goal.complete', payload: { agent, ref } })
           return okRpc({ ref: { id: 'g1' as never, revision: 2 } })
         },
       },
@@ -3519,7 +3807,7 @@ describe('bridge router: /goal command and goal todo merge', () => {
     expect((result.body as { parts: Array<{ text: string }> }).parts[0]?.text).toBe('Goal completed')
     expect(calls[0]).toMatchObject({
       method: 'goal.complete',
-      payload: { sessionId: 's1', ref: { id: 'g1', revision: 1 } },
+      payload: { agent: { id: 'agent-1' }, ref: { id: 'g1', revision: 1 } },
     })
   })
 
@@ -3529,10 +3817,10 @@ describe('bridge router: /goal command and goal todo merge', () => {
     const lines: string[] = []
     const api: BridgeApi = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         prompt: async (request) => {
-          calls.push({ method: 'session.prompt', payload: request.payload })
+          calls.push({ method: 'session.prompt', payload: request })
           return okRpc({ accepted: true })
         },
       },
@@ -3587,8 +3875,8 @@ describe('bridge router: /goal command and goal todo merge', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [
             { event: sessionEvent('todo/write', { todos: [{ content: 'step 1', status: 'in_progress' }] }, 1, 100) },
@@ -3617,8 +3905,8 @@ describe('bridge router: /goal command and goal todo merge', () => {
     const base = fakeApi()
     const api = {
       ...base,
-      sessions: {
-        ...base.sessions,
+      sessionController: {
+        ...base.sessionController,
         history: async () => okRpc({
           events: [
             { event: sessionEvent('todo/write', { todos: [{ content: 'step 1', status: 'pending' }] }, 1, 100) },
@@ -3641,8 +3929,8 @@ describe('bridge router: /goal command and goal todo merge', () => {
 
     const clearedApi = {
       ...fakeApi(),
-      sessions: {
-        ...fakeApi().sessions,
+      sessionController: {
+        ...fakeApi().sessionController,
         history: async () => okRpc({
           events: [
             { event: sessionEvent('goal/change', {
@@ -3663,8 +3951,8 @@ describe('bridge router: /goal command and goal todo merge', () => {
 describe('bridge router: projection state seed', () => {
   it('seeds goals and todos from durable history and keeps live state', async () => {
     const api = fakeApi({
-      sessions: {
-        ...fakeApi().sessions,
+      sessionController: {
+        ...fakeApi().sessionController,
         history: async () => okRpc({
           events: [{
             event: sessionEvent('todo/write', {
@@ -3707,10 +3995,10 @@ describe('bridge router: prompt queue delivery', () => {
   it('delivers every submit to the dsh queue, including identical texts', async () => {
     const calls: string[] = []
     const api = fakeApi({
-      sessions: {
-        ...fakeApi().sessions,
+      sessionController: {
+        ...fakeApi().sessionController,
         prompt: async (request) => {
-          const payload = request.payload as { content: Array<{ type: string; text?: string }> }
+          const payload = request as unknown as { content: Array<{ type: string; text?: string }> }
           calls.push(String(payload.content[0]?.text ?? ''))
           return okRpc({ accepted: true })
         },
@@ -3736,10 +4024,10 @@ describe('bridge router: prompt queue delivery', () => {
     // (next-step inbox), not 'queue' (next-turn).
     const calls: Array<{ mode?: string }> = []
     const api = fakeApi({
-      sessions: {
-        ...fakeApi().sessions,
+      sessionController: {
+        ...fakeApi().sessionController,
         prompt: async (request) => {
-          calls.push({ mode: String((request.payload as { mode?: unknown }).mode ?? '') })
+          calls.push({ mode: String((request as { mode?: unknown }).mode ?? '') })
           return okRpc({ accepted: true })
         },
       },

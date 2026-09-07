@@ -16,6 +16,11 @@ import type { OcBridgeService } from '../index.js'
 import { helpRequested, ocHelp } from '../help.js'
 import { renderMiniBrand } from './brand.js'
 import {
+  cleanupOpenCodeNativeTemp,
+  opencodeTuiTempDir,
+  prepareOpenCodeTemp,
+} from './temp.js'
+import {
   verifyOpenCodeVersion,
   resolveOpenCodeBinary as resolveBinaryFromDeps,
   type BinaryResolverDeps,
@@ -24,6 +29,12 @@ import {
 
 export type { BinaryResolverDeps, BinarySource, ResolvedBinary } from './binary.js'
 export { resolveAssetUrl } from './download.js'
+export {
+  cleanupOpenCodeNativeTemp,
+  opencodeTuiTempDir,
+  prepareOpenCodeTemp,
+  processAlive,
+} from './temp.js'
 
 /** Environment variable that seeds the opencode TUI with timestamps shown. */
 export const DSH_OC_TUI_TIMESTAMPS = 'DSH_OC_TUI_TIMESTAMPS'
@@ -400,6 +411,7 @@ export function buildChildEnv(
   env: NodeJS.ProcessEnv = process.env,
   dshHome: string = resolveDshHome(),
 ): NodeJS.ProcessEnv {
+  const tuiTempDir = opencodeTuiTempDir(dshHome)
   const childEnv: NodeJS.ProcessEnv = {
     ...env,
     ...OPENCODE_NETWORK_SAFETY_ENV,
@@ -408,6 +420,12 @@ export function buildChildEnv(
     XDG_DATA_HOME: join(dshHome, 'opencode', 'data'),
     XDG_STATE_HOME: join(dshHome, 'opencode', 'state'),
     XDG_CACHE_HOME: join(dshHome, 'opencode', 'cache'),
+    // Bun/OpenTUI extracts its embedded native renderer according to the
+    // process temp-dir variables. Isolate that known upstream leak from the
+    // shared system /tmp and keep cleanup scoped to this dsh run.
+    TMPDIR: tuiTempDir,
+    TMP: tuiTempDir,
+    TEMP: tuiTempDir,
   }
   if (tuiTimestampsEnabled(env)) {
     childEnv.OPENCODE_TUI_CONFIG = join(dshHome, 'opencode', 'config', OPENCODE_TUI_FILE)
@@ -538,6 +556,7 @@ export class OcTuiService extends Service {
     for (const arg of ignored) process.stderr.write(`[dsh-oc] ignored unsupported arg: ${arg}\n`)
 
     const dshHome = resolveDshHome()
+    const tuiTempDir = prepareOpenCodeTemp(dshHome)
     const childEnv = buildChildEnv(process.env, dshHome)
     for (const dir of [
       join(dshHome, 'opencode', 'config'),
@@ -558,6 +577,7 @@ export class OcTuiService extends Service {
         cwd: process.cwd(),
         env: childEnv,
         onExit: async code => {
+          cleanupOpenCodeNativeTemp(tuiTempDir)
           const needed = bridge.exitNoteNeeded
             ? await bridge.exitNoteNeeded().catch(() => false)
             : (bridge.hasNewActivity?.() ?? false)
@@ -567,11 +587,13 @@ export class OcTuiService extends Service {
           requestExit(this.ctx, code)
         },
         onError: error => {
+          cleanupOpenCodeNativeTemp(tuiTempDir)
           this.ctx.logger.error(error)
           requestExit(this.ctx, 1)
         },
       })
     } catch (error) {
+      cleanupOpenCodeNativeTemp(tuiTempDir)
       this.fail(error)
     }
   }

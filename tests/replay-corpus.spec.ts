@@ -114,10 +114,7 @@ function replay(events: SessionEvent[]) {
     onFlush: (events) => all.push(...events),
   })
   for (const event of events) {
-    const frame = {
-      rpcId: `rpc-${String((event as unknown as { seq?: number }).seq ?? 0)}` as never,
-      payload: { type: 'session/event' as const, sessionId: 's1' as never, event },
-    }
+    const frame = { type: 'session/event' as const, sessionId: 's1' as never, event }
     for (const translated of translator.translate(frame)) all.push(translated)
   }
   return { all, unhandled, errors }

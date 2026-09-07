@@ -1,12 +1,11 @@
 // session-v1 routes for the dsh-oc bridge.
 import * as R from '../router.js'
 import { randomUUID } from 'node:crypto'
-import type { HistoryEntry } from '@deepseek-ai/dsh-host-apiproxy/api'
-import type { SessionStatus } from '@opencode-ai/sdk/v2/types'
+import type { HistoryEntry } from '../dsh-types.js'
 import { badRequest, notFound } from '../errors.js'
 import { call } from '../rpc.js'
 import { convertGoalTodos } from '../convert/goal.js'
-import { convertMessagesV1 } from '../convert/message.js'
+import { convertMessagesV1, type V1MessageEntry } from '../convert/message.js'
 import { convertSessionSummary } from '../convert/session.js'
 import { filterGitTrackedDiffs } from '../git.js'
 import type { RouteRegistrar } from '../routes.js'
@@ -28,18 +27,28 @@ function remapV1Messages(
       : undefined
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
+    const synthetic = dshId.startsWith('msg_cmd:') || dshId.startsWith('msg_preset:')
     const parentDshId = typeof entry.info.parentID === 'string' ? entry.info.parentID : undefined
     const remappedParent = parentDshId === undefined ? undefined : surfaceIdForDshId(parentDshId)
-    const info = {
+    const info: Record<string, unknown> = {
       ...entry.info,
       ...(surfaceId === undefined ? {} : { id: surfaceId }),
       ...(remappedParent === undefined ? {} : { parentID: remappedParent }),
-      ...(sessionAgent !== undefined && entry.info.role === 'assistant'
+      ...(!synthetic && sessionAgent !== undefined && entry.info.role === 'assistant'
         ? { agent: sessionAgent, mode: sessionAgent }
         : {}),
-      ...(sessionAgent !== undefined && entry.info.role === 'user'
+      ...(!synthetic && sessionAgent !== undefined && entry.info.role === 'user'
         ? { agent: sessionAgent }
         : {}),
+    }
+    if (assistantId !== undefined) {
+      const created = ctx.state.assistantMessageCreatedAt(sessionId, assistantId)
+      const time = info.time as { created?: unknown; completed?: unknown } | undefined
+      if (created !== undefined && time !== undefined) {
+        const normalizedTime = { ...time, created }
+        if (ctx.state.isAssistantPending(sessionId, assistantId)) delete normalizedTime.completed
+        info.time = normalizedTime
+      }
     }
     const mapped: { info: Record<string, unknown>; parts: Array<Record<string, unknown>> } = {
       info,
@@ -66,18 +75,40 @@ function remapV1Messages(
   return remapped
 }
 
+function mergeCommandResults(
+  entries: V1MessageEntry[],
+  commandResults: readonly V1MessageEntry[],
+  maxEntries?: number,
+): void {
+  const seen = new Set(entries.map((entry) => String(entry.info.id)))
+  for (const entry of commandResults) {
+    if (seen.has(String(entry.info.id))) continue
+    seen.add(String(entry.info.id))
+    entries.push(entry)
+  }
+  entries.sort((left, right) => {
+    const l = (left.info.time as { created?: number } | undefined)?.created ?? 0
+    const r = (right.info.time as { created?: number } | undefined)?.created ?? 0
+    return l - r
+  })
+  if (maxEntries !== undefined && entries.length > maxEntries) {
+    entries.splice(0, entries.length - maxEntries)
+  }
+}
+
 function registerPromptIds(
   ctx: R.BridgeRouteContext,
   sessionId: string,
   body: Record<string, unknown>,
-): { promptUserID: string; assistantID: string } {
+): { promptUserID: string; assistantID: string; createdAt: number } {
   const promptUserID = typeof body.messageID === 'string' && body.messageID.length > 0
     ? body.messageID
     : `msg_${randomUUID()}`
-  ctx.state.registerPromptMessageId(sessionId, promptUserID)
+  const createdAt = Date.now()
+  ctx.state.registerPromptMessageId(sessionId, promptUserID, createdAt)
   const assistantID = `msg_${randomUUID()}`
   ctx.state.registerAssistantIdForUser(sessionId, promptUserID, assistantID)
-  return { promptUserID, assistantID }
+  return { promptUserID, assistantID, createdAt }
 }
 
 function promptText(content: Array<{ type: string; text?: unknown }>): string {
@@ -96,16 +127,19 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     return R.json(200, items.map((item) => convertSessionSummary(item, {
       cwd: ctx.state.sessionDirectories.get(String(item.sessionId)) ?? ctx.cwd,
       title: ctx.state.sessionTitleFor(String(item.sessionId)),
+      ...(ctx.state.sessionAgentFor(String(item.sessionId)) === undefined
+        ? {}
+        : { agent: ctx.state.sessionAgentFor(String(item.sessionId)) }),
     })))
   })
 
   register('GET', '/session/status', 'json', async (_req, ctx) => {
-    const list = await R.cachedSessionList(ctx)
-    const status: Record<string, SessionStatus> = {}
-    for (const item of R.filterSessionsByDirectory(list, _req.query.get('directory') ?? undefined, ctx.cwd)) {
-      status[String(item.sessionId)] = item.running ? { type: 'busy' } : { type: 'idle' }
-    }
-    return R.json(200, status)
+    // The official TUI polls this endpoint every 250ms while a turn waits.
+    // Read the host status map in memory; only the first unknown cold start
+    // may seed it through one bounded session.list call.
+    ctx.state.sessionStatusRequests++
+    await R.ensureSessionStatusSeed(ctx)
+    return R.json(200, R.sessionStatusSnapshot(ctx, _req.query.get('directory') ?? undefined))
   })
 
   register('GET', '/session/:id/children', 'json', async (req, ctx) => {
@@ -174,6 +208,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       },
       history.events.map((entry) => entry.view),
     )
+    mergeCommandResults(entries, ctx.state.commandResultsFor(id), limit)
     return R.json(200, remapV1Messages(ctx, id, entries))
   })
 
@@ -192,6 +227,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       },
       history.events.map((entry) => entry.view),
     )
+    mergeCommandResults(entries, ctx.state.commandResultsFor(id))
     const remapped = remapV1Messages(ctx, id, entries)
     const found = remapped.find((entry) => entry.info.id === messageID)
     if (found === undefined) throw notFound('message not found', { messageID })
@@ -208,20 +244,25 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
-    const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
+    const { promptUserID, assistantID, createdAt } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, req.body)
     await R.broadcastPromptUserMessage(
       ctx,
       id,
       promptUserID,
       promptText(content),
-      Date.now(),
+      createdAt,
       R.bodyModelRef(req.body),
     )
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'steer', content })
+    await R.rpc(ctx, 'session.prompt', {
+      sessionId: R.sid(id),
+      requestId: promptUserID,
+      mode: 'steer',
+      content,
+    })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
@@ -242,20 +283,25 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
     }
-    const { promptUserID, assistantID } = registerPromptIds(ctx, id, body)
+    const { promptUserID, assistantID, createdAt } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, req.body)
     await R.broadcastPromptUserMessage(
       ctx,
       id,
       promptUserID,
       promptText(content),
-      Date.now(),
+      createdAt,
       R.bodyModelRef(req.body),
     )
     if (!(await R.applyModelSelection(ctx, id, req.body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'steer', content })
+    await R.rpc(ctx, 'session.prompt', {
+      sessionId: R.sid(id),
+      requestId: promptUserID,
+      mode: 'steer',
+      content,
+    })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
@@ -275,20 +321,25 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
       return R.json(204)
     }
-    const { promptUserID } = registerPromptIds(ctx, id, body)
+    const { promptUserID, createdAt } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, body)
     await R.broadcastPromptUserMessage(
       ctx,
       id,
       promptUserID,
       promptText(content),
-      Date.now(),
+      createdAt,
       R.bodyModelRef(body),
     )
     if (!(await R.applyModelSelection(ctx, id, body))) {
       await R.reconcileModelSelection(ctx, id)
     }
-    await R.rpc(ctx, 'session.prompt', { sessionId: R.sid(id), mode: 'steer', content })
+    await R.rpc(ctx, 'session.prompt', {
+      sessionId: R.sid(id),
+      requestId: promptUserID,
+      mode: 'steer',
+      content,
+    })
     ctx.state.markInput()
     ctx.state.invalidateSession(id)
     return R.json(204)
@@ -341,7 +392,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     for (let index = history.events.length - 1; index >= 0; index--) {
       const event = (history.events[index] as HistoryEntry).event
       if (event.type === 'todo/write') {
-        todos = event.data.todos
+        todos = (event.data as { todos: unknown }).todos
         break
       }
     }

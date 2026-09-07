@@ -1,7 +1,8 @@
 import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
-import type { HistoryEntry, SessionProjectionsBlock, SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { HistoryEntry, SessionProjectionsBlock, SessionSummary } from './dsh-types.js'
 import type { PermissionEntry } from './convert/permission.js'
 import type { QuestionEntry } from './convert/question.js'
+import type { V1MessageEntry } from './convert/message.js'
 
 /** A memory-scoped "always" grant for one session + tool. */
 export interface SavedPermission {
@@ -20,11 +21,23 @@ export interface CachedHistory {
 /** One user-visible message sitting in a dsh pending inbox queue. */
 export interface QueuedInboxMessage {
   id: string
+  rpcId?: string
   /** dsh `UserMessage` content blocks (only text blocks are rendered). */
   content: readonly unknown[]
   source: { kind: string }
   /** When the message entered the queue (splice event time). */
   enqueuedAt: number
+}
+
+function sourceForQueueItem(
+  placement: 'queued' | 'steering' | 'context',
+  source: { kind: string; rpcId?: string } | undefined,
+): { kind: string } {
+  if (source !== undefined) return source
+  // The 0.1.2 control ABI deliberately omits `source` from queue messages.
+  // Ordinary queued/steering entries are user prompts; context entries are
+  // host-injected context and must not become user cards in the TUI.
+  return { kind: placement === 'context' ? 'context' : 'user' }
 }
 
 /** dsh inbox queue state mirrored by the bridge for opencode display. */
@@ -50,6 +63,11 @@ export class InteractionState {
   readonly byQuestionRpcId = new Map<string, string>()
   readonly sessionDirectories = new Map<string, string>()
   readonly sessionParents = new Map<string, string>()
+  readonly sessionAddressModes = new Map<string, 'one-shot' | 'continuable'>()
+  /** Authoritative live Agent state mirrored from dsh api-session/status. */
+  readonly sessionRunning = new Map<string, boolean>()
+  /** Last status/activity observation used for reconnect diagnostics. */
+  readonly sessionStatusUpdatedAt = new Map<string, number>()
   readonly savedPermissions = new Map<string, SavedPermission>()
   /** Last explicit model selection (with variant) per session, for self-heal. */
   readonly sessionModelSelections = new Map<string, {
@@ -61,6 +79,10 @@ export class InteractionState {
   readonly sessionTitles = new Map<string, string>()
   /** Last known agent preset per session (survives title/projection updates). */
   private readonly sessionAgents = new Map<string, string>()
+  /** One stale editor-agent value to suppress after an explicit /preset switch. */
+  private readonly stalePresetPrompts = new Map<string, { from: string; to: string }>()
+  /** Recent bridge-only command result cards retained for history hydration. */
+  private readonly recentCommandResults = new Map<string, V1MessageEntry[]>()
   /** Mirror of each session's dsh pending inbox (next-turn / next-step). */
   readonly inboxProjections = new Map<string, InboxProjection>()
   /** Message ids already surfaced to the TUI as queued user messages. */
@@ -69,16 +91,30 @@ export class InteractionState {
   private readonly broadcastDshIds = new Set<string>()
   /** TUI-generated `messageID`s from prompt submissions, FIFO per session. */
   private readonly promptMessageIds = new Map<string, string[]>()
+  /** Original optimistic-card timestamp, keyed by the TUI prompt id. */
+  private readonly promptMessageTimes = new Map<string, number>()
   /** dsh user message id -> TUI prompt id (kept so history echoes match). */
   private readonly dshPromptMessageIds = new Map<string, string>()
   /** Bridge-generated assistant message ids keyed by user message id. */
   private readonly assistantIdsByUser = new Map<string, Map<string, string>>()
   /** dsh assistant message id -> bridge assistant id (history echo match). */
   private readonly dshAssistantIds = new Map<string, string>()
+  /** Canonical live-card timestamp keyed by the bridge assistant id. */
+  private readonly assistantMessageTimes = new Map<string, number>()
+  /** Assistant cards whose turn/tool step is still live. */
+  private readonly pendingAssistantIds = new Set<string>()
   sessionListCache?: { items: SessionSummary[]; at: number }
   /** In-flight session.list RPC shared by concurrent callers (incl. prefetch). */
   sessionListLoading?: Promise<SessionSummary[]>
   private sessionListGeneration = 0
+  /** One bounded cold seed for the status endpoint; never retry in a poll loop. */
+  sessionStatusSeedAttempted = false
+  sessionStatusSeeded = false
+  sessionStatusLoading?: Promise<void>
+  /** Lightweight counters used to prove the status poll has no list storm. */
+  sessionStatusRequests = 0
+  sessionStatusSeeds = 0
+  sessionListRpcCalls = 0
   /** Whether this bridge run accepted new user input (banner-bearing content). */
   newInputDuringRun = false
   /** The session the TUI most recently created/resumed/opened. */
@@ -88,6 +124,18 @@ export class InteractionState {
   readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
   private readonly historyLoading = new Map<string, Promise<CachedHistory>>()
   private readonly historyGenerations = new Map<string, number>()
+
+  recordCommandResult(sessionId: string, entry: V1MessageEntry): void {
+    const results = this.recentCommandResults.get(sessionId) ?? []
+    if (results.some((item) => item.info.id === entry.info.id)) return
+    results.push(entry)
+    if (results.length > 20) results.shift()
+    this.recentCommandResults.set(sessionId, results)
+  }
+
+  commandResultsFor(sessionId: string): readonly V1MessageEntry[] {
+    return this.recentCommandResults.get(sessionId) ?? []
+  }
 
   getSessionListCache(ttlMs: number): SessionSummary[] | undefined {
     const cached = this.sessionListCache
@@ -127,6 +175,33 @@ export class InteractionState {
 
   listGeneration(): number {
     return this.sessionListGeneration
+  }
+
+  setSessionRunning(sessionId: string, running: boolean, updatedAt = 0): void {
+    const current = this.sessionStatusUpdatedAt.get(sessionId)
+    // Equal timestamps intentionally keep queue order: a later edge in the
+    // serialized per-session queue is authoritative. Older host/list edges
+    // must not roll a newer turn edge back to the opposite status.
+    if (current !== undefined && updatedAt < current) return
+    this.sessionRunning.set(sessionId, running)
+    this.sessionStatusUpdatedAt.set(sessionId, updatedAt)
+  }
+
+  sessionRunningFor(sessionId: string): boolean | undefined {
+    return this.sessionRunning.get(sessionId)
+  }
+
+  sessionStatusUpdatedAtFor(sessionId: string): number | undefined {
+    return this.sessionStatusUpdatedAt.get(sessionId)
+  }
+
+  markSessionStatusSeeded(): void {
+    this.sessionStatusSeeded = true
+  }
+
+  markSessionActivity(sessionId: string, updatedAt: number): void {
+    const current = this.sessionStatusUpdatedAt.get(sessionId) ?? 0
+    if (updatedAt >= current) this.sessionStatusUpdatedAt.set(sessionId, updatedAt)
   }
 
   /** Drop list and (optionally per-session) history caches after any mutation. */
@@ -205,11 +280,9 @@ export class InteractionState {
     sessionId: string,
     selection: { providerID: string; modelID: string; variant?: string },
   ): void {
-    if (selection.variant === undefined) {
-      this.sessionModelSelections.delete(sessionId)
-    } else {
-      this.sessionModelSelections.set(sessionId, selection)
-    }
+    // A default-tier model is still an explicit session choice. Dropping it
+    // here would make the next prompt silently fall back to catalog.default.
+    this.sessionModelSelections.set(sessionId, selection)
   }
 
   sessionModelSelectionFor(sessionId: string): { providerID: string; modelID: string; variant?: string } | undefined {
@@ -251,13 +324,19 @@ export class InteractionState {
   }
 
   /** Register a TUI-generated message id for the next user echo of a session. */
-  registerPromptMessageId(sessionId: string, promptId: string): void {
+  registerPromptMessageId(sessionId: string, promptId: string, createdAt = Date.now()): void {
     const queue = this.promptMessageIds.get(sessionId)
     if (queue === undefined) {
       this.promptMessageIds.set(sessionId, [promptId])
     } else {
       queue.push(promptId)
     }
+    this.promptMessageTimes.set(`${sessionId}\u0000${promptId}`, createdAt)
+  }
+
+  /** Timestamp used by the optimistic user card and its queue-state update. */
+  promptMessageCreatedAt(sessionId: string, promptId: string): number | undefined {
+    return this.promptMessageTimes.get(`${sessionId}\u0000${promptId}`)
   }
 
   /** Oldest registered prompt id that has not been echoed yet, if any. */
@@ -275,6 +354,7 @@ export class InteractionState {
     if (queue !== undefined && queue.length === 0) this.promptMessageIds.delete(sessionId)
     if (promptId === undefined) return dshId
     this.dshPromptMessageIds.set(`${sessionId}\u0000${dshId}`, promptId)
+    this.promptMessageTimes.delete(`${sessionId}\u0000${promptId}`)
     return promptId
   }
 
@@ -307,6 +387,37 @@ export class InteractionState {
     return this.assistantIdsByUser.get(sessionId)?.get(userId)
   }
 
+  /** Timestamp that must be retained when history hydrates a live card. */
+  assistantMessageCreatedAt(sessionId: string, assistantId: string): number | undefined {
+    return this.assistantMessageTimes.get(`${sessionId}\u0000${assistantId}`)
+  }
+
+  /** Record the timestamp chosen for a live assistant card. */
+  setAssistantMessageCreatedAt(sessionId: string, assistantId: string, createdAt: number): void {
+    if (!this.assistantMessageTimes.has(`${sessionId}\u0000${assistantId}`)) {
+      this.assistantMessageTimes.set(`${sessionId}\u0000${assistantId}`, createdAt)
+    }
+  }
+
+  markAssistantPending(sessionId: string, assistantId: string): void {
+    this.pendingAssistantIds.add(`${sessionId}\u0000${assistantId}`)
+  }
+
+  markAssistantCompleted(sessionId: string, assistantId: string): void {
+    this.pendingAssistantIds.delete(`${sessionId}\u0000${assistantId}`)
+  }
+
+  isAssistantPending(sessionId: string, assistantId: string): boolean {
+    return this.pendingAssistantIds.has(`${sessionId}\u0000${assistantId}`)
+  }
+
+  clearPendingAssistants(sessionId: string): void {
+    const prefix = `${sessionId}\u0000`
+    for (const key of [...this.pendingAssistantIds]) {
+      if (key.startsWith(prefix)) this.pendingAssistantIds.delete(key)
+    }
+  }
+
   /** Record a dsh->bridge assistant id mapping after a streamed turn. */
   recordAssistantId(sessionId: string, dshId: string, bridgeId: string): void {
     this.dshAssistantIds.set(`${sessionId}\u0000${dshId}`, bridgeId)
@@ -336,7 +447,7 @@ export class InteractionState {
     target: 'next-turn' | 'next-step',
     start: number,
     removedCount: number,
-    inserted: Array<{ id: string; content: readonly unknown[]; source: { kind: string } }>,
+    inserted: Array<{ id: string; rpcId?: string; content: readonly unknown[]; source?: { kind: string; rpcId?: string } }>,
     enqueuedAt: number,
     outcome?: 'canceled',
   ): InboxSpliceOutcome {
@@ -352,8 +463,11 @@ export class InteractionState {
       this.presentQueuedIds.add(key)
       const entry: QueuedInboxMessage = {
         id: String(message.id),
+        ...((message.rpcId ?? message.source?.rpcId) === undefined
+          ? {}
+          : { rpcId: String(message.rpcId ?? message.source?.rpcId) }),
         content: message.content,
-        source: message.source,
+        source: sourceForQueueItem('queued', message.source),
         enqueuedAt,
       }
       added.push(entry)
@@ -382,11 +496,17 @@ export class InteractionState {
     sessionId: string,
     items: Array<{
       placement: 'queued' | 'steering' | 'context'
-      message: { id: string; content: readonly unknown[]; source: { kind: string } }
+      rpcId?: string
+      message: { id: string; content: readonly unknown[]; source?: { kind: string; rpcId?: string } }
     }>,
     enqueuedAt: number,
+    force = false,
   ): InboxSpliceOutcome {
-    if (this.inboxProjections.has(sessionId)) return { added: [], removed: [] }
+    const previous = this.inboxProjections.get(sessionId)
+    const previousItems = previous === undefined
+      ? []
+      : [...previous.nextTurn, ...previous.nextStep]
+    const previousById = new Map(previousItems.map((item) => [item.id, item]))
     const nextTurn: QueuedInboxMessage[] = []
     const nextStep: QueuedInboxMessage[] = []
     const added: QueuedInboxMessage[] = []
@@ -394,16 +514,27 @@ export class InteractionState {
       const id = String(item.message.id)
       const entry: QueuedInboxMessage = {
         id,
+        ...(item.rpcId === undefined ? {} : { rpcId: String(item.rpcId) }),
         content: item.message.content,
-        source: item.message.source,
+        source: sourceForQueueItem(item.placement, item.message.source),
         enqueuedAt,
       }
       ;(item.placement === 'context' || item.placement === 'steering' ? nextStep : nextTurn).push(entry)
-      this.presentQueuedIds.add(this.queuedKey(sessionId, id))
-      added.push(entry)
+      const key = this.queuedKey(sessionId, id)
+      if (previousById.has(id) || this.presentQueuedIds.has(key)) {
+        this.presentQueuedIds.add(key)
+      } else {
+        this.presentQueuedIds.add(key)
+        added.push(entry)
+      }
+    }
+    const nextIds = new Set([...nextTurn, ...nextStep].map((item) => item.id))
+    const removed = previousItems.filter((item) => !nextIds.has(item.id))
+    if (force) {
+      for (const item of removed) this.presentQueuedIds.delete(this.queuedKey(sessionId, item.id))
     }
     this.inboxProjections.set(sessionId, { nextTurn, nextStep })
-    return { added, removed: [] }
+    return { added, removed }
   }
 
   setSessionTitle(sessionId: string, title: unknown): void {
@@ -422,6 +553,35 @@ export class InteractionState {
 
   sessionAgentFor(sessionId: string): string | undefined {
     return this.sessionAgents.get(sessionId)
+  }
+
+  copyPresentationContextTo(target: InteractionState): void {
+    for (const [id, value] of this.sessionDirectories) target.sessionDirectories.set(id, value)
+    for (const [id, value] of this.sessionParents) target.sessionParents.set(id, value)
+    for (const [id, value] of this.sessionAddressModes) target.sessionAddressModes.set(id, value)
+    for (const [id, value] of this.sessionTitles) target.sessionTitles.set(id, value)
+    for (const [id, value] of this.sessionAgents) target.sessionAgents.set(id, value)
+    for (const [id, value] of this.sessionModelSelections) target.sessionModelSelections.set(id, { ...value })
+    for (const [id, value] of this.sessionRunning) target.sessionRunning.set(id, value)
+    for (const [id, value] of this.sessionStatusUpdatedAt) target.sessionStatusUpdatedAt.set(id, value)
+  }
+
+  markStalePresetPrompt(sessionId: string, from: string, to: string): void {
+    if (from === to) {
+      this.stalePresetPrompts.delete(sessionId)
+      return
+    }
+    this.stalePresetPrompts.set(sessionId, { from, to })
+  }
+
+  /** Consume only the one prompt carrying the editor value from before /preset. */
+  consumeStalePresetPrompt(sessionId: string, agent: string | undefined): boolean {
+    const pending = this.stalePresetPrompts.get(sessionId)
+    if (pending === undefined) return false
+    // Any prompt with the new/current agent means the editor has caught up;
+    // any other agent is an explicit later Tab choice and must be honored.
+    this.stalePresetPrompts.delete(sessionId)
+    return agent !== undefined && pending.from === agent && pending.to !== agent
   }
 
   /** Record that the user submitted new input during this run. */
@@ -448,6 +608,11 @@ export class InteractionState {
     return `${sessionId}\u0000${agent}`
   }
 
+  /** Pending approval decisions keyed by rpcId (answerer → HTTP reply). */
+  readonly pendingApprovals = new Map<string, (outcome: 'allowed-once' | 'rejected' | 'cancelled') => void>()
+  /** Pending question decisions keyed by rpcId (answerer → HTTP reply). */
+  readonly pendingQuestions = new Map<string, (answer: unknown | undefined) => void>()
+
   registerApproval(entry: PermissionEntry): PermissionEntry {
     this.permissions.set(entry.opencodeId, entry)
     this.byApprovalId.set(entry.approvalId, entry.opencodeId)
@@ -469,6 +634,13 @@ export class InteractionState {
     return opencodeId === undefined ? undefined : this.permissions.get(opencodeId)
   }
 
+  permissionByRpcId(rpcId: string): PermissionEntry | undefined {
+    for (const entry of this.permissions.values()) {
+      if (entry.rpcId === rpcId) return entry
+    }
+    return undefined
+  }
+
   questionByOpenCodeId(id: string): QuestionEntry | undefined {
     return this.questions.get(id)
   }
@@ -488,6 +660,54 @@ export class InteractionState {
     const entry = this.questions.get(opencodeId)
     if (entry) this.byQuestionRpcId.delete(entry.rpcId)
     this.questions.delete(opencodeId)
+  }
+
+  /** Resolve and clear every in-flight answerer when the bridge stops. */
+  clearPendingInteractions(): void {
+    for (const resolve of this.pendingApprovals.values()) resolve('cancelled')
+    this.pendingApprovals.clear()
+    for (const resolve of this.pendingQuestions.values()) resolve(undefined)
+    this.pendingQuestions.clear()
+    this.permissions.clear()
+    this.questions.clear()
+    this.byApprovalId.clear()
+    this.byQuestionRpcId.clear()
+  }
+
+  clearSession(sessionId: string): void {
+    this.sessionDirectories.delete(sessionId)
+    this.sessionParents.delete(sessionId)
+    this.sessionAddressModes.delete(sessionId)
+    this.sessionRunning.delete(sessionId)
+    this.sessionStatusUpdatedAt.delete(sessionId)
+    this.sessionModelSelections.delete(sessionId)
+    this.sessionTitles.delete(sessionId)
+    this.sessionAgents.delete(sessionId)
+    this.stalePresetPrompts.delete(sessionId)
+    this.recentCommandResults.delete(sessionId)
+    for (const [key, saved] of this.savedPermissions) {
+      if (saved.sessionId === sessionId) this.savedPermissions.delete(key)
+    }
+    for (const key of [...this.lockedAgentNotices]) if (key.startsWith(`${sessionId}\u0000`)) this.lockedAgentNotices.delete(key)
+    this.inboxProjections.delete(sessionId)
+    for (const key of [...this.presentQueuedIds]) if (key.startsWith(`${sessionId}\u0000`)) this.presentQueuedIds.delete(key)
+    for (const key of [...this.broadcastDshIds]) if (key.startsWith(`${sessionId}\u0000`)) this.broadcastDshIds.delete(key)
+    for (const key of [...this.dshPromptMessageIds.keys()]) if (key.startsWith(`${sessionId}\u0000`)) this.dshPromptMessageIds.delete(key)
+    for (const key of [...this.dshAssistantIds.keys()]) if (key.startsWith(`${sessionId}\u0000`)) this.dshAssistantIds.delete(key)
+    for (const key of [...this.assistantMessageTimes.keys()]) if (key.startsWith(`${sessionId}\u0000`)) this.assistantMessageTimes.delete(key)
+    this.clearPendingAssistants(sessionId)
+    this.promptMessageIds.delete(sessionId)
+    for (const key of [...this.promptMessageTimes.keys()]) if (key.startsWith(`${sessionId}\u0000`)) this.promptMessageTimes.delete(key)
+    this.assistantIdsByUser.delete(sessionId)
+    this.historyCache.delete(sessionId)
+    this.inboxProjections.delete(sessionId)
+    this.invalidateHistory(sessionId)
+    this.removeSessionInteractions(sessionId)
+  }
+
+  private removeSessionInteractions(sessionId: string): void {
+    for (const entry of this.permissionsForSession(sessionId)) this.removePermission(entry.opencodeId)
+    for (const entry of this.questionsForSession(sessionId)) this.removeQuestion(entry.opencodeId)
   }
 
   permissionsForSession(sessionId: string): PermissionEntry[] {

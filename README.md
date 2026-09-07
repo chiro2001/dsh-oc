@@ -16,6 +16,18 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
                   └─ DSH Agent/Session/Tools/LLM/Approval/Questions
 ```
 
+## 当前候选：0.2.0-rc.1
+
+这是面向 dsh `>=0.1.2-rc.1` 的 ABI breaking minor RC。当前候选由 PR #1/#2/#3
+的语义修复与 dsh 0.1.2 迁移重新整合而成，并非逐字合入任一 PR：bridge 已从
+旧 `apiProxy` envelope 迁移到 `sessionController`、`agentPresets`、`goals`、
+`sessionSkillCatalog`、`agents`、`sessions` 与 `sessionProjections` host
+services。
+
+候选还包含模型/preset、队列、approval/question、subagent/history、SSE
+`Last-Event-ID` 有界回放、status 内存热路径和 OpenTUI native 临时目录隔离。
+发布前仍需按 [docs/RELEASE.md](docs/RELEASE.md) 完成独立 TUI/e2e 与工件门禁。
+
 ## 能力状态
 
 > 完整矩阵见 [docs/FEATURES.md](docs/FEATURES.md)，路由细节见

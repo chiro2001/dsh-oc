@@ -25,7 +25,7 @@ const MAX_BODY_BYTES = 1024 * 1024
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Last-Event-ID',
   'Access-Control-Max-Age': '86400',
 }
 
@@ -112,6 +112,7 @@ async function handleRequest(
     pathname,
     query: url.searchParams,
     params: extractParams(route.pattern, pathname),
+    headers: req.headers,
     body,
   }
 

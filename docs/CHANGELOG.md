@@ -6,6 +6,36 @@
 
 ## [Unreleased]
 
+## [0.2.0-rc.1] - 2026-09-07
+
+> 本候选面向 dsh `>=0.1.2-rc.1`。PR #1/#2/#3 未原样合入；其有效修复与
+> dsh 0.1.2 迁移经过语义重整合，当前分支是独立的 RC 候选。
+
+### 变更
+
+- bridge 从旧 `apiProxy` envelope 迁移到 dsh 0.1.2 的
+  `sessionController`、`agentPresets`、`goals`、`sessionSkillCatalog`、
+  `agents`、`sessions`、`sessionProjections` host services。
+- 重整合模型选择、默认模型/preset、队列可见性、approval/question、subagent
+  lineage、history pagination 与 dsh 0.1.2 error ABI；保留稳定的 v1/v2
+  OpenCode protocol surface。
+- 新增 `Last-Event-ID` 有界 SSE ring（事件数与序列化字节双上限），断线游标
+  命中时只回放缺失事件，淘汰/未知游标回退到 status/control snapshot。
+- `/session/status` 改为 dsh `api-session/status` 驱动的内存热路径；冷启动最多
+  一次有界 `session.list` seed，避免官方 TUI 250ms 等待轮询触发全量持久化 I/O。
+- OpenTUI native 临时文件隔离到 `$DSH_HOME/opencode/tmp/tui-<pid>`，正常退出
+  清理、下次启动回收已退出实例；不搜索任意插件缓存，不关闭官方 binary 校验。
+- dsh-dcp rc.6 的 `session.events` 兼容 getter 暂时保留，待 dcp 完成 dsh
+  0.1.2 peer/API 迁移后删除。
+- 增加安全默认的 `scripts/monitor-process-io.sh`（observe-only；只允许清理
+  脚本自己以 `setsid` 启动并校验过的进程组）及 fake attach 空闲回归。
+
+### 验证
+
+- typecheck、targeted bridge/TUI tests、status/SSE ring tests、monitor shell
+  self-tests 已通过；完整 e2e、真实 TUI 与 release artifact audit 留待独立
+  发布验证阶段。
+
 ### 修复
 
 - 用户 prompt 改为以 dsh `mode: 'steer'` 提交：运行中的 turn 在下一个 step

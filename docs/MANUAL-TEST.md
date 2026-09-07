@@ -133,3 +133,34 @@ TUI 仍把完整后续文本渲染在排队卡片上方（顺序正确，95 帧�
 该结果指向“错序依赖真实会话中未覆盖的事件交错/消息身份形态”，最终归因
 仍需在最小 server 上复现真实会话的原始事件序列。回合消息的完成时间已推迟
 到回合结束，QUEUED 标记在整轮完成前保持正确。
+
+## 12. 进程 I/O 观察（安全默认）
+
+`scripts/monitor-process-io.sh` 默认只观察明确指定的 PID，不会结束任何外部
+进程；达到阈值只在 stderr 告警，并继续记录。日志为 TSV，包含
+`read_bytes/write_bytes/rchar/wchar/RSS/CPU` 及 CPU 增量：
+日志同时保留当前累计值与本窗口 delta；外部 PID 的首样本只建立 baseline，
+`--start` 自有进程可计入首样本已有计数，并按 PID/starttime 防止子进程退出或
+PID 复用产生负 delta。
+
+```bash
+scripts/monitor-process-io.sh \
+  --pid <明确PID> --include-descendants --interval 1 \
+  --read-threshold 1073741824 --log /tmp/dsh-oc-io.tsv
+```
+
+需要由监控脚本自行启动并在结束时清理的测试进程，必须显式使用 `--start`；
+只有该模式允许 `--terminate-owned`，且只针对脚本创建并校验过的进程组：
+
+```bash
+scripts/monitor-process-io.sh --start --terminate-owned --samples 10 \
+  --interval 1 --log /tmp/dsh-oc-owned.tsv -- sleep 30
+```
+
+fake attach 的空闲回归：`tests/e2e/fake-opencode-idle.sh`。它证明修复后的
+fake binary 不再因 EOF 忙循环消耗 CPU/I/O。
+
+监控安全自测：`tests/e2e/monitor-process-io-read.sh` 验证 16 MiB 的
+`rchar` 增量和阈值告警；`tests/e2e/monitor-process-io-owned.sh` 验证
+忽略 TERM 的 owned child、root 提前退出后仍存活的 child，以及外部 PID
+终止保护。

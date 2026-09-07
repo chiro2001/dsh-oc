@@ -4,6 +4,21 @@
 > 功能状态入口：先读 [FEATURES.md](FEATURES.md)，再回到本文件核对路由/协议细节。
 > 探针基准：`opencode-ai@1.18.18`（GitHub Release `v1.18.18`，commit `4643e65`）。
 
+## 0.2.0-rc.1 实现基线
+
+本候选面向 dsh `>=0.1.2-rc.1`。下文早期表格中保留的 `apiProxy` 字样是历史
+设计来源；当前实现已完成 PR #1/#2/#3 的语义重整合，不再依赖
+`@deepseek-ai/dsh-host-apiproxy`：
+
+- Session/list/history/prompt/cancel/model/fork/rename 直连
+  `sessionController`；agent/preset、goal、skill 分别直连对应 host services。
+- SSE 由 `session/event`、`sessionController.control`、approval/question
+  answerer 事件翻译组成；不再消费旧 `apiProxy.events.mux()` envelope。
+- `/session/status` 使用 dsh `api-session/status` 的内存 authoritative map，
+  冷启动最多一次 `session.list` seed，避免 TUI 等待轮询触发全库 I/O。
+- SSE 客户端支持有界 `Last-Event-ID` ring 回放；游标淘汰时只回放当前
+  status/control snapshot，不扫描 history。
+
 ---
 
 ## 1. 为什么需要兼容 v1 和 v2
@@ -119,34 +134,34 @@ GET /api/integration?location[directory]=...
 | `GET /project/current` | STUB | 单项目对象 |
 | `GET /project/global/directories` | STUB | `[]` |
 | `GET /config` | STUB | `{}` |
-| `GET /config/providers` | STUB | `[]` 或从 `apiProxy.llm.providers` 转 |
-| `GET /provider` | MAP | `apiProxy.llm.models` |
+| `GET /config/providers` | STUB | `[]` 或从 host model catalog 转 |
+| `GET /provider` | MAP | `sessionController.modelCatalog` |
 | `GET /provider/auth` | STUB | `{}` |
 | `GET /agent` | STUB/MAP | 首版 `[]` |
 | `GET /command` | MAP | 注册 `/preset`、`/goal`、`/help`（TUI slash 弹层） |
-| `GET /session` | MAP | `apiProxy.sessions.list` |
+| `GET /session` | MAP | `sessionController.list` |
 | `GET /session/status` | MAP | list 的 running 状态 |
-| `POST /session` | MAP | `apiProxy.sessions.create` |
-| `POST /session/{id}/fork` | MAP | `apiProxy.sessions.fork`（opencode `messageID` 换算为 dsh `atSeq`） |
+| `POST /session` | MAP | `sessionController.create` |
+| `POST /session/{id}/fork` | MAP | `sessionController.fork`（opencode `messageID` 换算为 dsh `atSeq`） |
 | `POST /session/{id}/summarize` | MAP | dsh `/compact` command registry（TUI `/compact` 实际调用此路由） |
 | `POST /session/{id}/compact` | MAP | 同上（v1 兼容别名） |
 | `POST /session/{id}/command` | MAP | `/preset`、`/goal`（dsh command registry）、`/help`（bridge 本地） |
 | `GET /session/{id}` | MAP | history + summary |
-| `PATCH /session/{id}` | MAP | `apiProxy.sessions.rename` |
-| `GET /session/{id}/message` | MAP | `apiProxy.sessions.history` |
+| `PATCH /session/{id}` | MAP | `sessionController.rename` |
+| `GET /session/{id}/message` | MAP | `sessionController.follow/page` history |
 | `GET /session/{id}/message/{messageID}` | MAP | 复用 v1 转换，按 `info.id` 单条查询；未找到 404 |
-| `POST /session/{id}/prompt` | MAP | `apiProxy.sessions.prompt` |
-| `POST /session/{id}/abort` | MAP | `apiProxy.sessions.cancel` |
+| `POST /session/{id}/prompt` | MAP | `sessionController.prompt` |
+| `POST /session/{id}/abort` | MAP | `sessionController.cancel` |
 | `POST /session/{id}/init` | MAP | no-op 成功 `true`（dsh 会话创建即初始化） |
 | `GET /session/{id}/todo` | MAP | dsh `todos` projection + `goal` 投影/事件（goal 为首条） |
 | `GET /session/{id}/diff` | MAP/LATER | produced-files 投影或 `[]` |
 | `GET /permission` | MAP | pending approval map |
-| `POST /permission/{id}/reply` | MAP | `apiProxy.respond` |
+| `POST /permission/{id}/reply` | MAP | approval answerer + `permission.replied` |
 | `POST /session/{id}/permissions/{permissionID}` | MAP | SDK v2 权限回复别名（body `response`：once/always/reject），同 `permissionReply` |
 | `GET /question` | MAP | pending question map |
-| `POST /question/{id}/reply` | MAP | `apiProxy.respond` |
-| `POST /question/{id}/reject` | MAP | `apiProxy.respond` cancelled |
-| `GET /global/event` | MAP | `apiProxy.events.mux` + SSE |
+| `POST /question/{id}/reply` | MAP | question answerer + `question.replied` |
+| `POST /question/{id}/reject` | MAP | question answerer cancelled |
+| `GET /global/event` | MAP | host session/control/answerer events + SSE |
 | `GET /lsp` | STUB | `[]` |
 | `GET /mcp` | STUB | `{}` |
 | `GET /formatter` | STUB | `[]` |
@@ -170,8 +185,8 @@ GET /api/integration?location[directory]=...
 | `GET /api/health` | MAP | `{ healthy: true }`（客户端探活） |
 | `GET /api/agent` | STUB/LATER | `[]` |
 | `GET /api/integration` | STUB | `[]` |
-| `GET /api/model` | MAP | `apiProxy.llm.models` |
-| `GET /api/provider` | MAP | `apiProxy.llm.models/providers` |
+| `GET /api/model` | MAP | `sessionController.modelCatalog` |
+| `GET /api/provider` | MAP | `sessionController.modelCatalog` providers |
 | `GET /api/provider/{id}` | MAP | 单 provider `{ location, data: ProviderV2Info }`；未找到 404 |
 | `GET /api/reference` | STUB | `[]` |
 | `GET /api/command` | MAP | 注册 `/preset`、`/goal`、`/help` |
@@ -183,7 +198,7 @@ GET /api/integration?location[directory]=...
 | `POST /api/session` | MAP | 同 v1 |
 | `POST /api/session/{id}/fork` | MAP | 同 v1 fork，返回 v2 信封 |
 | `POST /api/session/{id}/compact` | MAP | 同 v1 summarize/compact（SDK v2 路由，204） |
-| `POST /api/session/{id}/interrupt` | MAP | 同 v1 abort：`apiProxy.sessions.cancel`（SDK v2 打断入口，204） |
+| `POST /api/session/{id}/interrupt` | MAP | 同 v1 abort：`sessionController.cancel`（SDK v2 打断入口，204） |
 | `POST /session/{id}/command` | MAP | `/preset`、`/goal` 经 dsh command registry 执行并广播 busy/idle；`/help` 本地返回能力摘要 |
 | `GET /session/{id}/children` | MAP | 会话列表中 `parentSessionId == id` 的 subagent 子会话（`convertSessionSummary`） |
 | `GET /api/session/{id}` | MAP | 同 v1 |
@@ -197,10 +212,10 @@ GET /api/integration?location[directory]=...
 | `GET /api/session/{id}/event` | MAP | 按会话过滤的 SSE 事件流（`/global/event` 子集） |
 | `GET /api/session/{id}/permission` | MAP | pending approvals per session |
 | `GET /api/session/{id}/permission/{rid}` | MAP | 单条 pending approval（session 不匹配 404） |
-| `POST /api/session/{id}/permission/{rid}/reply` | MAP | `apiProxy.respond` |
+| `POST /api/session/{id}/permission/{rid}/reply` | MAP | approval answerer |
 | `GET /api/session/{id}/question` | MAP | pending questions per session |
-| `POST /api/session/{id}/question/{rid}/reply` | MAP | `apiProxy.respond` |
-| `POST /api/session/{id}/question/{rid}/reject` | MAP | `apiProxy.respond` cancelled |
+| `POST /api/session/{id}/question/{rid}/reply` | MAP | question answerer |
+| `POST /api/session/{id}/question/{rid}/reject` | MAP | question answerer cancelled |
 | `GET /api/permission/request` | MAP | SDK v2 全局 pending approvals 别名，`{ location, data }` |
 | `GET /api/question/request` | MAP | SDK v2 全局 pending questions 别名，`{ location, data }` |
 | `GET /api/permission/saved` | MAP | 内存中的 always 授权列表（`PermissionSavedInfo` + `sessionID/grantedAt`） |
@@ -220,7 +235,9 @@ GET /api/integration?location[directory]=...
 
 ## 5. SSE 事件映射表
 
-DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `GlobalEvent`。
+当前 dsh 0.1.2 由 Cordis `session/event`、`sessionController.control` 与
+approval/question answerer 产出 host frames，oc-bridge 翻译为 opencode
+`GlobalEvent`；旧版 `apiProxy.events.mux()` 仅作为历史协议来源。
 
 | DSH mux frame | opencode GlobalEvent |
 |---|---|
@@ -262,7 +279,7 @@ DSH `apiProxy.events.mux()` 产出 `MuxFrame`，oc-bridge 翻译为 opencode `Gl
 > 多条排队消息会在下一个 step 按序合并进同一次请求；QUEUED 徽标仍由 TUI
 > 按时间线自行判定。
 
-> **已知行为（文本 delta 成对重复）**：dsh 0.1.0-rc.6 对同一段流式文本同时下发
+> **已知行为（文本 delta 成对重复）**：旧 dsh/dcp rc.6 对同一段流式文本同时下发
 > `assistant/chunk`（text-delta）与 packed `text-chunks` 两种编码，且新 mux 订阅
 > 会先重放历史再进入实时，因此 bridge 的 `message.part.delta` 可能把同一字符发送
 > 两次（两种编码分块/偏移不同，无法无损合并）。opencode 1.18.18 TUI 以最终
@@ -372,7 +389,7 @@ fallback，且每个平台使用各自 manifest 条目独立校验，不是全�
 ## 9. e2e 实测实现状态（2026-08-15）
 
 下列状态来自 `chore-release` 分支 profile-fix 之后的真实 e2e（mock LLM +
-dsh 0.1.0-rc.6 + opencode 1.18.18，TUI 与 bridge 均实际跑通）：
+dsh 0.1.2-rc.1 + opencode 1.18.18，TUI 与 bridge 均实际跑通）：
 
 | 路由/能力 | 状态 | 备注 |
 |---|---|---|

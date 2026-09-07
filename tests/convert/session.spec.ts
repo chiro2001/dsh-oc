@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { SessionSummary } from '../../src/bridge/dsh-types.js'
 import {
   convertSessionSummary,
   convertSessionSummaryV2,

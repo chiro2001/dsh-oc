@@ -1,6 +1,8 @@
-import type { RpcError, RpcErrorCode } from '@deepseek-ai/dsh-host-apiproxy/api'
-import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
+import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionFollowFrame } from '@deepseek-ai/dsh-api-session-controller'
+import type { Agent } from '@deepseek-ai/dsh-agent/types'
 import type { BridgeApi } from '../src/bridge/rpc.js'
+import { RpcCallError } from '../src/bridge/rpc.js'
 
 export function sessionEvent(
   type: string,
@@ -16,74 +18,76 @@ export function sessionEvent(
   } as unknown as SessionEvent
 }
 
-export function okRpc<T>(value: T) {
-  return { rpcId: 'rpc-1' as never, result: { ok: true as const, value } }
+/** Host services return plain values; `okRpc` is now an identity helper. */
+export function okRpc<T>(value: T): T {
+  return value
 }
 
-export function errRpc(code: string, message: string, details: Record<string, unknown> = {}) {
-  const error = {
-    code: code as RpcErrorCode,
-    message,
-    details: details as never,
-  } as unknown as RpcError
-  return {
-    rpcId: 'rpc-1' as never,
-    result: { ok: false as const, error },
+/** Host services throw on failure; `errRpc` throws a RemoteError-like error. */
+export function errRpc(code: string, message: string, details: Record<string, unknown> = {}): never {
+  throw new RpcCallError(code, message, details)
+}
+
+/** Wrap an old-style history result into a follow override (test fixture). */
+export function followWith(
+  events: Array<{ event: unknown; view?: unknown }>,
+  hasMore = false,
+  projections?: { asOfSeq: number; values: Record<string, unknown> },
+): (request: unknown, signal?: AbortSignal) => AsyncIterable<SessionFollowFrame> {
+  return async function* () {
+    yield {
+      type: 'snapshot',
+      header: {} as never,
+      cursor: events.length > 0 ? events.length : -1,
+      records: events.map((e) => ({ type: 'event', event: e.event } as never)),
+      hasMore,
+      projections: projections ?? { asOfSeq: -1, values: {} },
+    } as SessionFollowFrame
   }
 }
 
 export function fakeApi(overrides: Partial<BridgeApi> = {}): BridgeApi {
   const api: BridgeApi = {
-    sessions: {
-      list: async () => okRpc({ items: [] }),
-      search: async () => okRpc({ items: [], hasMore: false }),
-      create: async () => okRpc({ sessionId: 'new-session' as never }),
-      fork: async () => okRpc({ sessionId: 'fork-session' as never }),
-      history: async () => okRpc({ events: [], hasMore: false }),
-      models: async () => okRpc({
-        current: { provider: 'deepseek-official', model: 'mock-model' },
-        routable: true,
+    sessionController: {
+      list: async () => ({ items: [] }),
+      search: async () => ({ items: [], hasMore: false }),
+      create: async () => ({ sessionId: 'new-session' as never }),
+      fork: async () => ({ sessionId: 'fork-session' as never }),
+      prompt: async () => ({ accepted: true }),
+      cancel: () => ({ accepted: true as const }),
+      selectModel: async () => ({
+        selected: { provider: 'deepseek-official', model: 'mock-model', reasoningEffort: 'off' },
+      }),
+      modelCatalog: async () => ({
+        default: { provider: 'deepseek-official', model: 'mock-model' },
+        routableProviders: ['deepseek-official'],
         groups: [],
         failures: [],
       }),
-      rename: async () => okRpc({ title: 'renamed', seq: 3 }),
-      prompt: async () => okRpc({ accepted: true }),
-      cancel: async () => okRpc({ accepted: true }),
-      selectModel: async () => okRpc({
-        selected: { provider: 'deepseek-official', model: 'mock-model', reasoningEffort: 'off' },
-      }),
-    },
-    host: {
-      describe: async () =>
-        okRpc({ version: '0.1.0-rc.6', cwd: '/work', attachedSessions: 0, canOpenPath: false }),
+      rename: async () => ({ title: 'renamed', seq: 3 }),
+      page: async () => ({ records: [], hasMore: false }),
+      follow: followWith([]),
+      control: async function* () {},
+      resolveAgent: async () => ({ agent: { id: 'agent-1' } as never }),
+      history: async () => ({ events: [], hasMore: false }),
+      models: async () => ({ current: { provider: 'deepseek-official', model: 'mock-model' } }),
     },
     agentPresets: {
-      list: async () => okRpc({ presets: [], authorable: false, hasDocument: false }),
-      select: async () => okRpc({ agentPreset: 'minimal' }),
+      list: async () => [],
+      select: async () => 'minimal',
+      defaultId: 'minimal',
     },
     goals: {
-      create: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 1 } }),
-      edit: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 2 } }),
-      pause: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 2 } }),
-      resume: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 3 } }),
-      complete: async () => okRpc({ ref: { id: 'goal-1' as never, revision: 4 } }),
-      clear: async () => okRpc({ cleared: true }),
+      create: async () => ({ id: 'goal-1' as never, revision: 1 }),
+      edit: async () => ({ id: 'goal-1' as never, revision: 2 }),
+      pause: async () => ({ id: 'goal-1' as never, revision: 2 }),
+      resume: async () => ({ id: 'goal-1' as never, revision: 3 }),
+      complete: async () => ({ id: 'goal-1' as never, revision: 4 }),
+      clear: async () => ({ cleared: true }),
     },
-    skills: {
-      list: async () => okRpc({ skills: [] }),
+    sessionSkillCatalog: {
+      list: async () => ({ skills: [] }),
     },
-    llm: {
-      models: async () => okRpc({ groups: [], failures: [] }),
-    },
-    events: {
-      mux: async function* () {
-        return
-      },
-      host: async function* () {
-        return
-      },
-    },
-    respond: async () => ({ accepted: true }),
   }
   return { ...api, ...overrides } as BridgeApi
 }

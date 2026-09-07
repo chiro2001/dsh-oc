@@ -1,4 +1,4 @@
-import type { SessionSummary } from '@deepseek-ai/dsh-host-apiproxy/api'
+import type { SessionSummary } from '../dsh-types.js'
 import type { Session, SessionV2Info } from '@opencode-ai/sdk/v2'
 import {
   DEFAULT_AGENT,
@@ -19,6 +19,12 @@ export interface SessionConvertOptions {
     providerID: string
     variant?: string
   }
+  /**
+   * Live per-session agent (user preset switch / Tab). When present it wins
+   * over the summary's header default ("build"), which dsh keeps on a fresh
+   * session even after the preset was switched.
+   */
+  agent?: string
 }
 
 export function sessionTitleFrom(summary: SessionSummary, override?: string): string {
@@ -61,7 +67,7 @@ export function convertSessionSummary(
       ? { parentID: String(summary.parentSessionId) }
       : {}),
     title,
-    agent: summary.agentPreset ?? DEFAULT_AGENT,
+    agent: options.agent ?? summary.agentPreset ?? DEFAULT_AGENT,
     ...(options.model === undefined ? {} : { model: options.model }),
     version: OPENCODE_VERSION,
     ...(sessionMetadataFrom(summary) === undefined
@@ -87,7 +93,7 @@ export function convertSessionSummaryV2(
       ? { parentID: String(summary.parentSessionId) }
       : {}),
     projectID: projectIdFor(directory),
-    agent: summary.agentPreset ?? DEFAULT_AGENT,
+    agent: options.agent ?? summary.agentPreset ?? DEFAULT_AGENT,
     ...(options.model === undefined ? {} : { model: options.model }),
     cost: 0,
     tokens: {

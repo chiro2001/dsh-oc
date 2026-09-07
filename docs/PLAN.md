@@ -5,6 +5,8 @@
 > [ROADMAP.md](ROADMAP.md)、开发指南见 [../AGENTS.md](../AGENTS.md)。
 >
 > 状态：方案已确认，主体已执行。
+> `0.2.0-rc.1` 已迁移到 dsh `>=0.1.2-rc.1` host services；本文保留的
+> `apiProxy` 结构仅作历史背景，运行时以 AGENTS/PROTOCOL 为准。
 > 仓库：`chiro2001/dsh-oc`（后续可能转移为 `chiro/dsh-oc`）。
 > 目标读者：后续按本计划实施 dsh-oc 的模型/工程师。
 

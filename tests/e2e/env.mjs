@@ -22,7 +22,7 @@ import { join } from 'node:path'
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
 const mockScript = join(repoRoot, 'tests', 'e2e', 'mock-llm.mjs')
-const e2eRoot = join(repoRoot, '.e2e')
+const e2eRoot = process.env.DSH_OC_E2E_ROOT ?? join(repoRoot, '.e2e')
 
 const HELP = `usage:
   new-run [--label NAME] [--runid ID] [--permission MODE] [--sequence CSV]
@@ -103,20 +103,22 @@ async function newRun(argv) {
   const ocBlock = dump.split('# == @chiro2001/dsh-oc')[1]
   if (!ocBlock) fail('dump-config: missing @chiro2001/dsh-oc bundle block')
   for (const id of [
-    'storage',
-    'storage-json',
-    'storage-domain',
     'webserver',
     'agent-presets',
     'workspace',
     'directory-picker',
-    'api-proxy',
+    'session-controller',
     'oc-bridge',
     'oc-tui',
   ]) {
     if (!ocBlock.includes(`- id: ${id}`)) fail(`dump-config: missing id ${id}`)
   }
-  if (!ocBlock.includes('inject:\n    - apiProxy')) fail('dump-config: oc-bridge must inject apiProxy')
+  const ocBridgeInject = /id: oc-bridge[\s\S]*?inject:\n((?:    - \S+\n)+)/.exec(ocBlock)?.[1] ?? ''
+  for (const service of ['sessionController', 'agentPresets', 'goals', 'sessionSkillCatalog']) {
+    if (!ocBridgeInject.includes(`- ${service}`)) {
+      fail(`dump-config: oc-bridge must inject ${service}`)
+    }
+  }
   if (!ocBlock.includes('inject:\n    - ocBridge')) fail('dump-config: oc-tui must inject ocBridge')
 
   const overlay = join(runDir, 'agent-model.patch.yml')

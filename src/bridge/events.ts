@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { MuxFrame, RpcRequest, ToolEventView } from '@deepseek-ai/dsh-host-apiproxy/api'
-import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
+import type { BridgeFrame, ToolEventView } from './dsh-types.js'
+import type { BridgeEvent } from './dsh-types.js'
 import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
 import type { SnapshotFileDiff } from '@opencode-ai/sdk/v2/types'
 import {
@@ -12,6 +12,7 @@ import {
 } from './convert/message.js'
 import {
   DEFAULT_AGENT,
+  externalProviderId,
   projectIdFor,
   provisionalMessageId,
   provisionalPartId,
@@ -40,6 +41,7 @@ import type { InteractionState, NewApprovalEntry, NewQuestionEntry } from './sta
 import {
   agentErrorEvents,
   commandResultEvents,
+  commandResultMessage,
   directoryFor,
   earliestBlockStart,
   makeEvent,
@@ -59,6 +61,7 @@ import {
 export {
   agentErrorEvents,
   commandResultEvents,
+  commandResultMessage,
   makeEvent,
   opencodeError,
   toolCallId,
@@ -66,6 +69,32 @@ export {
   type BridgeGlobalEvent,
   type TranslateDeps,
 } from './events-util.js'
+
+/**
+ * Extract an error descriptor from a tool-result message content when dsh
+ * marked the block `isError` (e.g. a permission-rejected tool) without a
+ * top-level `error` field on the event. Returns the first matching error
+ * carrying the block's own text, so the opencode TUI renders a readable
+ * "failed: <text>" (the mini TUI has no tool card title, only the error).
+ */
+function toolResultContentError(
+  content: readonly unknown[],
+): { name: string; code: string } | undefined {
+  for (const block of content) {
+    const record = block as { type?: unknown; isError?: unknown; content?: unknown } | null
+    if (record === null || typeof record !== 'object') continue
+    if (record.type !== 'tool-result') continue
+    if (record.isError !== true) continue
+    const inner = Array.isArray(record.content) ? record.content : []
+    for (const part of inner) {
+      const text = (part as { type?: unknown; text?: unknown } | null)?.text
+      if (typeof text === 'string' && text.length > 0) {
+        return { name: text, code: 'tool-rejected' }
+      }
+    }
+  }
+  return undefined
+}
 
 /**
  * Packed dsh chunk rows (`text-chunks` / `reasoning-chunks`) arrive through
@@ -159,6 +188,12 @@ interface SessionStreamState {
   turnStartTime?: number
   lastUserMessageId?: string
   provisionalMessageIds: Map<string, string>
+  /** Stable `time.created` for each provisional assistant message. OpenCode
+   * 1.18.18 keys live messages by `time.created + id`; when turn/start opens
+   * a card before the first chunk, its timestamp must be reused by the final
+   * assistant update or the TUI inserts a second card and leaves the first
+   * one spinning forever. */
+  provisionalMessageCreatedAt: Map<string, number>
   blockStarts: Map<string, number>
   blockEnds: Map<string, number>
   finishReasons: Map<string, string>
@@ -207,11 +242,22 @@ export class MuxEventTranslator {
     this.sessionTodos = deps.sharedState?.todos ?? new Map<string, unknown>()
   }
 
+  /** Drop all live/replay state when the Host reports a Session removal. */
+  disposeSession(sessionId: string): void {
+    this.currentAssistant.delete(sessionId)
+    this.pendingCalls.delete(sessionId)
+    this.pendingAssistantCompletions.delete(sessionId)
+    this.streams.delete(sessionId)
+    this.sessionGoals.delete(sessionId)
+    this.sessionTodos.delete(sessionId)
+  }
+
   private streamState(sessionId: string): SessionStreamState {
     let state = this.streams.get(sessionId)
     if (!state) {
       state = {
         provisionalMessageIds: new Map(),
+        provisionalMessageCreatedAt: new Map(),
         blockStarts: new Map(),
         blockEnds: new Map(),
         finishReasons: new Map(),
@@ -282,7 +328,11 @@ export class MuxEventTranslator {
     const messageID = alreadyOpen
       ? provisionalMessageId(sessionId, turn, step)
       : (bridgeId ?? provisionalMessageId(sessionId, turn, step))
+    const createdAt = this.deps.state.assistantMessageCreatedAt(sessionId, messageID) ?? time
     state.provisionalMessageIds.set(stepKey, messageID)
+    state.provisionalMessageCreatedAt.set(stepKey, createdAt)
+    this.deps.state.setAssistantMessageCreatedAt(sessionId, messageID, createdAt)
+    this.deps.state.markAssistantPending(sessionId, messageID)
     if (bridgeId !== undefined) state.openedMessageIds.add(bridgeId)
     return {
       messageID,
@@ -294,7 +344,7 @@ export class MuxEventTranslator {
               sessionId,
               this.deps,
               messageID,
-              state.turnStartTime ?? time,
+              createdAt,
               state.lastUserMessageId ?? `pending:${sessionId}:user`,
             ),
           }, project)],
@@ -609,22 +659,21 @@ export class MuxEventTranslator {
     }
   }
 
-  translate(frame: RpcRequest<MuxFrame>): BridgeGlobalEvent[] {
-    const payload = frame.payload
-    switch (payload.type) {
+  translate(frame: BridgeFrame): BridgeGlobalEvent[] {
+    switch (frame.type) {
       case 'session/event':
-        return this.translateSessionEvent(frame.rpcId, payload.sessionId, payload.event, payload.view)
+        return this.translateSessionEvent(frame.sessionId, frame.event, frame.view)
       case 'approval/requested': {
-        const approvalId = String(payload.approvalId)
+        const approvalId = String(frame.approvalId)
         if (this.deps.replayGuard?.approvals.has(approvalId)) return []
         this.deps.replayGuard?.approvals.add(approvalId)
         const entry: NewApprovalEntry = {
           rpcId: String(frame.rpcId),
-          sessionId: String(payload.sessionId),
+          sessionId: String(frame.sessionId),
           approvalId,
-          toolName: payload.toolName,
-          callId: payload.callId === undefined ? undefined : String(payload.callId),
-          reason: payload.reason,
+          toolName: frame.toolName,
+          callId: frame.callId === undefined ? undefined : String(frame.callId),
+          reason: frame.reason,
         }
         const registered = this.deps.state.registerApproval({
           opencodeId: randomUUID(),
@@ -641,13 +690,18 @@ export class MuxEventTranslator {
         ]
       }
       case 'approval/resolved': {
-        const entry = this.deps.state.permissionByApprovalId(String(payload.approvalId))
+        const entry = this.deps.state.permissionByApprovalId(String(frame.approvalId))
         if (!entry) {
-          this.deps.log(`[bridge/events] approval/resolved for unknown approval ${String(payload.approvalId)}`)
+          this.deps.log(`[bridge/events] approval/resolved for unknown approval ${String(frame.approvalId)}`)
           return []
         }
         const directory = directoryFor(entry.sessionId, this.deps)
-        const reply = payload.outcome === 'allowed-once' ? 'once' : 'reject'
+        const reply = frame.outcome === 'allowed-once' ? 'once' : 'reject'
+        const pending = this.deps.state.pendingApprovals.get(entry.rpcId)
+        if (pending !== undefined) {
+          this.deps.state.pendingApprovals.delete(entry.rpcId)
+          pending(frame.outcome)
+        }
         this.deps.state.removePermission(entry.opencodeId)
         return [
           makeEvent(
@@ -664,8 +718,8 @@ export class MuxEventTranslator {
         this.deps.replayGuard?.questions.add(questionKey)
         const entry: NewQuestionEntry = {
           rpcId: questionKey,
-          sessionId: String(payload.sessionId),
-          items: payload.questions,
+          sessionId: String(frame.sessionId),
+          items: frame.questions,
         }
         const registered = this.deps.state.registerQuestion({
           opencodeId: randomUUID(),
@@ -682,20 +736,30 @@ export class MuxEventTranslator {
         ]
       }
       case 'question/resolved': {
-        const entry = this.deps.state.questionByRpcId(String(payload.questionRpcId))
+        const entry = this.deps.state.questionByRpcId(String(frame.questionRpcId))
         if (!entry) {
-          this.deps.log(`[bridge/events] question/resolved for unknown rpcId ${String(payload.questionRpcId)}`)
+          this.deps.log(`[bridge/events] question/resolved for unknown rpcId ${String(frame.questionRpcId)}`)
           return []
         }
         const directory = directoryFor(entry.sessionId, this.deps)
         const project = projectIdFor(directory)
         this.deps.state.removeQuestion(entry.opencodeId)
-        if (payload.outcome === 'answered') {
+        const pending = this.deps.state.pendingQuestions.get(entry.rpcId)
+        if (pending !== undefined) {
+          this.deps.state.pendingQuestions.delete(entry.rpcId)
+          pending(frame.outcome === 'answered'
+            ? { answers: entry.items.map((item, index) => ({
+                id: item.id,
+                selected: frame.answers?.[index] ?? [],
+              })) }
+            : undefined)
+        }
+        if (frame.outcome === 'answered') {
           return [
             makeEvent(directory, 'question.replied', {
               sessionID: entry.sessionId,
               requestID: entry.opencodeId,
-              answers: [],
+              answers: frame.answers ?? [],
             }, project),
           ]
         }
@@ -707,30 +771,61 @@ export class MuxEventTranslator {
         ]
       }
       case 'session/projection':
-        return this.translateProjection(payload.sessionId, payload.key, payload.value)
-      case 'session/subscribed':
+        return this.translateProjection(frame.sessionId, frame.key, frame.value)
       case 'session/jobs':
         return []
       case 'session/queue': {
-        const sessionId = String(payload.sessionId)
+        const sessionId = String(frame.sessionId)
         const directory = directoryFor(sessionId, this.deps)
         const project = projectIdFor(directory)
-        const items = Array.isArray(payload.items)
-          ? (payload.items as Array<{
+        const items = Array.isArray(frame.items)
+          ? (frame.items as Array<{
               placement: 'queued' | 'steering' | 'context'
-              message: { id: string; content: readonly unknown[]; source: { kind: string } }
+              rpcId?: string
+              message: { id: string; content: readonly unknown[]; source?: { kind: string } }
             }>)
           : []
         const { added } = this.deps.state.initializeInboxProjection(sessionId, items, Date.now())
         return this.queuedMessageEvents(sessionId, added, directory, project)
       }
+      case 'control/baseline': {
+        const events: BridgeGlobalEvent[] = []
+        for (const [sessionId, items] of Object.entries(frame.value.queues ?? {})) {
+          const directory = directoryFor(sessionId, this.deps)
+          const project = projectIdFor(directory)
+          const { added, removed } = this.deps.state.initializeInboxProjection(
+            sessionId,
+            items.map((item) => ({
+              placement: item.placement,
+              rpcId: item.rpcId,
+              message: item.message,
+            })),
+            Date.now(),
+            true,
+          )
+          events.push(...this.queuedMessageEvents(sessionId, added, directory, project))
+          for (const message of removed) {
+            if (message.source.kind !== 'user') continue
+            events.push(makeEvent(directory, 'message.removed', {
+              sessionID: sessionId,
+              messageID: message.id,
+            }, project))
+          }
+        }
+        for (const [sessionId, projection] of Object.entries(frame.value.projections ?? {})) {
+          for (const [key, value] of Object.entries(projection.values ?? {})) {
+            events.push(...this.translateProjection(sessionId, key, value))
+          }
+        }
+        return events
+      }
       case 'stream/error':
-        this.deps.log(`[bridge/events] stream/error: ${payload.error.code} ${payload.error.message}`)
+        this.deps.log(`[bridge/events] stream/error: ${frame.error.code} ${frame.error.message}`)
         return [makeEvent(this.deps.cwd, 'session.error', {
-          error: opencodeError(String(payload.error.code), payload.error.message),
+          error: opencodeError(String(frame.error.code), frame.error.message),
         }, projectIdFor(this.deps.cwd))]
       default:
-        this.deps.log(`[bridge/events] unhandled mux frame ${String((payload as { type: string }).type)}`)
+        this.deps.log(`[bridge/events] unhandled mux frame ${String((frame as { type: string }).type)}`)
         return []
     }
   }
@@ -775,24 +870,58 @@ export class MuxEventTranslator {
         ),
       ]
     }
+    if (key === 'agentPreset') {
+      if (typeof value !== 'string' || value.length === 0) return []
+      this.deps.state.setSessionAgent(sessionId, value)
+      return [makeEvent(directory, 'session.updated', {
+        sessionID: sessionId,
+        info: minimalSession(sessionId, {
+          cwd: directory,
+          title: this.deps.state.sessionTitleFor(sessionId),
+          agent: value,
+        }),
+      }, project)]
+    }
+    if (key === 'subagent') {
+      const mode = (value as { mode?: unknown } | null)?.mode
+      if (mode === 'one-shot' || mode === 'continuable') {
+        this.deps.state.sessionAddressModes.set(sessionId, mode)
+      }
+      return []
+    }
+    if (key === 'modelSelection') {
+      const selection = value as {
+        next?: { provider?: unknown; model?: unknown; reasoningEffort?: unknown } | null
+        lastUsed?: { provider?: unknown; model?: unknown; reasoningEffort?: unknown } | null
+      } | null
+      const current = selection?.next ?? selection?.lastUsed
+      if (current !== null && current !== undefined
+        && typeof current.provider === 'string' && typeof current.model === 'string') {
+        this.deps.state.setSessionModelSelection(sessionId, {
+          providerID: externalProviderId(current.provider),
+          modelID: current.model,
+          ...(typeof current.reasoningEffort === 'string' ? { variant: current.reasoningEffort } : {}),
+        })
+      }
+      return []
+    }
     return []
   }
 
   private translateSessionEvent(
-    rpcId: string,
     sessionId: string,
-    event: SessionEvent,
+    event: BridgeEvent,
     view?: ToolEventView,
   ): BridgeGlobalEvent[] {
     const directory = directoryFor(sessionId, this.deps)
     const project = projectIdFor(directory)
     switch (event.type) {
-      case 'agent/inbox/spliced' as SessionEvent['type']: {
+      case 'agent/inbox/spliced': {
         const splice = event.data as unknown as {
           target: 'next-turn' | 'next-step'
           start: number
           removedCount?: number
-          inserted: Array<{ id: string; content: readonly unknown[]; source: { kind: string } }>
+          inserted: Array<{ id: string; rpcId?: string; content: readonly unknown[]; source: { kind: string; rpcId?: string } }>
           outcome?: 'canceled'
         }
         const { added, removed } = this.deps.state.applyInboxSplice(
@@ -901,9 +1030,9 @@ export class MuxEventTranslator {
         if (isUserPrompt) this.streamState(sessionId).lastUserMessageId = dshId
         return events
       }
-      case 'compaction/start' as SessionEvent['type']:
-      case 'compaction/summary' as SessionEvent['type']:
-      case 'compaction/end' as SessionEvent['type']:
+      case 'compaction/start':
+      case 'compaction/summary':
+      case 'compaction/end':
         return this.translateCompactionEvent(
           sessionId,
           event as unknown as CompactionEvent,
@@ -961,15 +1090,15 @@ export class MuxEventTranslator {
         }
         return []
       }
-      case 'tool-call-chunks' as SessionEvent['type']:
+      case 'tool-call-chunks':
         return this.translateToolCallChunks(
           sessionId,
           event as unknown as ToolCallChunkRowEvent,
           directory,
           project,
         )
-      case 'text-chunks' as SessionEvent['type']:
-      case 'reasoning-chunks' as SessionEvent['type']:
+      case 'text-chunks':
+      case 'reasoning-chunks':
         {
           const chunkSeqKey = `${sessionId}:${event.seq}`
           if (this.deps.replayGuard?.chunks?.has(chunkSeqKey)) return []
@@ -996,7 +1125,12 @@ export class MuxEventTranslator {
         } else if (bridgeForUser !== undefined) {
           this.deps.state.recordAssistantId(sessionId, dshId, bridgeForUser)
         }
-        const created = earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
+        // Prefer the timestamp used when the provisional live card was
+        // opened. In particular, turn/start can precede the first text/tool
+        // chunk; changing `time.created` on the final update violates the
+        // OpenCode TUI message key and renders a duplicate assistant card.
+        const created = state.provisionalMessageCreatedAt.get(stepKey)
+          ?? earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
           ?? state.turnStartTime
           ?? event.time
         const events = messageEvents(sessionId, this.deps, () => {
@@ -1038,6 +1172,7 @@ export class MuxEventTranslator {
             })
           } else if ((info.time as { completed?: number } | undefined)?.completed !== undefined) {
             state.completedMessageIds.add(messageID)
+            this.deps.state.markAssistantCompleted(sessionId, messageID)
           }
           return {
             info,
@@ -1093,11 +1228,30 @@ export class MuxEventTranslator {
         return events
       }
       case 'turn/start':
-        this.streamState(sessionId).turnStartTime = event.time
-        return [
+        {
+          const state = this.streamState(sessionId)
+          state.turnStartTime = event.time
+          // A prompt route has already registered an optimistic user card and
+          // its assistant id. Open that pending assistant at turn/start, before
+          // a tool approval can pause the stream, so a later queue item gets a
+          // deterministic QUEUED badge even when the approval dialog wins the
+          // race with the first streamed tool event.
+          if (state.lastUserMessageId === undefined) {
+            state.lastUserMessageId = this.deps.state.peekPromptMessageId(sessionId)
+          }
+          const promptAnchor = state.lastUserMessageId ?? this.deps.state.peekPromptMessageId(sessionId)
+          const hasPromptAssistant = promptAnchor !== undefined
+            && this.deps.state.assistantIdForUser(sessionId, promptAnchor) !== undefined
+          if (state.lastUserMessageId === undefined && hasPromptAssistant) state.lastUserMessageId = promptAnchor
+          const provisional = hasPromptAssistant
+            ? this.ensureProvisionalMessage(sessionId, event.data.turn, 1, event.time, directory, project)
+            : { events: [] as BridgeGlobalEvent[] }
+          return [
           makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'busy' } }, project),
           makeEvent(directory, 'turn.wait', { sessionID: sessionId }, project),
-        ]
+            ...provisional.events,
+          ]
+        }
       case 'turn/end': {
         const state = this.streamState(sessionId)
         const events = [
@@ -1136,6 +1290,7 @@ export class MuxEventTranslator {
                 }, project),
               )
             }
+            this.deps.state.markAssistantCompleted(sessionId, pending.messageID)
           }
           this.pendingAssistantCompletions.delete(sessionId)
         }
@@ -1146,6 +1301,7 @@ export class MuxEventTranslator {
           if (state.completedMessageIds.has(messageID)) continue
           const created = state.blockStarts.get(`${stepKey}:text`)
             ?? state.blockStarts.get(`${stepKey}:reasoning`)
+            ?? state.provisionalMessageCreatedAt.get(stepKey)
             ?? state.turnStartTime
             ?? event.time
           const base = provisionalAssistantMessage(
@@ -1165,17 +1321,20 @@ export class MuxEventTranslator {
               },
             }, project),
           )
+          this.deps.state.markAssistantCompleted(sessionId, messageID)
         }
         state.provisionalMessageIds.clear()
+        state.provisionalMessageCreatedAt.clear()
         state.openedMessageIds.clear()
         state.completedMessageIds.clear()
         this.currentAssistant.delete(sessionId)
         this.pendingCalls.delete(sessionId)
         this.clearToolTimers(sessionId)
         this.streams.delete(sessionId)
+        this.deps.state.clearPendingAssistants(sessionId)
         return events
       }
-      case 'step/end' as SessionEvent['type']: {
+      case 'step/end': {
         // A tool-call step may be followed by more steps of the same turn
         // (e.g. the follow-up text after the tool result). Completing the
         // message here marks the card finished too early and later parts for
@@ -1185,27 +1344,49 @@ export class MuxEventTranslator {
         return []
       }
       case 'todo/write':
-        this.sessionTodos.set(sessionId, event.data.todos)
+        this.sessionTodos.set(sessionId, (event.data as { todos: unknown }).todos)
         return this.todoUpdateEvents(sessionId, directory, project)
-      case 'step/start' as SessionEvent['type']:
-      case 'request/header' as SessionEvent['type']:
-      case 'request/context' as SessionEvent['type']:
-      case 'session/title-llm-request' as SessionEvent['type']:
-      case 'permission/preset' as SessionEvent['type']:
-      case 'sandbox/mode' as SessionEvent['type']:
-      case 'approval/policy' as SessionEvent['type']:
-      case 'command/run' as SessionEvent['type']:
-      case 'command/done' as SessionEvent['type']:
-      case 'session/end-seed' as SessionEvent['type']:
-      case 'approval/asked' as SessionEvent['type']:
-      case 'approval/decided' as SessionEvent['type']:
+      case 'model/selection': {
+        const data = event.data as { provider?: unknown; model?: unknown; reasoningEffort?: unknown }
+        if (typeof data.provider === 'string' && typeof data.model === 'string') {
+          this.deps.state.setSessionModelSelection(sessionId, {
+            providerID: externalProviderId(data.provider),
+            modelID: data.model,
+            ...(typeof data.reasoningEffort === 'string' ? { variant: data.reasoningEffort } : {}),
+          })
+        }
+        return []
+      }
+      case 'step/start':
+      case 'request/context':
+      case 'session/title-llm-request':
+      case 'permission/preset':
+      case 'sandbox/mode':
+      case 'approval/policy':
+      case 'command/run':
+      case 'command/done':
+      case 'session/end-seed':
+      case 'approval/asked':
+      case 'approval/decided':
         // Log-only / environment-snapshot events: no TUI surface. Explicitly
         // silent so genuinely unknown event types stay loud in the logs.
         return []
-      case 'agent-preset/selected' as SessionEvent['type']: {
+      case 'request/header': {
+        const config = (event.data as { header?: { config?: unknown } }).header?.config as {
+          provider?: unknown; model?: unknown; reasoningEffort?: unknown
+        } | undefined
+        if (typeof config?.provider === 'string' && typeof config.model === 'string') {
+          this.deps.state.setSessionModelSelection(sessionId, {
+            providerID: externalProviderId(config.provider),
+            modelID: config.model,
+            ...(typeof config.reasoningEffort === 'string' ? { variant: config.reasoningEffort } : {}),
+          })
+        }
+        return []
+      }
+      case 'agent-preset/selected': {
         const preset = (event.data as { agentPreset?: unknown }).agentPreset
         if (typeof preset === 'string') {
-          this.deps.state.lastAgentPreset = preset
           // Fold the committed preset into the per-session agent too, so
           // later prompts carrying the same agent are recognized as already
           // effective (out-of-band plugin switches) instead of re-selecting
@@ -1214,7 +1395,7 @@ export class MuxEventTranslator {
         }
         return []
       }
-      case 'goal/change' as SessionEvent['type']: {
+      case 'goal/change': {
         const data = (event as unknown as { data: { goal?: unknown; cleared?: unknown } }).data
         if (data?.goal !== undefined) {
           this.sessionGoals.set(sessionId, { goal: data.goal })
@@ -1286,13 +1467,18 @@ export class MuxEventTranslator {
           view,
           callView: call.view,
         }
-        const part = data.error === undefined
+        // dsh 0.1.2 signals a rejected/errored tool result via the block's
+        // `isError` flag inside `message.content`; `data.error` is undefined in
+        // that case, so the bridge must treat either as an error.
+        const contentError = toolResultContentError(data.message.content)
+        const resultError = data.error ?? contentError
+        const part = resultError === undefined
           ? completedToolPart(call, {
               ...resultInfo,
             }, { sessionID: sessionId, messageID, time: event.time })
           : errorToolPart(call, {
               ...resultInfo,
-              error: data.error,
+              error: resultError,
             }, { sessionID: sessionId, messageID, time: event.time })
         calls?.delete(callId)
         const events: BridgeGlobalEvent[] = [
@@ -1304,7 +1490,7 @@ export class MuxEventTranslator {
           }, project),
         ]
         const output = toolResultText(resultInfo)
-        const tail = data.error === undefined
+        const tail = resultError === undefined
           ? [makeEvent(directory, 'session.next.tool.success', {
               timestamp: event.time,
               sessionID: sessionId,
@@ -1320,12 +1506,12 @@ export class MuxEventTranslator {
               assistantMessageID: messageID,
               callID: callId,
               error: {
-                code: data.error.code,
-                message: data.error.name,
+                code: resultError.code,
+                message: resultError.name,
               },
               provider: { executed: true },
             }, project)]
-        if (data.error === undefined) {
+        if (resultError === undefined) {
           const changes = fileChangesFromToolResult(call, resultInfo)
           if (changes.length > 0) {
             events.push(...fileChangeEvents(sessionId, messageID, changes, project, directory, event.time))
@@ -1396,7 +1582,7 @@ export class MuxEventTranslator {
             }, project),
           ]
         }
-        this.deps.log(`[bridge/events] unhandled session event ${event.type} (rpcId ${rpcId})`)
+        this.deps.log(`[bridge/events] unhandled session event ${event.type}`)
         return []
       }
     }
@@ -1405,33 +1591,50 @@ export class MuxEventTranslator {
   /** Surface dsh pending inbox messages as opencode queued user messages. */
   private queuedMessageEvents(
     sessionId: string,
-    messages: readonly { id: string; content: readonly unknown[]; source: { kind: string }; enqueuedAt: number }[],
+    messages: readonly { id: string; rpcId?: string; content: readonly unknown[]; source: { kind: string }; enqueuedAt: number }[],
     directory: string,
     project: string | undefined,
   ): BridgeGlobalEvent[] {
     const events: BridgeGlobalEvent[] = []
     for (const message of messages) {
       if (message.source.kind !== 'user') continue
-      // Prompts echoed by the prompt route (or surfaced there via the dsh
-      // user/message echo) must not be presented again from the queue; that
-      // would render a second user card.
-      if (this.deps.state.peekPromptMessageId(sessionId) !== undefined) continue
+      // A prompt route already emitted a local card. For rc.1 queue frames the
+      // rpcId is the same client-minted id, so update that exact card instead
+      // of emitting a second one; the update is what lets the TUI mark it
+      // QUEUED while the active turn is blocked (e.g. on approval).
+      const localPromptId = this.deps.state.peekPromptMessageId(sessionId)
+      const localCard = localPromptId !== undefined && message.rpcId === localPromptId
+      if (localPromptId !== undefined && !localCard) continue
       if (this.deps.state.isBroadcastDshId(sessionId, String(message.id))) continue
-      const model = this.deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+      // OpenCode 1.18.18 orders messages by `time.created + id`, not by id
+      // alone. A queue-state update for an optimistic local card must retain
+      // the original timestamp or the TUI inserts a second user card instead
+      // of reconciling the existing one, which destroys the QUEUED predicate.
+      const created = localCard && localPromptId !== undefined
+        ? (this.deps.state.promptMessageCreatedAt(sessionId, localPromptId) ?? message.enqueuedAt)
+        : message.enqueuedAt
+      const selected = this.deps.state.sessionModelSelectionFor(sessionId)
+      const model = selected === undefined
+        ? (this.deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' })
+        : {
+            providerID: selected.providerID,
+            modelID: selected.modelID,
+          }
       const agent = this.deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
       events.push(
         makeEvent(directory, 'message.updated', {
           sessionID: sessionId,
           info: {
-            id: message.id,
+            id: localCard ? localPromptId : message.id,
             sessionID: sessionId,
             role: 'user',
-            time: { created: message.enqueuedAt },
+            time: { created },
             agent,
             model,
           },
         }, project),
       )
+      if (localCard) continue
       message.content.forEach((block, index) => {
         const textBlock = block as { type?: string; text?: unknown }
         if (textBlock.type !== 'text' || typeof textBlock.text !== 'string') return
@@ -1439,12 +1642,12 @@ export class MuxEventTranslator {
           makeEvent(directory, 'message.part.updated', {
             sessionID: sessionId,
             part: {
-              id: `${message.id}:${index}`,
+              id: `${localCard ? localPromptId : message.id}:${index}`,
               sessionID: sessionId,
-              messageID: message.id,
+              messageID: localCard ? localPromptId : message.id,
               type: 'text',
               text: textBlock.text,
-              time: { start: message.enqueuedAt, end: message.enqueuedAt },
+              time: { start: created, end: created },
             },
           }, project),
         )
@@ -1498,7 +1701,14 @@ export class MuxEventTranslator {
         provisionalId = alreadyOpen
           ? provisionalMessageId(sessionId, event.data.turn, event.data.step)
           : (bridgeId ?? provisionalMessageId(sessionId, event.data.turn, event.data.step))
+        const provisionalCreated = state.blockStarts.get(blockStartKey)
+          ?? this.deps.state.assistantMessageCreatedAt(sessionId, provisionalId)
+          ?? state.turnStartTime
+          ?? time0
         state.provisionalMessageIds.set(stepKey, provisionalId)
+        state.provisionalMessageCreatedAt.set(stepKey, provisionalCreated)
+        this.deps.state.setAssistantMessageCreatedAt(sessionId, provisionalId, provisionalCreated)
+        this.deps.state.markAssistantPending(sessionId, provisionalId)
         if (bridgeId !== undefined) state.openedMessageIds.add(bridgeId)
         if (!alreadyOpen) {
           events.push(
@@ -1508,7 +1718,7 @@ export class MuxEventTranslator {
                 sessionId,
                 this.deps,
                 provisionalId,
-                state.blockStarts.get(blockStartKey) ?? state.turnStartTime ?? time0,
+                provisionalCreated,
                 state.lastUserMessageId ?? `pending:${sessionId}:user`,
               ),
             }, project),

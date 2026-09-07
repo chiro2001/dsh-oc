@@ -91,7 +91,8 @@ QUEUED_HINT=""
 deadline=$((SECONDS + 30))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-queue-live.txt"
-  if grep -qa "QUEUED" "$E2E_RUN_DIR/tui-queue-live.txt"; then
+  if grep -qa "e2e second queued prompt" "$E2E_RUN_DIR/tui-queue-live.txt" \
+    && grep -qa "QUEUED" "$E2E_RUN_DIR/tui-queue-live.txt"; then
     QUEUED_HINT="second prompt visible with QUEUED badge"
     break
   fi

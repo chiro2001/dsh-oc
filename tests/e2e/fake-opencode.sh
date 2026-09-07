@@ -11,9 +11,25 @@ case "${1:-}" in
   attach)
     log="${DSH_OC_FAKE_LOG:?DSH_OC_FAKE_LOG must be set}"
     printf '%s\n' "$@" > "$log"
-    trap 'exit 0' TERM INT
+    sleep_pid=''
+    cleanup() {
+      trap - TERM INT
+      if [[ -n "$sleep_pid" ]]; then
+        kill "$sleep_pid" 2>/dev/null || true
+        wait "$sleep_pid" 2>/dev/null || true
+      fi
+      exit 0
+    }
+    trap cleanup TERM INT
     while :; do
-      read -r -t 3600 < /dev/null || true
+      # `read -t ... < /dev/null` returns EOF immediately and spins at 100%
+      # CPU. Keep a real child wait instead; signals are handled by cleanup.
+      sleep 3600 &
+      sleep_pid=$!
+      status=0
+      wait "$sleep_pid" || status=$?
+      sleep_pid=''
+      [[ "$status" == 0 ]] || exit 0
     done
     ;;
 esac
