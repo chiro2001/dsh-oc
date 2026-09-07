@@ -3104,6 +3104,19 @@ describe('bridge events: SSE connection lifecycle', () => {
       firstText += decoder.decode(value)
     }
     expect(firstText).toContain('"type":"busy"')
+
+    const secondController = new AbortController()
+    const second = await fetch(`${server.url}/global/event?sessionID=s1`, { signal: secondController.signal })
+    const secondReader = second.body!.getReader()
+    let secondText = ''
+    while (!secondText.includes('"type":"busy"')) {
+      const { done, value } = await secondReader.read()
+      if (done) break
+      secondText += decoder.decode(value)
+    }
+    expect(secondText).toContain('"type":"session.status"')
+    expect(secondText).toContain('"type":"busy"')
+    secondController.abort()
     firstController.abort()
 
     router.feedHostFrame({ type: 'host/session-status', sessionId: 's1', running: false })

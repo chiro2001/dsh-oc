@@ -68,6 +68,8 @@ export class InteractionState {
   readonly sessionRunning = new Map<string, boolean>()
   /** Last status/activity observation used for reconnect diagnostics. */
   readonly sessionStatusUpdatedAt = new Map<string, number>()
+  /** Last realtime status edge broadcast to connected SSE clients. */
+  private readonly sessionStatusBroadcast = new Map<string, boolean>()
   readonly savedPermissions = new Map<string, SavedPermission>()
   /** Last explicit model selection (with variant) per session, for self-heal. */
   readonly sessionModelSelections = new Map<string, {
@@ -193,6 +195,21 @@ export class InteractionState {
 
   sessionStatusUpdatedAtFor(sessionId: string): number | undefined {
     return this.sessionStatusUpdatedAt.get(sessionId)
+  }
+
+  /**
+   * Claim one live session.status edge for broadcast. dsh 0.1.2 reports the
+   * same turn edge through both Session events and api-session/status; the
+   * authoritative state guard also rejects an older opposite edge before it
+   * can mark the session idle/busy incorrectly. SSE snapshots deliberately do
+   * not use this method because every new client needs its own snapshot.
+   */
+  shouldBroadcastSessionStatus(sessionId: string, running: boolean): boolean {
+    const authoritative = this.sessionRunning.get(sessionId)
+    if (authoritative !== undefined && authoritative !== running) return false
+    if (this.sessionStatusBroadcast.get(sessionId) === running) return false
+    this.sessionStatusBroadcast.set(sessionId, running)
+    return true
   }
 
   markSessionStatusSeeded(): void {
@@ -680,6 +697,7 @@ export class InteractionState {
     this.sessionAddressModes.delete(sessionId)
     this.sessionRunning.delete(sessionId)
     this.sessionStatusUpdatedAt.delete(sessionId)
+    this.sessionStatusBroadcast.delete(sessionId)
     this.sessionModelSelections.delete(sessionId)
     this.sessionTitles.delete(sessionId)
     this.sessionAgents.delete(sessionId)

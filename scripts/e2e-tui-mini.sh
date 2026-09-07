@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Mini attach e2e: dsh --profile oc --mini boots the real opencode TUI in
-# minimal mode, renders a recognizable prompt and exits cleanly.
+# minimal mode, renders a recognizable prompt and exits with either a graceful
+# status or the expected SIGINT status after triple C-c.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source tests/e2e/common.sh
@@ -101,7 +102,10 @@ if [[ ! -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
   e2e_tui_capture "$E2E_RUN_DIR/tui-mini-stuck.txt"
   exit 1
 fi
-grep -q '^DSH_EXIT=0$' "$E2E_RUN_DIR/dsh-exit.txt"
+if ! grep -Eq '^DSH_EXIT=(0|130)$' "$E2E_RUN_DIR/dsh-exit.txt"; then
+  echo "e2e: unexpected mini exit status: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+  exit 1
+fi
 sleep 1
 e2e_tui_capture "$E2E_RUN_DIR/tui-mini-exit.txt"
 tmux capture-pane -p -S -300 -t "$E2E_TUI_SESSION" > "$E2E_RUN_DIR/tui-mini-exit-scrollback.txt" 2>/dev/null || true

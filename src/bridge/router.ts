@@ -2300,6 +2300,7 @@ export function createBridgeRouter(
       if (frame.type === 'host/session-status') {
         const updatedAt = frame.updatedAt ?? Date.now()
         ctx.state.setSessionRunning(sessionId, frame.running, updatedAt)
+        if (!ctx.state.shouldBroadcastSessionStatus(sessionId, frame.running)) return
         const directory = ctx.state.sessionDirectories.get(sessionId) ?? cwd
         hub.broadcast([makeEvent(directory, 'session.status', {
           sessionID: sessionId,

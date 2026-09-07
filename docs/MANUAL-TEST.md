@@ -39,7 +39,7 @@
 
 ## 4. 打断与取消
 
-- 模型输出长文本时：全量 TUI 连按两次 Esc、`--mini` 按一次 Esc，应停止
+- 模型输出长文本时：全量 TUI 与 `--mini` 都连按两次 Esc，应停止
   在途流并回到可输入状态；thinking 指示不应一直转圈。
 - 流式出错（如 SSE 无 `[DONE]` 或鉴权失败）：侧边栏应显示可读的错误
   文本（如 “SSE stream ended without [DONE]”），而不是 `[object Object]`。
@@ -59,8 +59,10 @@
 
 ## 7. mini 模式
 
-- `dsh --profile oc --mini`：回复只渲染一次（无重复）；Esc 单按打断；
-  权限 Esc 多一步确认层；退出同第 5 节。
+- `dsh --profile oc --mini`：回复只渲染一次（无重复）；流式回合连按两次
+  Esc 打断；权限 Esc 多一步确认层；退出同第 5 节。
+- `scripts/e2e-tui-mini.sh` 的三次 C-c 可能得到 `DSH_EXIT=130`（SIGINT），
+  这是可接受的退出码；无论 0/130 均需看到 dsh-oc 退出提示。
 
 ## 8. 其它入口
 

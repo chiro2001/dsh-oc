@@ -1246,16 +1246,18 @@ export class MuxEventTranslator {
           const provisional = hasPromptAssistant
             ? this.ensureProvisionalMessage(sessionId, event.data.turn, 1, event.time, directory, project)
             : { events: [] as BridgeGlobalEvent[] }
+          const status = this.deps.state.shouldBroadcastSessionStatus(sessionId, true)
           return [
-          makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'busy' } }, project),
+          ...(status ? [makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'busy' } }, project)] : []),
           makeEvent(directory, 'turn.wait', { sessionID: sessionId }, project),
             ...provisional.events,
           ]
         }
       case 'turn/end': {
         const state = this.streamState(sessionId)
+        const status = this.deps.state.shouldBroadcastSessionStatus(sessionId, false)
         const events = [
-          makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'idle' } }, project),
+          ...(status ? [makeEvent(directory, 'session.status', { sessionID: sessionId, status: { type: 'idle' } }, project)] : []),
           makeEvent(directory, 'session.idle', { sessionID: sessionId }, project),
           makeEvent(directory, 'turn.idle', { sessionID: sessionId }, project),
         ]

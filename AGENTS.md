@@ -218,8 +218,10 @@ e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
 - **退出 splash**：官方 opencode 二进制在会话有内容时打印自己的 logo 与
   `opencode -s <id>` 恢复命令，无法替换；dsh-oc 在下方补一行 dsh 恢复说明
   （`DSH_OC_DISABLE_EXIT_NOTE=1` 可关）。
-- **--mini**：通过 `POST /session/:id/prompt_async` 提交；退出打断按一次 Esc，
-  全量 TUI 连按两次。
+- **--mini**：通过 `POST /session/:id/prompt_async` 提交；流式回合打断按两次
+  Esc（与官方 opencode 1.18.18 handler 一致），全量 TUI 也按两次。
+- **mini e2e 退出码**：`scripts/e2e-tui-mini.sh` 的三次 C-c 可能由 SIGINT
+  结束并返回 130；脚本接受 0/130，但仍必须断言 dsh-oc 退出提示。
 - **协议探针**：`scripts/probe-opencode.mjs` 自动扫描 `router.ts` +
   `routes.ts` + `src/bridge/routes/` + `stubs.ts`；新增路由文件需被扫描到。
 - **e2e mock LLM**：`tests/e2e/mock-llm.mjs` 包装

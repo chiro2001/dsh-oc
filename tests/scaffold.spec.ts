@@ -113,6 +113,15 @@ describe('package.json', () => {
   })
 })
 
+describe('question e2e fixture', () => {
+  it('reserves a tool-call slot for both standard question turns', () => {
+    const script = read('scripts/e2e-tui-permission-ext.sh')
+    expect(script).toContain(
+      '"tool_call_success,success,tool_call_success,success,success,success" "0"',
+    )
+  })
+})
+
 describe('src constants', () => {
   it('exports the pinned opencode version and commit', async () => {
     const mod = await import('../src/index.ts')

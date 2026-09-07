@@ -1,3 +1,4 @@
+{"type":"session.status","props":{"sessionID":"id-0","status":{"type":"idle"}}}
 {"type":"session.updated","props":{"sessionID":"id-0","info":{"id":"id-0","slug":"id-0","projectID":"id-1","directory":"/workspace","title":"golden trace tool prompt","agent":"minimal","version":"1.18.18","time":{}}}}
 {"type":"message.updated","props":{"sessionID":"id-0","info":{"id":"id-2","sessionID":"id-0","role":"user","time":{},"agent":"minimal","model":{"providerID":"deepseek","modelID":"mock-model"}}}}
 {"type":"message.part.updated","props":{"sessionID":"id-0","part":{"id":"id-3","sessionID":"id-0","messageID":"id-2","type":"text","text":"golden trace text prompt","time":{}}}}

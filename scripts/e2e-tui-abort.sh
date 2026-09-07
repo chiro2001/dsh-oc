@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Real TUI interrupt e2e: prompt a slow streaming mock, press Esc twice
-# (full TUI's interrupt key), and assert the bridge cancel stops the stream
-# long before the mock would finish.
+# (the full TUI and mini handler both require the second press to abort), and
+# assert the bridge cancel stops the stream long before the mock would finish.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source tests/e2e/common.sh
@@ -248,6 +248,10 @@ if ! rg -q 'message.part.delta' "$E2E_RUN_DIR/mini-sse.log" 2>/dev/null; then
   kill "$SSE_PID" 2>/dev/null || true
   exit 1
 fi
+sleep 1
+# opencode's prompt handler arms the interrupt on the first Escape and calls
+# session.abort on the second (the same 1.18.18 handler used by full TUI).
+tmux send-keys -t "$E2E_TUI_SESSION" Escape
 sleep 1
 tmux send-keys -t "$E2E_TUI_SESSION" Escape
 sleep 5

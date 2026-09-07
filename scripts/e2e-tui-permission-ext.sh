@@ -145,7 +145,7 @@ option_fg_sig() {
 
 echo "== run H: standard question navigation + Esc cancel =="
 e2e_new_run "tui-permission-nav" "workspace-write" \
-  "tool_call_success,success,success,tool_call_success,success,success" "0" \
+  "tool_call_success,success,tool_call_success,success,success,success" "0" \
   '{"questions":[{"id":"q1","question":"Pick a language?","options":[{"label":"Python"},{"label":"Node.js"}]}]}' \
   "ask_user_question"
 use_standard_preset

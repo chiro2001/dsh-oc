@@ -6747,6 +6747,8 @@ declare class InteractionState {
   readonly sessionRunning: Map<string, boolean>;
   /** Last status/activity observation used for reconnect diagnostics. */
   readonly sessionStatusUpdatedAt: Map<string, number>;
+  /** Last realtime status edge broadcast to connected SSE clients. */
+  private readonly sessionStatusBroadcast;
   readonly savedPermissions: Map<string, SavedPermission>;
   /** Last explicit model selection (with variant) per session, for self-heal. */
   readonly sessionModelSelections: Map<string, {
@@ -6823,6 +6825,14 @@ declare class InteractionState {
   setSessionRunning(sessionId: string, running: boolean, updatedAt?: number): void;
   sessionRunningFor(sessionId: string): boolean | undefined;
   sessionStatusUpdatedAtFor(sessionId: string): number | undefined;
+  /**
+   * Claim one live session.status edge for broadcast. dsh 0.1.2 reports the
+   * same turn edge through both Session events and api-session/status; the
+   * authoritative state guard also rejects an older opposite edge before it
+   * can mark the session idle/busy incorrectly. SSE snapshots deliberately do
+   * not use this method because every new client needs its own snapshot.
+   */
+  shouldBroadcastSessionStatus(sessionId: string, running: boolean): boolean;
   markSessionStatusSeeded(): void;
   markSessionActivity(sessionId: string, updatedAt: number): void;
   /** Drop list and (optionally per-session) history caches after any mutation. */

@@ -116,7 +116,8 @@ opencode 的配置、数据、状态与缓存全部隔离在 `$DSH_HOME/opencode
   （`DSH_OC_DISABLE_EXIT_NOTE=1` 可关）。
 - `--mini` 入口 logo：官方 mini 界面不加载 TUI 插件，无法替换其内置
   OpenCode 字符画；dsh-oc 会在启动前先打印 DSH OC 品牌。
-- Esc 打断：`--mini` 单按、全量 TUI 连按两次；dsh-oc 会转为 `session.cancel`。
+- Esc 打断：流式回合中 `--mini` 与全量 TUI 都需连按两次；dsh-oc 会转为
+  `session.cancel`。
 - 附件：支持文本与图片，PDF 等二进制暂不支持。
 - 工具回合的后续文本在“忙碌中排队第二条消息”时，TUI 即时转录顺序可能
   错位（内容完整、无重复；重新进入会话后恢复），官方 opencode 同类场景

@@ -441,6 +441,66 @@ describe('bridge router: session routes', () => {
     expect(router.ctx.state.sessionStatusUpdatedAtFor('s-turn')).toBe(200)
   })
 
+  it('broadcasts one live status edge when turn and host sources overlap', async () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    const writes: string[] = []
+    const fakeRes = {
+      write: (chunk: string) => { writes.push(chunk); return true },
+      on: () => fakeRes,
+      destroyed: false,
+    }
+    const client = router.ctx.hub.add(fakeRes as never)
+
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's-status-dedupe',
+      event: sessionEvent('turn/start', { turn: 1 }, 10, 100),
+    })
+    router.feedHostFrame({
+      type: 'host/session-status',
+      sessionId: 's-status-dedupe',
+      running: true,
+      updatedAt: 100,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's-status-dedupe',
+      event: sessionEvent('turn/end', { turn: 1, reason: { kind: 'completed' } }, 11, 200),
+    })
+    router.feedHostFrame({
+      type: 'host/session-status',
+      sessionId: 's-status-dedupe',
+      running: false,
+      updatedAt: 200,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const statuses = writes
+      .map((wire) => wire.split('\n').find((line) => line.startsWith('data: ')))
+      .filter((line): line is string => line !== undefined)
+      .map((line) => JSON.parse(line.slice(6)) as { payload: { type: string; properties: { status?: { type?: string } } } })
+      .filter((event) => event.payload.type === 'session.status')
+      .map((event) => event.payload.properties.status?.type)
+    expect(statuses).toEqual(['busy', 'idle'])
+
+    router.feedHostFrame({ type: 'host/session-removed', sessionId: 's-status-dedupe' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await router.feed({
+      type: 'session/event',
+      sessionId: 's-status-dedupe',
+      event: sessionEvent('turn/start', { turn: 2 }, 20, 300),
+    })
+    const afterRemoval = writes
+      .map((wire) => wire.split('\n').find((line) => line.startsWith('data: ')))
+      .filter((line): line is string => line !== undefined)
+      .map((line) => JSON.parse(line.slice(6)) as { payload: { type: string; properties: { status?: { type?: string } } } })
+      .filter((event) => event.payload.type === 'session.status')
+      .map((event) => event.payload.properties.status?.type)
+    expect(afterRemoval).toEqual(['busy', 'idle', 'busy'])
+    router.ctx.hub.remove(client)
+  })
+
   it('rejects stale host status edges but lets a later equal-time edge win', async () => {
     const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
     await router.feed({
