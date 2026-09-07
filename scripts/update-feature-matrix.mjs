@@ -141,9 +141,11 @@ try {
 const startIndex = content.indexOf(startMarker)
 const endIndex = content.indexOf(endMarker)
 if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
-  content = `${content.trimEnd()}\n\n${auto}\n`
+  content = `${content.trimEnd()}\n\n${auto.trimEnd()}\n`
 } else {
-  content = `${content.slice(0, startIndex)}${auto}${content.slice(endIndex + endMarker.length)}`
+  const prefix = content.slice(0, startIndex)
+  const suffix = content.slice(endIndex + endMarker.length).trim()
+  content = `${prefix}${auto.trimEnd()}\n${suffix === '' ? '' : `\n${suffix}\n`}`
 }
 
 writeFileSync(featuresPath, content)

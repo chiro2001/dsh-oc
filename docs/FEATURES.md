@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`46c4319`（2026-09-07）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`468c05f`（2026-09-08）。
 
 ### 路由注册表
 
@@ -179,10 +179,10 @@
 |---|---|---|
 | `tests/bin.spec.ts` | 5 | 050803b chore(release): bump version to 0.1.0 for first release |
 | `tests/bridge-errors.spec.ts` | 1 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `tests/bridge-events.spec.ts` | 88 | b05d5c9 fix(bridge): keep live message identity stable |
+| `tests/bridge-events.spec.ts` | 88 | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
-| `tests/bridge-router.spec.ts` | 136 | b05d5c9 fix(bridge): keep live message identity stable |
+| `tests/bridge-router.spec.ts` | 136 | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 24 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `tests/convert/model.spec.ts` | 7 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
@@ -213,30 +213,30 @@
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/session.ts` | d6c834f fix(bridge): preserve subagent metadata and canonical order |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/tool.ts` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `src/bridge/convert/tool.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/dsh-types.ts` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `src/bridge/errors.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `src/bridge/events-util.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
+| `src/bridge/events-util.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/events.ts` | b05d5c9 fix(bridge): keep live message identity stable |
 | `src/bridge/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/git.ts` | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
 | `src/bridge/http.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `src/bridge/index.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
+| `src/bridge/index.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/router-entry.ts` | 6928f8a feat(bridge): expose router entry and add minimal-server renderer attribution |
-| `src/bridge/router.ts` | d6c834f fix(bridge): preserve subagent metadata and canonical order |
+| `src/bridge/router.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/routes.ts` | 5f6aad0 feat(bridge): serve workspace files over /api/fs with wildcard routing |
 | `src/bridge/routes/boot.ts` | 0637c81 fix(bridge): advertise the configured default preset as the TUI's first agent |
 | `src/bridge/routes/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/routes/permission.ts` | fd1e4b5 feat(bridge): add SDK v2 permission reply alias route |
-| `src/bridge/routes/session-v1.ts` | b05d5c9 fix(bridge): keep live message identity stable |
-| `src/bridge/routes/session-v2.ts` | b05d5c9 fix(bridge): keep live message identity stable |
+| `src/bridge/routes/session-v1.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
+| `src/bridge/routes/session-v2.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/routes/vcs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
-| `src/bridge/rpc.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `src/bridge/shell.ts` | — |
+| `src/bridge/rpc.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
+| `src/bridge/shell.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/sse.ts` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
-| `src/bridge/state.ts` | b05d5c9 fix(bridge): keep live message identity stable |
+| `src/bridge/state.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/stubs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
-| `src/help.ts` | a289e00 docs(help): mention background subagents in capability summary |
+| `src/help.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/index.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/brand.ts` | eba383f feat(tui): print DSH OC brand before --mini launches |
@@ -248,7 +248,7 @@
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `scripts/audit-local-sessions.sh` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
 | `scripts/build-replay-corpus.mjs` | 6928f8a feat(bridge): expose router entry and add minimal-server renderer attribution |
-| `scripts/check-all.sh` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `scripts/check-all.sh` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `scripts/cleanup-e2e-runs.sh` | ec31177 chore: add e2e run directory cleanup script |
 | `scripts/cleanup-merged-branches.sh` | 2f1ab51 chore(scripts): enumerate remote merged branches for cleanup |
 | `scripts/e2e-api-attachment.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
@@ -283,11 +283,11 @@
 | `scripts/e2e-tui-permission-ext.sh` | 59074e9 fix(e2e): align status and mini abort oracles |
 | `scripts/e2e-tui-permission-mini.sh` | 261e324 test(e2e): add minimal permission case and 10x flake scan |
 | `scripts/e2e-tui-permission.sh` | d94f52e fix(e2e): harden permission waits and monitor output |
-| `scripts/e2e-tui-preset-inherit.sh` | af41815 test(e2e): add /preset inheritance regression for new sessions |
+| `scripts/e2e-tui-preset-inherit.sh` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `scripts/e2e-tui-print-logs.sh` | 7561559 test(e2e): assert --log-level value passthrough to opencode child |
 | `scripts/e2e-tui-queue-live.sh` | e37d7fd test(e2e): keyboard queue while a live stream is running |
 | `scripts/e2e-tui-queue.sh` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `scripts/e2e-tui-shell.sh` | — |
+| `scripts/e2e-tui-shell.sh` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `scripts/e2e-tui-skill.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-stream.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-subagent.sh` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
