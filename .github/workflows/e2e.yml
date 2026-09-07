@@ -52,7 +52,7 @@ jobs:
           tmux -V
 
       - name: Install dsh CLI
-        run: npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+        run: npm install -g @deepseek-ai/dsh@0.1.2-rc.1
 
       - name: Install pnpm globally
         run: npm install -g pnpm@11.9.0
@@ -100,7 +100,9 @@ jobs:
 
       - name: Pack e2e runs for upload
         if: failure()
-        run: tar -C .e2e --exclude='*/node_modules' --exclude='*/.git' -czf /tmp/e2e-runs.tgz .
+        run: |
+          mkdir -p .e2e
+          tar -C .e2e --exclude='*/node_modules' --exclude='*/.git' -czf /tmp/e2e-runs.tgz .
 
       - name: Upload e2e runs on failure
         if: failure()

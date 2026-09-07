@@ -28,6 +28,9 @@
 - 崩溃恢复 e2e 从当前 tmux pane 精确记录 dsh/attach 父子 PID，避免系统 PID
   回绕时 `ps | awk` 自匹配并误取低位 awk PID；SIGKILL 仍只作用于该 run 已验证
   的两个 PID。
+- GitHub e2e workflow 更新到本候选要求的 dsh `0.1.2-rc.1`，失败工件打包允许
+  `.e2e` 尚未创建；perf 在 dsh 启动前退出时立即报告退出码与 stderr，不再只
+  等待 bridge URL 超时。
 - v2 会话摘要与 fallback 现在同样输出 subagent `metadata.origin`；历史中多个
   同父/同描述 child 按 label 或 parent-local FIFO 绑定，v1/v2 不再复用同一个 child。
 

@@ -113,6 +113,15 @@ describe('package.json', () => {
   })
 })
 
+describe('e2e workflow', () => {
+  it('uses the dsh host ABI required by this release and can pack an empty failure directory', () => {
+    const workflow = read('.github/workflows/e2e.yml')
+    expect(workflow).toContain('@deepseek-ai/dsh@0.1.2-rc.1')
+    expect(workflow).not.toContain('@deepseek-ai/dsh@0.1.0-rc.6')
+    expect(workflow).toMatch(/Pack e2e runs for upload[\s\S]*mkdir -p \.e2e[\s\S]*tar -C \.e2e/)
+  })
+})
+
 describe('question e2e fixture', () => {
   it('reserves a tool-call slot for both standard question turns', () => {
     const script = read('scripts/e2e-tui-permission-ext.sh')

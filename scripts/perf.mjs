@@ -275,7 +275,15 @@ async function main() {
   let bridgeUrl
   try {
     bridgeUrl = await waitFor(() => {
-      if (dsh.exitCode !== null) return null
+      if (dsh.exitCode !== null || dsh.signalCode !== null) {
+        const stderr = existsSync(join(home, 'dsh.err'))
+          ? readFileSync(join(home, 'dsh.err'), 'utf8').trim()
+          : ''
+        throw new Error(
+          `dsh exited before bridge startup (code=${String(dsh.exitCode)}, signal=${String(dsh.signalCode)})`
+          + (stderr === '' ? '' : `\n${stderr}`),
+        )
+      }
       if (!existsSync(fakeLog)) return null
       const match = readFileSync(fakeLog, 'utf8').match(/http:\/\/127\.0\.0\.1:\d+/)
       return match ? match[0] : null
