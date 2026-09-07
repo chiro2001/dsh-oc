@@ -177,6 +177,17 @@ describe('convert/message (v1)', () => {
     expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1100, end: 2000 } })
   })
 
+  it('keeps a no-chunk assistant strictly after a same-time user', () => {
+    const entries = convertMessagesV1([
+      sessionEvent('turn/start', { turn: 1 }, 1, 1010),
+      makeUserEvent('hello', 'm-user-order', 1010),
+      makeAssistantEvent([{ type: 'text', text: 'answer' }], 'm-assistant-order', 1200),
+    ], opts)
+    expect(entries.map((entry) => entry.info.role)).toEqual(['user', 'assistant'])
+    expect(entries[1]?.info.time.created).toBeGreaterThanOrEqual(entries[0]?.info.time.created ?? 0)
+    expect(entries[1]?.info.time.created).toBe(1011)
+  })
+
   it('hydrates in-flight text/reasoning chunks as a provisional assistant message', () => {
     const events = [
       makeUserEvent('hello', 'm-user', 1000),
@@ -413,6 +424,17 @@ describe('convert/message (v2)', () => {
         expect(reasoning.time).toEqual({ created: 1100, completed: 2000 })
       }
     }
+  })
+
+  it('keeps a v2 no-chunk assistant strictly after a same-time user', () => {
+    const messages = convertMessagesV2([
+      sessionEvent('turn/start', { turn: 1 }, 1, 1010),
+      makeUserEvent('hello', 'm-user-order-v2', 1010),
+      makeAssistantEvent([{ type: 'text', text: 'answer' }], 'm-assistant-order-v2', 1200),
+    ], opts)
+    expect(messages.map((message) => message.type)).toEqual(['user', 'assistant'])
+    expect(messages[1]?.time.created).toBeGreaterThanOrEqual(messages[0]?.time.created ?? 0)
+    expect(messages[1]?.time.created).toBe(1011)
   })
 
   it('hydrates v2 in-flight text/reasoning chunks as a provisional assistant message', () => {

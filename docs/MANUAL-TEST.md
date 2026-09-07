@@ -64,7 +64,16 @@
 - `scripts/e2e-tui-mini.sh` 的三次 C-c 可能得到 `DSH_EXIT=130`（SIGINT），
   这是可接受的退出码；无论 0/130 均需看到 dsh-oc 退出提示。
 
-## 8. 其它入口
+## 8. subagent / Task 面板
+
+- 让模型调用 `subagent` 或 `subagent_fork`，预期父会话显示原生
+  `Spawn Task` / `Fork Task` 卡片及 delegation description，而不是未知工具卡。
+- Task 卡片应能跳转到实际 child session；child 页面仍显示正确的父会话关系，
+  一次性 child 完成后仍可查看历史。
+- 自动化回归：`scripts/e2e-tui-subagent.sh`（隔离 dsh profile + 官方
+  `opencode attach` + 精确 PID observe-only monitor）。
+
+## 9. 其它入口
 
 - `--dir <path>` 改变工作目录（路径、附件校验基准）；`--fork` 从当前会话
   派生；`--log-level` 透传给 opencode。
@@ -74,7 +83,7 @@
   `/goal` + 上一条消息）；自动开启的 goal 回合可用 Esc 打断。
 - `/help` 展示能力摘要；`/preset` 列出 agent preset。
 
-## 9. 协议端点冒烟（可选，开发者）
+## 10. 协议端点冒烟（可选，开发者）
 
 启动后从 attach 进程参数取 bridge URL（`opencode attach http://127.0.0.1:<port>`）：
 
@@ -88,13 +97,13 @@ curl -s "$B/api/fs/find?query=README"       # 文件查找
 curl -s $B/api/permission/request           # 无 pending 时 {"data":[]}
 ```
 
-## 10. 已知限制复核
+## 11. 已知限制复核
 
 - `Allow always` 重启清空；MCP/LSP/formatter/skills/integration 为
   schema-valid stub；opencode 退出 splash 无法替换（只有下方说明）；
   `ask_user_question` 的 `multiple` 选项在官方 TUI 中无可视多选交互。
 
-## 11. 与官方 opencode 的显示对比（1.18.18 + 本地 mock）
+## 12. 与官方 opencode 的显示对比（1.18.18 + 本地 mock）
 
 在同一 mock provider 下逐项对比官方 `opencode attach` 与 dsh-oc：
 
@@ -136,7 +145,7 @@ TUI 仍把完整后续文本渲染在排队卡片上方（顺序正确，95 帧�
 仍需在最小 server 上复现真实会话的原始事件序列。回合消息的完成时间已推迟
 到回合结束，QUEUED 标记在整轮完成前保持正确。
 
-## 12. 进程 I/O 观察（安全默认）
+## 13. 进程 I/O 观察（安全默认）
 
 `scripts/monitor-process-io.sh` 默认只观察明确指定的 PID，不会结束任何外部
 进程；正常退出默认静默，达到阈值只在 stderr 告警，并继续记录。需要报告正常

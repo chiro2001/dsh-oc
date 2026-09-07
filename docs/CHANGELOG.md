@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+- 修复 dsh `subagent` / `subagent_fork` 在 OpenCode TUI 中被当作未知工具的
+  问题：转换为原生 `task` 卡片，保留 `description`、`prompt`、
+  `subagent_type` 与 child `sessionId`；child 的 host/lifecycle 时序和历史
+  v1/v2 hydration 均支持。所有 `session.updated` 替换继续携带 subagent
+  `parentID` / `metadata.origin`，避免 projection/title 更新使 child 脱离会话树。
+- 新增 `scripts/e2e-tui-subagent.sh`，使用隔离 dsh profile、真实
+  `opencode attach` 和精确 PID observe-only I/O monitor 验证 Task 卡片及 child
+  导航；加强短 TUI turn 的首条 user 顺序和两轮去重 oracle。
+- 修复 dsh `turn/start` 先于 `user/message` 时 provisional assistant 的时间键在
+  final 更新阶段漂移，避免官方 TUI 生成第二张回复卡；补充延迟 durable user echo
+  的事件回归。API e2e 分页改为跨真实 turn 验证，并对 synthetic command card 与
+  既有外部 orphan 进程做安全隔离诊断。
+- 修复 `e2e-recovery-crash.sh` 在 SIGKILL dsh 后无法找到已 reparent 的
+  `opencode attach` child、导致高 CPU orphan 泄漏的问题；现在在 kill 前锁定
+  精确子 PID，并增加 run-scoped leftover 断言。
+
 ## [0.2.0-rc.1] - 2026-09-07
 
 > 本候选面向 dsh `>=0.1.2-rc.1`。PR #1/#2/#3 未原样合入；其有效修复与

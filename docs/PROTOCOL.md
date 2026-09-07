@@ -248,8 +248,8 @@ approval/question answerer 产出 host frames，oc-bridge 翻译为 opencode
 | `session/event: user/message` | 重建 Session 后发 `message.updated` |
 | `session/event: assistant/message` | `message.updated` + `message.part.updated` |
 | `session/event: assistant/chunk (tool-call-delta)` | `session.next.tool.input.started/delta/ended` + v1 ToolPart 增量（节流合并） |
-| `session/event: tool/call` | `session.next.tool.called` + `progress` + `message.part.updated`（ToolPart pending） |
-| `session/event: tool/result` | `session.next.tool.success/failed` + `message.part.updated`（ToolPart completed/error） |
+| `session/event: tool/call` | `session.next.tool.called` + `progress` + `message.part.updated`（ToolPart pending；dsh `subagent*` 为 OpenCode `task`） |
+| `session/event: tool/result` | `session.next.tool.success/failed` + `message.part.updated`（ToolPart completed/error；Task child `sessionId` 从 host child lineage 关联，不依赖 result meta） |
 | `session/event: todo/write` | `todo.updated` |
 | `session/event: goal/change` | `todo.updated`（合并 goal 为首条） |
 | `session/event: approval/asked\|decided` | 持久化记录，bridge 静默（权限交互由 mux 帧 `approval/requested\|resolved` 驱动） |
@@ -263,6 +263,12 @@ approval/question answerer 产出 host frames，oc-bridge 翻译为 opencode
 | `session/queue`（订阅初始化） | 首次为该 session 时镜像 pending inbox → 每条用户消息 `message.updated` + `message.part.updated`（TUI 显示 QUEUED） |
 | `session/event: agent/inbox/spliced` | 增量：插入用户消息 → `message.updated`；`outcome: canceled` 移除 → `message.removed`；claim（无 outcome）不删除，等 `user/message` 同 id upsert |
 | `session/jobs` | 忽略 |
+
+> **Task 子代理关联**：OpenCode 1.18.18 TUI 读取 `ToolPart.state.input.description` /
+> `subagent_type` 渲染 Task，并读取 `ToolPart.state.metadata.sessionId` 导航 child。
+> dsh `api-session/added`、`subagent/descriptor` 与 `subagent` projection 可能跨
+> session 到达，bridge 按 parent pending call 做暂存/FIFO 关联；所有 child
+> `session.updated` 替换都保留 `parentID` 与 `metadata.origin`。
 
 > **排队消息可见性**：bridge 丢弃旧的 `session/queue` 会导致排队中的 prompt 在
 > TUI 无任何反馈，用户以为发送失败而重发，队列积压后模型回复旧消息。现在

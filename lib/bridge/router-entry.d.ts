@@ -3375,7 +3375,7 @@ interface WebFetchResultView {
  * The plugin-merged event names the bridge consumes beyond the core
  * `SessionEvent` union. Each is read structurally.
  */
-type PluginSessionEventType = 'agent/inbox/spliced' | 'compaction/start' | 'compaction/summary' | 'compaction/end' | 'tool-call-chunks' | 'text-chunks' | 'reasoning-chunks' | 'todo/write' | 'session/title-llm-request' | 'permission/preset' | 'sandbox/mode' | 'approval/policy' | 'command/run' | 'command/done' | 'approval/asked' | 'approval/decided' | 'agent-preset/selected' | 'model/selection' | 'goal/change';
+type PluginSessionEventType = 'agent/inbox/spliced' | 'compaction/start' | 'compaction/summary' | 'compaction/end' | 'tool-call-chunks' | 'text-chunks' | 'reasoning-chunks' | 'todo/write' | 'session/title-llm-request' | 'permission/preset' | 'sandbox/mode' | 'approval/policy' | 'command/run' | 'command/done' | 'approval/asked' | 'approval/decided' | 'agent-preset/selected' | 'subagent/descriptor' | 'model/selection' | 'goal/change';
 /** Core union ∪ plugin events, as the bridge's event feed actually delivers. */
 type BridgeEvent = SessionEvent | {
   readonly type: PluginSessionEventType;
@@ -6730,6 +6730,46 @@ interface InboxSpliceOutcome {
   added: QueuedInboxMessage[];
   removed: QueuedInboxMessage[];
 }
+/** One dsh delegation waiting for its session-backed child identity. */
+interface SubagentCallRecord {
+  parentSessionId: string;
+  callId: string;
+  toolName: string;
+  arguments: string;
+  messageId: string;
+  description: string;
+  prompt: string;
+  subagentType: string;
+  background?: boolean;
+  turn?: number;
+  step?: number;
+  createdAt: number;
+  childSessionId?: string;
+  childMode?: 'one-shot' | 'continuable';
+  /** Whether the parent Task part has already reached the SSE stream. */
+  partEmitted?: boolean;
+  /** Terminal result retained so a late child association cannot regress it. */
+  resultStatus?: 'completed' | 'error';
+  resultTime?: number;
+  resultContent?: readonly unknown[];
+  resultError?: {
+    name?: string;
+    code?: string;
+  };
+}
+/** Durable/live facts learned for one dsh subagent child. */
+interface SubagentChildRecord {
+  sessionId: string;
+  parentSessionId: string;
+  label?: string;
+  mode?: 'one-shot' | 'continuable';
+  title?: string;
+  agent?: string;
+  cwd?: string;
+  addedAt: number;
+  /** Host lifecycle arrival may use parent-local FIFO before descriptor data. */
+  allowFifo?: boolean;
+}
 /**
  * In-memory correlation maps between opencode-facing request ids and the dsh
  * rpcIds/approval ids that answer them. Populated from the mux stream; the
@@ -6743,6 +6783,16 @@ declare class InteractionState {
   readonly sessionDirectories: Map<string, string>;
   readonly sessionParents: Map<string, string>;
   readonly sessionAddressModes: Map<string, "continuable" | "one-shot">;
+  /** Sessions whose durable origin is the dsh subagent seam. */
+  readonly sessionOrigins: Set<string>;
+  /** Pending/associated dsh delegation calls, keyed by parent + call id. */
+  readonly subagentCalls: Map<string, SubagentCallRecord>;
+  /** Child records learned from api-session/added, projection, or summaries. */
+  readonly subagentChildren: Map<string, SubagentChildRecord>;
+  /** Descriptor facts that can precede the host lifecycle summary. */
+  readonly subagentDescriptorFacts: Map<string, Pick<SubagentChildRecord, "label" | "mode">>;
+  /** Child additions that arrived before their parent tool/call was translated. */
+  readonly pendingSubagentChildren: Map<string, SubagentChildRecord[]>;
   /** Authoritative live Agent state mirrored from dsh api-session/status. */
   readonly sessionRunning: Map<string, boolean>;
   /** Last status/activity observation used for reconnect diagnostics. */
@@ -6811,6 +6861,28 @@ declare class InteractionState {
   }>;
   private readonly historyLoading;
   private readonly historyGenerations;
+  private static subagentCallKey;
+  private static subagentChildMatchesCall;
+  private attachSubagentChild;
+  private matchPendingChildForCall;
+  /** Register a parent tool call and attach any child that arrived first. */
+  registerSubagentCall(call: SubagentCallRecord): SubagentCallRecord;
+  /** Return a registered dsh delegation call, if any. */
+  subagentCallFor(parentSessionId: string, callId: string): SubagentCallRecord | undefined;
+  /** Return the child associated with one parent tool call, if known. */
+  subagentChildForCall(parentSessionId: string, callId: string): SubagentChildRecord | undefined;
+  /**
+   * Associate one host/session-added or projection-derived child. The child
+   * may arrive before the parent's tool/call event reaches the translator.
+   * Label equality wins; otherwise parent-local FIFO is deterministic.
+   */
+  associateSubagentChild(child: SubagentChildRecord): SubagentCallRecord | undefined;
+  /** Enrich a previously associated child with descriptor/projection facts. */
+  enrichSubagentChild(sessionId: string, update: Partial<Pick<SubagentChildRecord, 'label' | 'mode' | 'title' | 'agent' | 'cwd'>>): SubagentCallRecord | undefined;
+  /** Store descriptor/projection identity even before host/session-added. */
+  recordSubagentDescriptor(sessionId: string, update: Pick<SubagentChildRecord, 'label' | 'mode'>): SubagentCallRecord | undefined;
+  /** Whether a session is a durable subagent child. */
+  isSubagentSession(sessionId: string): boolean;
   recordCommandResult(sessionId: string, entry: V1MessageEntry): void;
   commandResultsFor(sessionId: string): readonly V1MessageEntry[];
   getSessionListCache(ttlMs: number): SessionSummary[] | undefined;
@@ -7031,6 +7103,13 @@ declare class SseHub {
   replayAfter(client: SseClient, lastEventId: string): boolean;
   /** Fan one event batch out to every connected SSE client. */
   broadcast(events: BridgeGlobalEvent[]): void;
+  /**
+   * Broadcast a batch while retaining it for the first client when the
+   * bridge has not acquired an SSE subscriber yet.  Unlike calling
+   * `enqueue()` followed by `broadcast()`, this remembers each event in the
+   * Last-Event-ID ring exactly once.
+   */
+  broadcastAndBufferIfIdle(events: BridgeGlobalEvent[]): void;
   /** Broadcast now, or buffer until the first client connects. */
   enqueue(events: BridgeGlobalEvent[]): void;
   closeAll(): void;

@@ -12,7 +12,7 @@ import {
   type BridgeGlobalEvent,
 } from '../src/bridge/events.js'
 import { InteractionState } from '../src/bridge/state.js'
-import { createBridgeRouter } from '../src/bridge/router.js'
+import { createBridgeRouter, hostSessionAddedEvents } from '../src/bridge/router.js'
 import { startBridgeServer, type BridgeServerHandle } from '../src/bridge/http.js'
 import { SseHub } from '../src/bridge/sse.js'
 import type { BridgeFrame } from '../src/bridge/dsh-types.js'
@@ -89,6 +89,155 @@ function translator(
 }
 
 describe('bridge events: session event mapping', () => {
+  function subagentCall(
+    name: 'subagent' | 'subagent_fork',
+    callId: string,
+    description: string,
+    seq: number,
+    time: number,
+  ): BridgeFrame {
+    return frame({
+      type: 'session/event',
+      sessionId: 'parent-1',
+      event: sessionEvent('tool/call', {
+        turn: 1,
+        step: 1,
+        callId,
+        name,
+        arguments: JSON.stringify({ description, prompt: `prompt for ${description}`, run_in_background: false }),
+      }, seq, time),
+    })
+  }
+
+  it('maps a dsh subagent call to a running task once its child is added', () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    const instance = new MuxEventTranslator({ cwd: '/work', state: router.ctx.state, log: () => {} })
+    const before = instance.translate(subagentCall('subagent', 'call-a', 'Analyze bridge', 1, 100))
+    const pending = before.find((event) => event.payload.type === 'message.part.updated')
+    expect((pending?.payload.properties.part as { tool?: string }).tool).toBe('task')
+    expect((pending?.payload.properties.part as { state?: { status?: string } }).state?.status).toBe('pending')
+
+    const added = hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-a',
+      parentSessionId: 'parent-1',
+      origin: 'subagent',
+      cwd: '/work',
+      projections: {
+        asOfSeq: 0,
+        values: {
+          subagent: { mode: 'one-shot', label: 'Analyze bridge' },
+          title: 'Analyze bridge child',
+          agentPreset: 'minimal',
+        },
+      } as never,
+    })
+    const task = added.find((event) => {
+      if (event.payload.type !== 'message.part.updated') return false
+      const part = event.payload.properties.part as { tool?: string; state?: { metadata?: unknown } }
+      return part.tool === 'task' && part.state?.metadata !== undefined
+    })
+    expect(task?.payload.properties).toMatchObject({
+      sessionID: 'parent-1',
+      part: {
+        tool: 'task',
+        state: {
+          status: 'running',
+          metadata: {
+            sessionId: 'child-a',
+            parentSessionId: 'parent-1',
+            mode: 'one-shot',
+          },
+        },
+      },
+    })
+    expect((task?.payload.properties.part as { state: { input: Record<string, unknown> } }).state.input)
+      .toMatchObject({ description: 'Analyze bridge', prompt: 'prompt for Analyze bridge', subagent_type: 'spawn' })
+  })
+
+  it('holds a child that arrives before its parent tool call and attaches it FIFO', () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    const host = hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-before-call',
+      parentSessionId: 'parent-1',
+      origin: 'subagent',
+      cwd: '/work',
+    })
+    expect(host.filter((event) => event.payload.type === 'message.part.updated')).toHaveLength(0)
+
+    const instance = new MuxEventTranslator({ cwd: '/work', state: router.ctx.state, log: () => {} })
+    const events = instance.translate(subagentCall('subagent_fork', 'call-before', 'Fork review', 1, 100))
+    const task = events.find((event) => {
+      if (event.payload.type !== 'message.part.updated') return false
+      const part = event.payload.properties.part as { tool?: string; state?: { status?: string; metadata?: unknown } }
+      return part.tool === 'task' && part.state?.status === 'running'
+    })
+    expect(task?.payload.properties).toMatchObject({
+      part: { state: { metadata: { sessionId: 'child-before-call' } } },
+    })
+    expect(router.ctx.state.subagentChildForCall('parent-1', 'call-before')?.sessionId)
+      .toBe('child-before-call')
+  })
+
+  it('correlates multiple same-parent children by FIFO when added without labels', () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    const instance = new MuxEventTranslator({ cwd: '/work', state: router.ctx.state, log: () => {} })
+    instance.translate(subagentCall('subagent', 'call-1', 'first', 1, 100))
+    instance.translate(subagentCall('subagent_fork', 'call-2', 'second', 2, 101))
+    hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-1', parentSessionId: 'parent-1', origin: 'subagent', cwd: '/work',
+    })
+    hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-2', parentSessionId: 'parent-1', origin: 'subagent', cwd: '/work',
+    })
+    expect(router.ctx.state.subagentChildForCall('parent-1', 'call-1')?.sessionId).toBe('child-1')
+    expect(router.ctx.state.subagentChildForCall('parent-1', 'call-2')?.sessionId).toBe('child-2')
+  })
+
+  it('updates task metadata when a child descriptor arrives after host/session-added', () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    const instance = new MuxEventTranslator({ cwd: '/work', state: router.ctx.state, log: () => {} })
+    instance.translate(subagentCall('subagent', 'call-descriptor', 'Descriptor child', 1, 100))
+    hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-descriptor', parentSessionId: 'parent-1', origin: 'subagent', cwd: '/work',
+    })
+    const events = instance.translate(frame({
+      type: 'session/event',
+      sessionId: 'child-descriptor',
+      event: sessionEvent('subagent/descriptor', {
+        version: 3,
+        mode: 'one-shot',
+        provider: 'spawn',
+        label: 'Descriptor child',
+      }, 2, 200),
+    }))
+    const task = events.find((event) => event.payload.type === 'message.part.updated')
+    expect(task?.payload.properties).toMatchObject({
+      sessionID: 'parent-1',
+      part: { state: { status: 'running', metadata: { sessionId: 'child-descriptor', mode: 'one-shot' } } },
+    })
+    expect(router.ctx.state.sessionAddressModes.get('child-descriptor')).toBe('one-shot')
+  })
+
+  it('keeps subagent lineage on title and agent projection replacements', () => {
+    const router = createBridgeRouter(fakeApi(), { cwd: '/work' })
+    hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-lineage', parentSessionId: 'parent-1', origin: 'subagent', cwd: '/work',
+    })
+    const instance = new MuxEventTranslator({ cwd: '/work', state: router.ctx.state, log: () => {} })
+    const title = instance.translate({
+      type: 'session/projection', sessionId: 'child-lineage', key: 'title', value: 'Child title', seq: 1,
+    })
+    expect(title[0]?.payload.properties.info).toMatchObject({
+      id: 'child-lineage', parentID: 'parent-1', metadata: { origin: 'subagent' }, title: 'Child title',
+    })
+    const agent = instance.translate({
+      type: 'session/projection', sessionId: 'child-lineage', key: 'agentPreset', value: 'minimal', seq: 2,
+    })
+    expect(agent[0]?.payload.properties.info).toMatchObject({
+      id: 'child-lineage', parentID: 'parent-1', metadata: { origin: 'subagent' }, agent: 'minimal',
+    })
+  })
+
   it('emits a visible error message for host/agent-error frames', () => {
     const events = agentErrorEvents('s1', 'mock authentication failed', '/work')
     expect(events.map((event) => event.payload.type)).toEqual([
@@ -142,6 +291,64 @@ describe('bridge events: session event mapping', () => {
       expect(event.payload.id).toBeTypeOf('string')
       expect(event.payload.data).toEqual(event.payload.properties)
     }
+  })
+
+  it('keeps a same-time turn-start provisional assistant key after the user', () => {
+    const state = new InteractionState()
+    state.registerPromptMessageId('s1', 'prompt-user-1', 1100)
+    state.registerAssistantIdForUser('s1', 'prompt-user-1', 'prompt-assistant-1')
+    const { translate } = translator(state)
+    const events = translate([frame({
+      type: 'session/event',
+      sessionId: 's1',
+      event: sessionEvent('turn/start', { turn: 1 }, 1, 1100),
+    })])
+    const assistant = events.find((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'assistant')
+    expect(assistant?.payload.properties).toMatchObject({
+      info: { id: 'prompt-assistant-1', time: { created: 1101 } },
+    })
+  })
+
+  it('does not duplicate a live reply when the durable user echo arrives late', () => {
+    const state = new InteractionState()
+    state.registerPromptMessageId('s1', 'prompt-user-1', 1100)
+    state.registerAssistantIdForUser('s1', 'prompt-user-1', 'prompt-assistant-1')
+    const { translate } = translator(state)
+    const events = translate([
+      // dsh's live order is turn/start -> user/message. The prompt route has
+      // already emitted the optimistic user card at t=1100.
+      frame({
+        type: 'session/event',
+        sessionId: 's1',
+        event: sessionEvent('turn/start', { turn: 1 }, 1, 1100),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1',
+        event: makeUserEvent('hello', 'dsh-user-1', 1110),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1',
+        event: chunkRow('text-chunks', ['answer'], 1120, 3),
+      }),
+      frame({
+        type: 'session/event',
+        sessionId: 's1',
+        event: makeAssistantEvent([{ type: 'text', text: 'answer' }], 'dsh-assistant-1', 1130),
+      }),
+    ])
+    const assistantUpdates = events
+      .filter((event) => event.payload.type === 'message.updated')
+      .map((event) => event.payload.properties.info as { id?: string; role?: string; time?: { created?: number } })
+      .filter((info) => info.role === 'assistant' && info.id === 'prompt-assistant-1')
+    // The final streamed replacement intentionally has an intermediate
+    // incomplete update plus a completed update; all three updates must carry
+    // the same identity key so the official TUI reconciles them in place.
+    expect(assistantUpdates).toHaveLength(3)
+    expect(assistantUpdates.map((info) => info.time?.created)).toEqual([1101, 1101, 1101])
   })
 
   it('silently ignores log-only session events without log noise', () => {

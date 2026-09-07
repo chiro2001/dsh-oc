@@ -27,6 +27,14 @@ e2e_new_run "api-main" "danger-full-access" "success" "1"
 E2E_RUN="$E2E_RUN_DIR"
 E2E_SESSION="dsh-oc-api"
 E2E_ACTIVE_SESSION="$E2E_SESSION"
+# Keep the orphan check scoped to this invocation. A previous manually
+# interrupted run may leave a dsh process alive; it is external state and must
+# be reported, never killed by this test. Only a new process matching the
+# current checkout/run convention is a leak attributable to this invocation.
+ORPHAN_BASELINE="$E2E_RUN/orphan-baseline.pids"
+ps -eo pid=,args= | awk -v root="$E2E_REPO_ROOT/.e2e/" \
+  '$0 ~ root && $0 ~ /agent-model[.]patch[.]yml/ && ($0 ~ /dsh --profile/ || $0 ~ /fake-opencode/) { print $1 }' \
+  | sort -n -u > "$ORPHAN_BASELINE"
 
 e2e_start_dsh "$E2E_SESSION"
 e2e_wait_bridge_url
@@ -295,13 +303,42 @@ wait_assistant "$BRIDGE/session/$SESSION_V1/message" "mock response recovered"
 wait_assistant "$BRIDGE/api/session/$SESSION_V2/message" "mock response recovered"
 
 echo "== v2 message cursor pagination =="
+# dsh history pages are cut only at `turn/start` boundaries. All of the fast
+# steer prompts above can legitimately land in one turn, which means a
+# `limit=2` request would correctly return that whole turn with no cursor.
+# Add one idle prompt after the first turn settles so this assertion exercises
+# two real pages instead of depending on timing between concurrent prompts.
+PAGINATION_PROMPT="e2e: pagination second turn"
+curl -s -X POST "$BRIDGE/session/$SESSION_V1/message" -H 'Content-Type: application/json' \
+  -d "{\"parts\":[{\"type\":\"text\",\"text\":\"$PAGINATION_PROMPT\"}]}" \
+  | jq -e '.info.role == "assistant"' >/dev/null
+PAGINATION_REPLY_COUNT=""
+deadline=$((SECONDS + 60))
+while (( SECONDS < deadline )); do
+  PAGINATION_REPLY_COUNT="$(curl -s "$BRIDGE/session/$SESSION_V1/message" \
+    | jq '[.[] | select(.info.role == "assistant") | .parts[]?.text // empty | select(. == "mock response recovered")] | length' \
+    2>/dev/null || true)"
+  if [[ "$PAGINATION_REPLY_COUNT" -ge 3 ]]; then break; fi
+  sleep 1
+done
+if [[ "$PAGINATION_REPLY_COUNT" -lt 3 ]]; then
+  echo "e2e: pagination prompt did not settle a new turn (replies=$PAGINATION_REPLY_COUNT)" >&2
+  exit 1
+fi
+echo "  pagination prompt settled as a second turn (replies=$PAGINATION_REPLY_COUNT)"
 PAGE1="$(curl -s "$BRIDGE/api/session/$SESSION_V1/message?limit=2")"
-jq -e '(.data | length == 2) and (.cursor.previous | type) == "string"' <<<"$PAGE1" >/dev/null
+# History also hydrates bridge-only `/help`/`/preset` cards, which are not
+# counted by dsh's durable maxMessages page and may therefore make `.data`
+# longer than two. Assert the two durable records explicitly and exclude
+# synthetic cards from the cross-page overlap check below.
+jq -e '([.data[] | select((.id | startswith("msg_cmd:") or startswith("msg_preset:")) | not)] | length == 2)
+  and ([.data[] | select((.id | startswith("msg_cmd:") or startswith("msg_preset:")) | not) | .type] == ["user", "assistant"])
+  and (.cursor.previous | type) == "string"' <<<"$PAGE1" >/dev/null
 PREV_CURSOR="$(jq -r '.cursor.previous' <<<"$PAGE1")"
 PAGE2="$(curl -s "$BRIDGE/api/session/$SESSION_V1/message?limit=2&cursor=$(jq -rn --arg c "$PREV_CURSOR" '$c|@uri')")"
-jq -e '.data | length >= 1' <<<"$PAGE2" >/dev/null
-P1_IDS="$(jq -r '.data[].id' <<<"$PAGE1" | sort)"
-P2_IDS="$(jq -r '.data[].id' <<<"$PAGE2" | sort)"
+jq -e '([.data[] | select((.id | startswith("msg_cmd:") or startswith("msg_preset:")) | not)] | length >= 1)' <<<"$PAGE2" >/dev/null
+P1_IDS="$(jq -r '.data[] | select((.id | startswith("msg_cmd:") or startswith("msg_preset:")) | not) | .id' <<<"$PAGE1" | sort)"
+P2_IDS="$(jq -r '.data[] | select((.id | startswith("msg_cmd:") or startswith("msg_preset:")) | not) | .id' <<<"$PAGE2" | sort)"
 COMMON_IDS="$(comm -12 <(printf '%s\n' "$P1_IDS") <(printf '%s\n' "$P2_IDS"))"
 [[ -z "$COMMON_IDS" ]]
 echo "  v2 message cursor pages back without overlapping ids"
@@ -336,7 +373,13 @@ USER_MESSAGE_ID="$(curl -s "$BRIDGE/session/$SESSION_V1/message" | jq -er '.[] |
 [[ -n "$USER_MESSAGE_ID" ]]
 curl -s "$BRIDGE/session/$SESSION_V1/message/$USER_MESSAGE_ID" | jq -e --arg id "$USER_MESSAGE_ID" '.info.id == $id' >/dev/null
 echo "  GET single message by id ok"
-V2_FIRST_MSG_ID="$(curl -s "$BRIDGE/api/session/$SESSION_V2/message" | jq -r '.data[0].id')"
+# `/api/session/:id/message` prepends bridge-only command cards, which do not
+# have durable dsh message rows and therefore are not addressable by the
+# single-message endpoint. Select the first durable v2 record for this check.
+V2_FIRST_MSG_ID="$(curl -s "$BRIDGE/api/session/$SESSION_V2/message" \
+  | jq -r '.data[] | select((.id | startswith("msg_cmd:") or startswith("msg_preset:")) | not) | .id' \
+  | head -1)"
+[[ -n "$V2_FIRST_MSG_ID" ]]
 curl -s "$BRIDGE/api/session/$SESSION_V2/message/$V2_FIRST_MSG_ID" | jq -e --arg id "$V2_FIRST_MSG_ID" '.data.id == $id' >/dev/null
 echo "  GET v2 single message by id ok"
 FORKED_AT_MSG_JSON="$(curl -s -X POST "$BRIDGE/session/$SESSION_V1/fork" -H 'Content-Type: application/json' \
@@ -562,9 +605,22 @@ e2e_stop_dsh "$E2E_SESSION"
 e2e_stop_run
 
 echo "== orphan check =="
-ORPHANS="$(ps -eo args= | grep -F "$E2E_REPO_ROOT/.e2e/" | grep -F 'agent-model.patch.yml' | grep -v grep || true)"
+ORPHAN_SCAN="$(ps -eo pid=,args= | awk -v root="$E2E_REPO_ROOT/.e2e/" \
+  '$0 ~ root && $0 ~ /agent-model[.]patch[.]yml/ && ($0 ~ /dsh --profile/ || $0 ~ /fake-opencode/) { print }' || true)"
+PREEXISTING_ORPHANS="$(awk -v baseline="$ORPHAN_BASELINE" '
+  BEGIN { while ((getline pid < baseline) > 0) seen[pid] = 1; close(baseline) }
+  { pid=$1; if (seen[pid]) print }
+' <<<"$ORPHAN_SCAN")"
+ORPHANS="$(awk -v baseline="$ORPHAN_BASELINE" '
+  BEGIN { while ((getline pid < baseline) > 0) seen[pid] = 1; close(baseline) }
+  { pid=$1; if (!seen[pid]) print }
+' <<<"$ORPHAN_SCAN")"
+if [[ -n "$PREEXISTING_ORPHANS" ]]; then
+  echo "  pre-existing orphan processes left untouched (diagnostic):" >&2
+  echo "$PREEXISTING_ORPHANS" >&2
+fi
 if [[ -n "$ORPHANS" ]]; then
-  echo "e2e: orphan processes:" >&2
+  echo "e2e: new orphan processes:" >&2
   echo "$ORPHANS" >&2
   exit 1
 fi

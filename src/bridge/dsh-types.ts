@@ -57,6 +57,7 @@ export type PluginSessionEventType =
   | 'approval/asked'
   | 'approval/decided'
   | 'agent-preset/selected'
+  | 'subagent/descriptor'
   | 'model/selection'
   | 'goal/change'
 

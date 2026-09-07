@@ -58,12 +58,26 @@ import {
 import { toPermissionRequest, toPermissionV2 } from './convert/permission.js'
 import { answersToDsh, toQuestionRequest, toQuestionV2 } from './convert/question.js'
 import { convertGoalTodos } from './convert/goal.js'
-import { fileChangesFromToolResult, type FileChange, type ToolCallInfo } from './convert/tool.js'
+import {
+  completedToolPart,
+  errorToolPart,
+  fileChangesFromToolResult,
+  isSubagentToolName,
+  runningToolPart,
+  subagentTypeFromToolName,
+  type FileChange,
+  type ToolCallInfo,
+} from './convert/tool.js'
 import { agentErrorEvents, commandResultMessage, convertProducedFiles, makeEvent, toSnapshotFileDiffs } from './events.js'
 import { filterGitTrackedDiffs } from './git.js'
-import { DEFAULT_AGENT, dshProviderId, externalProviderId, projectIdFor } from './convert/common.js'
+import { DEFAULT_AGENT, dshProviderId, externalProviderId, projectIdFor, safeJsonParse } from './convert/common.js'
 import { ocHelp } from '../help.js'
-import { InteractionState, type CachedHistory } from './state.js'
+import {
+  InteractionState,
+  type CachedHistory,
+  type SubagentCallRecord,
+  type SubagentChildRecord,
+} from './state.js'
 import { registerRoutes } from './routes.js'
 import { SseHub, type SseClient } from './sse.js'
 import { MuxEventTranslator } from './events.js'
@@ -192,6 +206,153 @@ export function sessionDirectoryFrom(
   return fallback
 }
 
+function projectionValuesFor(item: SessionSummary): Record<string, unknown> {
+  return (item.projections?.values as Record<string, unknown> | undefined) ?? {}
+}
+
+function stringProjection(values: Record<string, unknown>, key: string): string | undefined {
+  const value = values[key]
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+/** Convert one dsh list row into the child facts needed by Task rendering. */
+export function subagentChildFromSummary(
+  item: SessionSummary,
+  fallbackCwd: string,
+  addedAt = Date.now(),
+  allowFifo = false,
+): SubagentChildRecord | undefined {
+  if (item.origin !== 'subagent' || item.parentSessionId === undefined) return undefined
+  const values = projectionValuesFor(item)
+  const identity = values.subagent as { mode?: unknown; label?: unknown } | null | undefined
+  const mode = identity?.mode === 'one-shot' || identity?.mode === 'continuable'
+    ? identity.mode
+    : values.mode === 'one-shot' || values.mode === 'continuable'
+      ? values.mode
+      : undefined
+  const label = typeof identity?.label === 'string' && identity.label.length > 0
+    ? identity.label
+    : undefined
+  const title = stringProjection(values, 'title')
+  const agent = typeof item.agentPreset === 'string' && item.agentPreset.length > 0
+    ? item.agentPreset
+    : stringProjection(values, 'agentPreset')
+  return {
+    sessionId: String(item.sessionId),
+    parentSessionId: String(item.parentSessionId),
+    ...(label === undefined ? {} : { label }),
+    ...(mode === undefined ? {} : { mode }),
+    ...(title === undefined ? {} : { title }),
+    ...(agent === undefined ? {} : { agent }),
+    cwd: item.cwd ?? fallbackCwd,
+    addedAt,
+    ...(allowFifo ? { allowFifo: true } : {}),
+  }
+}
+
+/** Lineage fields that every replacement `session.updated` must retain. */
+export function sessionLineageOptions(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+): { parentID?: string; metadata?: Record<string, unknown> } {
+  const parentID = ctx.state.sessionParents.get(sessionId)
+  if (parentID === undefined) return {}
+  return {
+    parentID,
+    ...(ctx.state.isSubagentSession(sessionId) ? { metadata: { origin: 'subagent' } } : {}),
+  }
+}
+
+/** Resolve a historical dsh delegation against cached child summaries. */
+export function subagentMetadataForHistory(
+  ctx: BridgeRouteContext,
+  parentSessionId: string,
+  call: ToolCallInfo,
+): Record<string, unknown> | undefined {
+  if (!isSubagentToolName(call.name)) return undefined
+  const child = ctx.state.subagentChildForCall(parentSessionId, call.callId)
+    ?? (() => {
+      const input = bodyAsRecord(safeJsonParse(call.arguments))
+      const description = typeof input.description === 'string' ? input.description : undefined
+      const candidates = [...ctx.state.subagentChildren.values()]
+        .filter((candidate) => candidate.parentSessionId === parentSessionId)
+        .filter((candidate) => description === undefined || candidate.label === description)
+        .sort((left, right) => left.addedAt - right.addedAt || left.sessionId.localeCompare(right.sessionId))
+      return candidates[0]
+    })()
+  if (child === undefined) return undefined
+  return {
+    sessionId: child.sessionId,
+    parentSessionId,
+    ...(child.mode === undefined ? {} : { mode: child.mode }),
+    ...(bodyAsRecord(safeJsonParse(call.arguments)).run_in_background === true ? { background: true } : {}),
+  }
+}
+
+/** Whether a history page contains a dsh delegation whose child can be linked. */
+export function historyNeedsSubagentContext(events: readonly HistoryEntry[]): boolean {
+  return events.some((entry) => {
+    const event = entry.event as unknown as { type?: unknown; data?: unknown }
+    if (event.type === 'tool/call') {
+      return isSubagentToolName(String((event.data as { name?: unknown } | undefined)?.name ?? ''))
+    }
+    if (event.type !== 'assistant/message') return false
+    const content = (event.data as { message?: { content?: unknown } } | undefined)?.message?.content
+    return Array.isArray(content) && content.some((block) => {
+      const value = block as { type?: unknown; name?: unknown } | null
+      return value?.type === 'tool-call' && isSubagentToolName(String(value.name ?? ''))
+    })
+  })
+}
+
+/** Lazily seed child summaries for direct history requests that skipped /session. */
+export async function ensureSubagentHistoryContext(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  events: readonly HistoryEntry[],
+): Promise<void> {
+  if (!historyNeedsSubagentContext(events)) return
+  if ([...ctx.state.subagentChildren.values()].some((child) => child.parentSessionId === sessionId)) return
+  try {
+    const list = await cachedSessionList(ctx)
+    recordSessionSummaries(ctx, list)
+  } catch (error) {
+    ctx.log(`[bridge/subagent] history child seed failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+/** Build the shared record used by live and host-side delegation correlation. */
+export function subagentCallRecord(
+  parentSessionId: string,
+  call: ToolCallInfo,
+  messageId: string,
+  time: number,
+  turn?: number,
+  step?: number,
+): SubagentCallRecord | undefined {
+  if (!isSubagentToolName(call.name)) return undefined
+  const input = safeJsonParse(call.arguments)
+  const description = typeof input.description === 'string' ? input.description : call.name
+  const prompt = typeof input.prompt === 'string' ? input.prompt : ''
+  const subagentType = typeof input.subagent_type === 'string' && input.subagent_type.trim() !== ''
+    ? input.subagent_type
+    : subagentTypeFromToolName(call.name)
+  return {
+    parentSessionId,
+    callId: call.callId,
+    toolName: call.name,
+    messageId,
+    description,
+    prompt,
+    subagentType,
+    ...(input.run_in_background === true ? { background: true } : {}),
+    ...(turn === undefined ? {} : { turn }),
+    ...(step === undefined ? {} : { step }),
+    createdAt: time,
+    arguments: call.arguments,
+  }
+}
+
 /**
  * Record child cwd and parent lineage from a session list. A subagent child
  * without its own cwd inherits the nearest parent's cwd so the TUI opens and
@@ -200,6 +361,7 @@ export function sessionDirectoryFrom(
 export function recordSessionSummaries(
   ctx: BridgeRouteContext,
   items: readonly SessionSummary[],
+  allowSubagentFifo = false,
 ): void {
   const directories = new Map<string, string>()
   for (const item of items) {
@@ -227,7 +389,12 @@ export function recordSessionSummaries(
     // (header passthrough), not a TUI-facing `agent` name. Reading the wrong
     // field left the per-session label unset, so every message fell back to
     // the hardcoded "build" agent even after a Tab switch to another preset.
-    const projectedAgent = (item.projections?.values as Record<string, unknown> | undefined)?.agentPreset
+    const projectionValues = projectionValuesFor(item)
+    const projectedTitle = stringProjection(projectionValues, 'title')
+    if (projectedTitle !== undefined && ctx.state.sessionTitleFor(id) === undefined) {
+      ctx.state.setSessionTitle(id, projectedTitle)
+    }
+    const projectedAgent = projectionValues.agentPreset
     const agent = (item as { agentPreset?: unknown; agent?: unknown }).agentPreset
       ?? (item as { agent?: unknown }).agent
       ?? projectedAgent
@@ -239,14 +406,13 @@ export function recordSessionSummaries(
       ctx.state.setSessionAgent(id, agent)
     }
     if (item.origin === 'subagent' && item.parentSessionId !== undefined) {
-      ctx.state.sessionParents.set(id, String(item.parentSessionId))
-      const projectionValues = item.projections?.values as Record<string, unknown> | undefined
-      const projectedMode = projectionValues?.mode
-        ?? (projectionValues?.subagent as { mode?: unknown } | undefined)?.mode
-      ctx.state.sessionAddressModes.set(
-        id,
-        projectedMode === 'one-shot' ? 'one-shot' : 'continuable',
-      )
+      const child = subagentChildFromSummary(item, directories.get(id) ?? ctx.cwd, Date.now(), allowSubagentFifo)
+      if (child !== undefined) {
+        ctx.state.associateSubagentChild(child)
+      } else {
+        ctx.state.sessionOrigins.add(id)
+        ctx.state.sessionParents.set(id, String(item.parentSessionId))
+      }
     }
   }
 }
@@ -651,6 +817,7 @@ export function toV1Session(view: SessionView, id: string, ctx: BridgeRouteConte
     ...(ctx.state.sessionParents.get(id) === undefined
       ? {}
       : { parentID: ctx.state.sessionParents.get(id) }),
+    ...sessionLineageOptions(ctx, id),
   })
 }
 
@@ -1159,6 +1326,7 @@ export function broadcastSessionAgent(
         cwd: directory,
         title: ctx.state.sessionTitleFor(sessionId),
         agent,
+        ...sessionLineageOptions(ctx, sessionId),
       }),
     }, project),
   ])
@@ -1212,7 +1380,7 @@ export async function broadcastPromptUserMessage(
   const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
   const project = projectIdFor(directory)
   const resolved = model ?? await sessionModelRef(ctx, sessionId)
-  ctx.hub.broadcast([
+  const events = [
     makeEvent(directory, 'message.updated', {
       sessionID: sessionId,
       info: {
@@ -1235,7 +1403,13 @@ export async function broadcastPromptUserMessage(
         time: { start: created, end: created },
       },
     }, project),
-  ])
+  ]
+  // The POST can win the race with the TUI's first global SSE connection.
+  // Keep the optimistic card pending until that first client subscribes;
+  // otherwise the durable user row is intentionally suppressed later as a
+  // duplicate and the first prompt vanishes from a cold attach.  The helper
+  // still remembers the batch in the Last-Event-ID ring exactly once.
+  ctx.hub.broadcastAndBufferIfIdle(events)
 }
 
 /** Run a `/preset` list/switch with visible TUI progress and result. */
@@ -1778,23 +1952,80 @@ export function hostSessionAddedEvents(
     ...(payload.agentPreset === undefined ? {} : { agentPreset: String(payload.agentPreset) }),
     ...(payload.projections === undefined ? {} : { projections: payload.projections }),
   }
-  recordSessionSummaries(ctx, [summary])
+  recordSessionSummaries(ctx, [summary], true)
   const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
   const project = projectIdFor(directory)
   const parentID = ctx.state.sessionParents.get(sessionId)
   const agent = ctx.state.sessionAgentFor(sessionId)
-  return [
+  const events: BridgeGlobalEvent[] = [
     makeEvent(directory, 'session.updated', {
       sessionID: sessionId,
       info: minimalSession(sessionId, {
         cwd: directory,
+        title: ctx.state.sessionTitleFor(sessionId),
         createdAt: Date.now(),
         ...(agent === undefined ? {} : { agent }),
         ...(parentID === undefined ? {} : { parentID }),
-        ...(payload.origin === 'subagent' ? { metadata: { origin: 'subagent' } } : {}),
+        ...sessionLineageOptions(ctx, sessionId),
       }),
     }, project),
   ]
+  const call = [...ctx.state.subagentCalls.values()]
+    .find((candidate) => candidate.childSessionId === sessionId && candidate.partEmitted === true)
+  if (call !== undefined) {
+    const child: SubagentChildRecord = ctx.state.subagentChildren.get(sessionId) ?? {
+      sessionId,
+      parentSessionId: call.parentSessionId,
+      addedAt: Date.now(),
+    }
+    const callInfo: ToolCallInfo = {
+      callId: call.callId,
+      name: call.toolName,
+      arguments: call.arguments,
+      subagent: {
+        sessionId,
+        parentSessionId: call.parentSessionId,
+        ...((child.mode ?? call.childMode) === undefined ? {} : { mode: child.mode ?? call.childMode }),
+        ...(call.background === undefined ? {} : { background: call.background }),
+      },
+    }
+    const resultInfo = call.resultStatus === undefined
+      ? undefined
+      : {
+          callId: call.callId,
+          content: (call.resultContent ?? []) as never,
+          time: call.resultTime ?? Date.now(),
+          ...(call.resultError === undefined ? {} : { error: call.resultError }),
+        }
+    const part = resultInfo === undefined
+      ? runningToolPart(callInfo, {
+          sessionID: call.parentSessionId,
+          messageID: call.messageId,
+          time: call.createdAt,
+        })
+      : call.resultStatus === 'error'
+        ? errorToolPart(callInfo, resultInfo, {
+            sessionID: call.parentSessionId,
+            messageID: call.messageId,
+            time: call.createdAt,
+          })
+        : completedToolPart(callInfo, resultInfo, {
+            sessionID: call.parentSessionId,
+            messageID: call.messageId,
+            time: call.createdAt,
+          })
+    events.push(makeEvent(
+      ctx.state.sessionDirectories.get(call.parentSessionId) ?? ctx.cwd,
+      'message.part.updated',
+      {
+        sessionID: call.parentSessionId,
+        part,
+        time: Date.now(),
+      },
+      projectIdFor(ctx.state.sessionDirectories.get(call.parentSessionId) ?? ctx.cwd),
+    ))
+  }
+  return events
 }
 
 export async function permissionReply(

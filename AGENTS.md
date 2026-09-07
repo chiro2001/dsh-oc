@@ -86,6 +86,7 @@ bash scripts/update-local-install.sh [ref]
 bash scripts/e2e-real-queued-order.sh     # manual：真实模型排队错序 wire/面板证据
 bash scripts/e2e-minimal-server-repro.sh  # 官方最小 server 归因：脚本化事件 → 官方 TUI 渲染顺序
 scripts/monitor-process-io.sh --pid <pid> --log <tsv> # 默认 observe-only，正常退出静默
+scripts/e2e-tui-subagent.sh             # dsh subagent → OpenCode task + child 导航
 tests/e2e/fake-opencode-idle.sh           # fake attach 空闲无 EOF 忙循环回归
 tests/e2e/monitor-process-io-attach.sh    # exact attach PID/log/无目标 kill shell 回归
  ```

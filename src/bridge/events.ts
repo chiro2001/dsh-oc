@@ -25,8 +25,11 @@ import {
   completedToolPart,
   errorToolPart,
   fileChangesFromToolResult,
+  isSubagentToolName,
   opencodeToolName,
   pendingToolPart,
+  runningToolPart,
+  subagentTypeFromToolName,
   streamingToolPart,
   toolResultStructured,
   toolResultText,
@@ -37,7 +40,13 @@ import { safeJsonParse } from './convert/common.js'
 import { convertGoalTodos } from './convert/goal.js'
 import { minimalSession } from './convert/session.js'
 import { filterGitTrackedDiffs } from './git.js'
-import type { InteractionState, NewApprovalEntry, NewQuestionEntry } from './state.js'
+import type {
+  InteractionState,
+  NewApprovalEntry,
+  NewQuestionEntry,
+  SubagentCallRecord,
+  SubagentChildRecord,
+} from './state.js'
 import {
   agentErrorEvents,
   commandResultEvents,
@@ -57,6 +66,10 @@ import {
   type TimerHandle,
   type TranslateDeps,
 } from './events-util.js'
+
+function minimumAssistantCreatedAt(userTime: number | undefined): number {
+  return userTime === undefined ? Number.MIN_SAFE_INTEGER : userTime + 1
+}
 
 export {
   agentErrorEvents,
@@ -187,6 +200,9 @@ interface ToolCallChunkRowEvent {
 interface SessionStreamState {
   turnStartTime?: number
   lastUserMessageId?: string
+  /** Latest visible user timestamp used to keep a provisional assistant key
+   * from preceding its parent when turn/start arrives first. */
+  lastUserMessageCreatedAt?: number
   provisionalMessageIds: Map<string, string>
   /** Stable `time.created` for each provisional assistant message. OpenCode
    * 1.18.18 keys live messages by `time.created + id`; when turn/start opens
@@ -287,6 +303,19 @@ export class MuxEventTranslator {
     ]
   }
 
+  /** Preserve child identity on every replacement session.updated payload. */
+  private sessionLineageOptions(sessionId: string): {
+    parentID?: string
+    metadata?: Record<string, unknown>
+  } {
+    const parentID = this.deps.state.sessionParents.get(sessionId)
+    if (parentID === undefined) return {}
+    return {
+      parentID,
+      ...(this.deps.state.isSubagentSession(sessionId) ? { metadata: { origin: 'subagent' } } : {}),
+    }
+  }
+
   private toolKey(turn: number, step: number, index: number): string {
     return `${turn}:${step}:${index}`
   }
@@ -302,6 +331,123 @@ export class MuxEventTranslator {
       if (state.callId === callId) return state
     }
     return undefined
+  }
+
+  /** Register a dsh delegation in shared state before rendering its part. */
+  private registerSubagentCall(
+    sessionId: string,
+    call: ToolCallInfo,
+    messageID: string,
+    time: number,
+    turn?: number,
+    step?: number,
+  ): { call: ToolCallInfo; record?: SubagentCallRecord; child?: SubagentChildRecord } {
+    if (!isSubagentToolName(call.name)) return { call }
+    const input = safeJsonParse(call.arguments)
+    const record: SubagentCallRecord = {
+      parentSessionId: sessionId,
+      callId: call.callId,
+      toolName: call.name,
+      arguments: call.arguments,
+      messageId: messageID,
+      description: typeof input.description === 'string' ? input.description : call.name,
+      prompt: typeof input.prompt === 'string' ? input.prompt : '',
+      subagentType: typeof input.subagent_type === 'string' && input.subagent_type.trim() !== ''
+        ? input.subagent_type
+        : subagentTypeFromToolName(call.name),
+      ...(input.run_in_background === true ? { background: true } : {}),
+      ...(input.run_in_background === false ? { childMode: 'one-shot' as const } : {}),
+      ...(turn === undefined ? {} : { turn }),
+      ...(step === undefined ? {} : { step }),
+      createdAt: time,
+    }
+    const registered = this.deps.state.registerSubagentCall(record)
+    const child = this.deps.state.subagentChildForCall(sessionId, call.callId)
+    if (child === undefined) return { call, record: registered }
+    return {
+      record: registered,
+      child,
+      call: {
+        ...call,
+        subagent: {
+          sessionId: child.sessionId,
+          parentSessionId: sessionId,
+          ...(child.mode ?? registered.childMode) === undefined ? {} : { mode: child.mode ?? registered.childMode },
+          ...(registered.background === undefined ? {} : { background: registered.background }),
+        },
+      },
+    }
+  }
+
+  /** Refresh a stored delegation call with any child identity learned later. */
+  private callWithSubagentChild(sessionId: string, call: ToolCallInfo): ToolCallInfo {
+    if (!isSubagentToolName(call.name)) return call
+    const record = this.deps.state.subagentCallFor(sessionId, call.callId)
+    const child = this.deps.state.subagentChildForCall(sessionId, call.callId)
+    if (child === undefined && call.subagent === undefined) return call
+    return {
+      ...call,
+      subagent: {
+        ...(call.subagent ?? {}),
+        ...(record?.background === undefined ? {} : { background: record.background }),
+        ...(child === undefined ? {} : {
+          sessionId: child.sessionId,
+          parentSessionId: sessionId,
+          ...((child.mode ?? record?.childMode) === undefined ? {} : { mode: child.mode ?? record?.childMode }),
+        }),
+      },
+    }
+  }
+
+  /** Emit a running Task replacement once the child session is known. */
+  private subagentTaskUpdate(
+    sessionId: string,
+    call: ToolCallInfo,
+    record: SubagentCallRecord | undefined,
+    child: SubagentChildRecord | undefined,
+    time: number,
+  ): BridgeGlobalEvent | undefined {
+    if (!isSubagentToolName(call.name) || record?.partEmitted !== true || child === undefined) return undefined
+    const effective = this.callWithSubagentChild(sessionId, {
+      ...call,
+      subagent: {
+        sessionId: child.sessionId,
+        parentSessionId: sessionId,
+        ...((child.mode ?? record.childMode) === undefined ? {} : { mode: child.mode ?? record.childMode }),
+        ...(record.background === undefined ? {} : { background: record.background }),
+      },
+    })
+    const directory = directoryFor(sessionId, this.deps)
+    const result = record?.resultStatus === undefined
+      ? undefined
+      : {
+          callId: effective.callId,
+          content: (record.resultContent ?? []) as never,
+          time: record.resultTime ?? time,
+          ...(record.resultError === undefined ? {} : { error: record.resultError }),
+        }
+    const part = result === undefined
+      ? runningToolPart(effective, {
+          sessionID: sessionId,
+          messageID: record.messageId,
+          time: record.createdAt,
+        })
+      : record.resultStatus === 'error'
+        ? errorToolPart(effective, result, {
+            sessionID: sessionId,
+            messageID: record.messageId,
+            time: record.createdAt,
+          })
+        : completedToolPart(effective, result, {
+            sessionID: sessionId,
+            messageID: record.messageId,
+            time: record.createdAt,
+          })
+    return makeEvent(directory, 'message.part.updated', {
+      sessionID: sessionId,
+      part,
+      time,
+    }, projectIdFor(directory))
   }
 
   /**
@@ -328,7 +474,14 @@ export class MuxEventTranslator {
     const messageID = alreadyOpen
       ? provisionalMessageId(sessionId, turn, step)
       : (bridgeId ?? provisionalMessageId(sessionId, turn, step))
-    const createdAt = this.deps.state.assistantMessageCreatedAt(sessionId, messageID) ?? time
+    const promptCreatedAt = state.lastUserMessageCreatedAt
+      ?? (state.lastUserMessageId === undefined
+        ? undefined
+        : this.deps.state.promptMessageCreatedAt(sessionId, state.lastUserMessageId))
+    const createdAt = Math.max(
+      this.deps.state.assistantMessageCreatedAt(sessionId, messageID) ?? time,
+      minimumAssistantCreatedAt(promptCreatedAt),
+    )
     state.provisionalMessageIds.set(stepKey, messageID)
     state.provisionalMessageCreatedAt.set(stepKey, createdAt)
     this.deps.state.setAssistantMessageCreatedAt(sessionId, messageID, createdAt)
@@ -771,7 +924,7 @@ export class MuxEventTranslator {
         ]
       }
       case 'session/projection':
-        return this.translateProjection(frame.sessionId, frame.key, frame.value)
+        return this.translateProjection(frame.sessionId, frame.key, frame.value, Date.now())
       case 'session/jobs':
         return []
       case 'session/queue': {
@@ -814,7 +967,7 @@ export class MuxEventTranslator {
         }
         for (const [sessionId, projection] of Object.entries(frame.value.projections ?? {})) {
           for (const [key, value] of Object.entries(projection.values ?? {})) {
-            events.push(...this.translateProjection(sessionId, key, value))
+            events.push(...this.translateProjection(sessionId, key, value, Date.now()))
           }
         }
         return events
@@ -834,6 +987,7 @@ export class MuxEventTranslator {
     sessionId: string,
     key: string,
     value: unknown,
+    time = Date.now(),
   ): BridgeGlobalEvent[] {
     const directory = directoryFor(sessionId, this.deps)
     const project = projectIdFor(directory)
@@ -864,6 +1018,7 @@ export class MuxEventTranslator {
               ...(this.deps.state.sessionAgentFor(sessionId) === undefined
                 ? {}
                 : { agent: this.deps.state.sessionAgentFor(sessionId) }),
+              ...this.sessionLineageOptions(sessionId),
             }),
           },
           project,
@@ -879,15 +1034,32 @@ export class MuxEventTranslator {
           cwd: directory,
           title: this.deps.state.sessionTitleFor(sessionId),
           agent: value,
+          ...this.sessionLineageOptions(sessionId),
         }),
       }, project)]
     }
     if (key === 'subagent') {
-      const mode = (value as { mode?: unknown } | null)?.mode
-      if (mode === 'one-shot' || mode === 'continuable') {
-        this.deps.state.sessionAddressModes.set(sessionId, mode)
+      const childValue = value as { mode?: unknown; label?: unknown } | null
+      const mode = childValue?.mode === 'one-shot' || childValue?.mode === 'continuable'
+        ? childValue.mode
+        : undefined
+      const label = typeof childValue?.label === 'string' && childValue.label.length > 0
+        ? childValue.label
+        : undefined
+      const call = this.deps.state.recordSubagentDescriptor(sessionId, {
+        ...(mode === undefined ? {} : { mode }),
+        ...(label === undefined ? {} : { label }),
+      })
+      if (call === undefined) return []
+      const child = this.deps.state.subagentChildren.get(sessionId)
+      if (child === undefined) return []
+      const original: ToolCallInfo = {
+        callId: call.callId,
+        name: call.toolName,
+        arguments: call.arguments,
       }
-      return []
+      const task = this.subagentTaskUpdate(call.parentSessionId, original, call, child, time)
+      return task === undefined ? [] : [task]
     }
     if (key === 'modelSelection') {
       const selection = value as {
@@ -952,6 +1124,7 @@ export class MuxEventTranslator {
         const dshId = String(event.data.id)
         const sourceKind = (event.data.source as { kind?: string } | undefined)?.kind
         const isUserPrompt = sourceKind === 'user'
+        if (isUserPrompt) this.streamState(sessionId).lastUserMessageCreatedAt = event.time
         const surfaceId = isUserPrompt
           ? this.deps.state.takePromptMessageId(sessionId, dshId)
           : dshId
@@ -1129,10 +1302,22 @@ export class MuxEventTranslator {
         // opened. In particular, turn/start can precede the first text/tool
         // chunk; changing `time.created` on the final update violates the
         // OpenCode TUI message key and renders a duplicate assistant card.
-        const created = state.provisionalMessageCreatedAt.get(stepKey)
-          ?? earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
-          ?? state.turnStartTime
-          ?? event.time
+        // Once the live provisional card is emitted, its `time.created` is
+        // part of the OpenCode TUI identity (`created + id`).  A durable
+        // user/message echo can arrive after turn/start (the normal dsh
+        // order), so applying its newer timestamp here would create a second
+        // assistant card when the final update arrives.  The provisional
+        // timestamp was already chosen from the optimistic prompt card; keep
+        // it byte-for-byte stable and only apply the user lower bound when no
+        // provisional card exists yet.
+        const provisionalCreated = state.provisionalMessageCreatedAt.get(stepKey)
+        const created = provisionalCreated ?? Math.max(
+          earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
+            ?? state.turnStartTime
+            ?? event.time,
+          minimumAssistantCreatedAt(state.lastUserMessageCreatedAt),
+        )
+        this.deps.state.setAssistantMessageCreatedAt(sessionId, messageID, created)
         const events = messageEvents(sessionId, this.deps, () => {
           const entry = assistantMessageFromEvent(
             event,
@@ -1301,11 +1486,14 @@ export class MuxEventTranslator {
         // keeps them pending forever (the "spinner keeps spinning" class).
         for (const [stepKey, messageID] of [...state.provisionalMessageIds]) {
           if (state.completedMessageIds.has(messageID)) continue
-          const created = state.blockStarts.get(`${stepKey}:text`)
-            ?? state.blockStarts.get(`${stepKey}:reasoning`)
-            ?? state.provisionalMessageCreatedAt.get(stepKey)
-            ?? state.turnStartTime
-            ?? event.time
+          const provisionalCreated = state.provisionalMessageCreatedAt.get(stepKey)
+          const created = provisionalCreated ?? Math.max(
+            state.blockStarts.get(`${stepKey}:text`)
+              ?? state.blockStarts.get(`${stepKey}:reasoning`)
+              ?? state.turnStartTime
+              ?? event.time,
+            minimumAssistantCreatedAt(state.lastUserMessageCreatedAt),
+          )
           const base = provisionalAssistantMessage(
             sessionId,
             this.deps,
@@ -1397,6 +1585,29 @@ export class MuxEventTranslator {
         }
         return []
       }
+      case 'subagent/descriptor': {
+        const data = event.data as { mode?: unknown; label?: unknown }
+        const mode = data.mode === 'one-shot' || data.mode === 'continuable'
+          ? data.mode
+          : undefined
+        const label = typeof data.label === 'string' && data.label.length > 0
+          ? data.label
+          : undefined
+        const call = this.deps.state.recordSubagentDescriptor(sessionId, {
+          ...(mode === undefined ? {} : { mode }),
+          ...(label === undefined ? {} : { label }),
+        })
+        if (call === undefined) return []
+        const child = this.deps.state.subagentChildren.get(sessionId)
+        if (child === undefined) return []
+        const original: ToolCallInfo = {
+          callId: call.callId,
+          name: call.toolName,
+          arguments: call.arguments,
+        }
+        const task = this.subagentTaskUpdate(call.parentSessionId, original, call, child, event.time)
+        return task === undefined ? [] : [task]
+      }
       case 'goal/change': {
         const data = (event as unknown as { data: { goal?: unknown; cleared?: unknown } }).data
         if (data?.goal !== undefined) {
@@ -1410,7 +1621,7 @@ export class MuxEventTranslator {
       }
       case 'tool/call': {
         const data = event.data
-        const call: ToolCallInfo = {
+        let call: ToolCallInfo = {
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
@@ -1421,23 +1632,29 @@ export class MuxEventTranslator {
           calls = new Map<string, ToolCallInfo>()
           this.pendingCalls.set(sessionId, calls)
         }
-        calls.set(call.callId, call)
         const provisional = this.currentAssistant.get(sessionId) === undefined
           ? this.ensureProvisionalMessage(sessionId, data.turn, data.step, event.time, directory, project)
           : undefined
         const messageID = this.currentAssistant.get(sessionId)
           ?? provisional?.messageID
           ?? `assistant:${data.turn}:${data.step}`
+        const registered = this.registerSubagentCall(sessionId, call, messageID, event.time, data.turn, data.step)
+        call = registered.call
+        calls.set(call.callId, call)
         const inputState = this.findToolInput(sessionId, call.callId)
         const inputEvents = inputState === undefined
           ? this.completeToolInputImmediately(sessionId, call, messageID, directory, project, event.time)
           : this.endToolInput(sessionId, inputState, directory, project, event.time)
+        const part = registered.child === undefined
+          ? pendingToolPart(call, { sessionID: sessionId, messageID, time: event.time })
+          : runningToolPart(call, { sessionID: sessionId, messageID, time: event.time })
+        if (registered.record !== undefined) registered.record.partEmitted = true
         return [
           ...(provisional?.events ?? []),
           ...inputEvents,
           makeEvent(directory, 'message.part.updated', {
             sessionID: sessionId,
-            part: pendingToolPart(call, { sessionID: sessionId, messageID, time: event.time }),
+            part,
             time: event.time,
           }, project),
         ]
@@ -1451,6 +1668,7 @@ export class MuxEventTranslator {
           this.deps.log(`[bridge/events] tool/result without tool/call for ${callId}`)
           return []
         }
+        const effectiveCall = this.callWithSubagentChild(sessionId, call)
         const provisional = this.currentAssistant.get(sessionId) === undefined
           ? this.ensureProvisionalMessage(sessionId, data.turn, data.step, event.time, directory, project)
           : undefined
@@ -1475,13 +1693,21 @@ export class MuxEventTranslator {
         const contentError = toolResultContentError(data.message.content)
         const resultError = data.error ?? contentError
         const part = resultError === undefined
-          ? completedToolPart(call, {
+          ? completedToolPart(effectiveCall, {
               ...resultInfo,
             }, { sessionID: sessionId, messageID, time: event.time })
-          : errorToolPart(call, {
+          : errorToolPart(effectiveCall, {
               ...resultInfo,
               error: resultError,
             }, { sessionID: sessionId, messageID, time: event.time })
+        const delegation = this.deps.state.subagentCallFor(sessionId, callId)
+        if (delegation !== undefined) {
+          delegation.resultStatus = resultError === undefined ? 'completed' : 'error'
+          delegation.resultTime = event.time
+          delegation.resultContent = data.message.content
+          if (resultError === undefined) delete delegation.resultError
+          else delegation.resultError = resultError
+        }
         calls?.delete(callId)
         const events: BridgeGlobalEvent[] = [
           ...(provisional?.events ?? []),
@@ -1514,7 +1740,7 @@ export class MuxEventTranslator {
               provider: { executed: true },
             }, project)]
         if (resultError === undefined) {
-          const changes = fileChangesFromToolResult(call, resultInfo)
+          const changes = fileChangesFromToolResult(effectiveCall, resultInfo)
           if (changes.length > 0) {
             events.push(...fileChangeEvents(sessionId, messageID, changes, project, directory, event.time))
           }
@@ -1542,6 +1768,7 @@ export class MuxEventTranslator {
                   ? {}
                   : { agent: this.deps.state.sessionAgentFor(sessionId) }),
                 ...(parentID === undefined ? {} : { parentID }),
+                ...this.sessionLineageOptions(sessionId),
               }),
             }, projectIdFor(childDirectory)),
           ]
@@ -1559,6 +1786,7 @@ export class MuxEventTranslator {
                   ? {}
                   : { agent: this.deps.state.sessionAgentFor(sessionId) }),
                 ...(parentID === undefined ? {} : { parentID }),
+                ...this.sessionLineageOptions(sessionId),
               }),
             }, project),
           ]
@@ -1580,6 +1808,7 @@ export class MuxEventTranslator {
                   ? {}
                   : { agent: this.deps.state.sessionAgentFor(sessionId) }),
                 ...(parentID === undefined ? {} : { parentID }),
+                ...this.sessionLineageOptions(sessionId),
               }),
             }, project),
           ]
@@ -1703,10 +1932,17 @@ export class MuxEventTranslator {
         provisionalId = alreadyOpen
           ? provisionalMessageId(sessionId, event.data.turn, event.data.step)
           : (bridgeId ?? provisionalMessageId(sessionId, event.data.turn, event.data.step))
-        const provisionalCreated = state.blockStarts.get(blockStartKey)
+        const promptCreatedAt = state.lastUserMessageCreatedAt
+          ?? (state.lastUserMessageId === undefined
+            ? undefined
+            : this.deps.state.promptMessageCreatedAt(sessionId, state.lastUserMessageId))
+        const provisionalCreated = Math.max(
+          state.blockStarts.get(blockStartKey)
           ?? this.deps.state.assistantMessageCreatedAt(sessionId, provisionalId)
           ?? state.turnStartTime
-          ?? time0
+          ?? time0,
+          minimumAssistantCreatedAt(promptCreatedAt),
+        )
         state.provisionalMessageIds.set(stepKey, provisionalId)
         state.provisionalMessageCreatedAt.set(stepKey, provisionalCreated)
         this.deps.state.setAssistantMessageCreatedAt(sessionId, provisionalId, provisionalCreated)

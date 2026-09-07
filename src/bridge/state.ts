@@ -51,6 +51,45 @@ export interface InboxSpliceOutcome {
   removed: QueuedInboxMessage[]
 }
 
+/** One dsh delegation waiting for its session-backed child identity. */
+export interface SubagentCallRecord {
+  parentSessionId: string
+  callId: string
+  toolName: string
+  arguments: string
+  messageId: string
+  description: string
+  prompt: string
+  subagentType: string
+  background?: boolean
+  turn?: number
+  step?: number
+  createdAt: number
+  childSessionId?: string
+  childMode?: 'one-shot' | 'continuable'
+  /** Whether the parent Task part has already reached the SSE stream. */
+  partEmitted?: boolean
+  /** Terminal result retained so a late child association cannot regress it. */
+  resultStatus?: 'completed' | 'error'
+  resultTime?: number
+  resultContent?: readonly unknown[]
+  resultError?: { name?: string; code?: string }
+}
+
+/** Durable/live facts learned for one dsh subagent child. */
+export interface SubagentChildRecord {
+  sessionId: string
+  parentSessionId: string
+  label?: string
+  mode?: 'one-shot' | 'continuable'
+  title?: string
+  agent?: string
+  cwd?: string
+  addedAt: number
+  /** Host lifecycle arrival may use parent-local FIFO before descriptor data. */
+  allowFifo?: boolean
+}
+
 /**
  * In-memory correlation maps between opencode-facing request ids and the dsh
  * rpcIds/approval ids that answer them. Populated from the mux stream; the
@@ -64,6 +103,16 @@ export class InteractionState {
   readonly sessionDirectories = new Map<string, string>()
   readonly sessionParents = new Map<string, string>()
   readonly sessionAddressModes = new Map<string, 'one-shot' | 'continuable'>()
+  /** Sessions whose durable origin is the dsh subagent seam. */
+  readonly sessionOrigins = new Set<string>()
+  /** Pending/associated dsh delegation calls, keyed by parent + call id. */
+  readonly subagentCalls = new Map<string, SubagentCallRecord>()
+  /** Child records learned from api-session/added, projection, or summaries. */
+  readonly subagentChildren = new Map<string, SubagentChildRecord>()
+  /** Descriptor facts that can precede the host lifecycle summary. */
+  readonly subagentDescriptorFacts = new Map<string, Pick<SubagentChildRecord, 'label' | 'mode'>>()
+  /** Child additions that arrived before their parent tool/call was translated. */
+  readonly pendingSubagentChildren = new Map<string, SubagentChildRecord[]>()
   /** Authoritative live Agent state mirrored from dsh api-session/status. */
   readonly sessionRunning = new Map<string, boolean>()
   /** Last status/activity observation used for reconnect diagnostics. */
@@ -126,6 +175,167 @@ export class InteractionState {
   readonly historyCache = new Map<string, { value: CachedHistory; at: number }>()
   private readonly historyLoading = new Map<string, Promise<CachedHistory>>()
   private readonly historyGenerations = new Map<string, number>()
+
+  private static subagentCallKey(parentSessionId: string, callId: string): string {
+    return `${parentSessionId}\u0000${callId}`
+  }
+
+  private static subagentChildMatchesCall(
+    child: SubagentChildRecord,
+    call: SubagentCallRecord,
+  ): boolean {
+    if (child.parentSessionId !== call.parentSessionId) return false
+    if (child.label === undefined || child.label.length === 0) return true
+    return child.label === call.description
+  }
+
+  private attachSubagentChild(
+    child: SubagentChildRecord,
+    call: SubagentCallRecord,
+  ): void {
+    call.childSessionId = child.sessionId
+    const mode = child.mode ?? call.childMode
+    if (mode !== undefined) call.childMode = mode
+    this.subagentCalls.set(InteractionState.subagentCallKey(call.parentSessionId, call.callId), call)
+    this.subagentChildren.set(child.sessionId, child)
+    this.sessionOrigins.add(child.sessionId)
+    this.sessionParents.set(child.sessionId, child.parentSessionId)
+    if (mode !== undefined) this.sessionAddressModes.set(child.sessionId, mode)
+    if (child.cwd !== undefined) this.sessionDirectories.set(child.sessionId, child.cwd)
+    if (child.title !== undefined && child.title.length > 0) this.setSessionTitle(child.sessionId, child.title)
+    if (child.agent !== undefined && child.agent.length > 0) this.setSessionAgent(child.sessionId, child.agent)
+  }
+
+  private matchPendingChildForCall(call: SubagentCallRecord): SubagentChildRecord | undefined {
+    const pending = this.pendingSubagentChildren.get(call.parentSessionId)
+    if (pending === undefined || pending.length === 0) return undefined
+    const exactIndex = pending.findIndex((child) => child.label !== undefined
+      && InteractionState.subagentChildMatchesCall(child, call))
+    // A host/session-added frame normally arrives in child creation order. If
+    // no descriptor label is available yet, the FIFO entry is the only stable
+    // fallback; descriptor/projection enrichment can still supply the exact
+    // mode and label later.
+    const fifoIndex = pending.findIndex((child) => child.allowFifo === true)
+    if (exactIndex === -1 && fifoIndex === -1) return undefined
+    const index = exactIndex === -1 ? fifoIndex : exactIndex
+    const child = pending.splice(index, 1)[0]
+    if (pending.length === 0) this.pendingSubagentChildren.delete(call.parentSessionId)
+    return child
+  }
+
+  /** Register a parent tool call and attach any child that arrived first. */
+  registerSubagentCall(call: SubagentCallRecord): SubagentCallRecord {
+    const key = InteractionState.subagentCallKey(call.parentSessionId, call.callId)
+    const existing = this.subagentCalls.get(key)
+    if (existing !== undefined) {
+      if (existing.childSessionId === undefined) {
+        const child = this.matchPendingChildForCall(existing)
+        if (child !== undefined) this.attachSubagentChild(child, existing)
+      }
+      return existing
+    }
+    this.subagentCalls.set(key, call)
+    const child = this.matchPendingChildForCall(call)
+    if (child !== undefined) this.attachSubagentChild(child, call)
+    return call
+  }
+
+  /** Return a registered dsh delegation call, if any. */
+  subagentCallFor(parentSessionId: string, callId: string): SubagentCallRecord | undefined {
+    return this.subagentCalls.get(InteractionState.subagentCallKey(parentSessionId, callId))
+  }
+
+  /** Return the child associated with one parent tool call, if known. */
+  subagentChildForCall(parentSessionId: string, callId: string): SubagentChildRecord | undefined {
+    const call = this.subagentCallFor(parentSessionId, callId)
+    return call?.childSessionId === undefined ? undefined : this.subagentChildren.get(call.childSessionId)
+  }
+
+  /**
+   * Associate one host/session-added or projection-derived child. The child
+   * may arrive before the parent's tool/call event reaches the translator.
+   * Label equality wins; otherwise parent-local FIFO is deterministic.
+   */
+  associateSubagentChild(child: SubagentChildRecord): SubagentCallRecord | undefined {
+    const previous = this.subagentChildren.get(child.sessionId)
+    const descriptor = this.subagentDescriptorFacts.get(child.sessionId)
+    const merged: SubagentChildRecord = previous === undefined
+      ? { ...child, ...(descriptor ?? {}) }
+      : {
+          ...previous,
+          ...child,
+          ...(descriptor ?? {}),
+          addedAt: previous.addedAt,
+        }
+    this.subagentChildren.set(child.sessionId, merged)
+    this.sessionOrigins.add(child.sessionId)
+    this.sessionParents.set(child.sessionId, merged.parentSessionId)
+    if (merged.mode !== undefined) this.sessionAddressModes.set(child.sessionId, merged.mode)
+    if (merged.cwd !== undefined) this.sessionDirectories.set(child.sessionId, merged.cwd)
+    if (merged.title !== undefined && merged.title.length > 0) this.setSessionTitle(child.sessionId, merged.title)
+    if (merged.agent !== undefined && merged.agent.length > 0) this.setSessionAgent(child.sessionId, merged.agent)
+
+    const associated = [...this.subagentCalls.values()].find((call) => call.childSessionId === child.sessionId)
+    if (associated !== undefined) return associated
+
+    const calls = [...this.subagentCalls.values()]
+      .filter((call) => call.parentSessionId === merged.parentSessionId && call.childSessionId === undefined)
+      .sort((left, right) => left.createdAt - right.createdAt || left.callId.localeCompare(right.callId))
+    const exact = calls.find((call) => merged.label !== undefined
+      && InteractionState.subagentChildMatchesCall(merged, call))
+    const call = exact ?? (merged.allowFifo === true ? calls[0] : undefined)
+    if (call !== undefined) {
+      this.attachSubagentChild(merged, call)
+      return call
+    }
+
+    const pending = this.pendingSubagentChildren.get(merged.parentSessionId) ?? []
+    const pendingIndex = pending.findIndex((candidate) => candidate.sessionId === merged.sessionId)
+    if (pendingIndex === -1) pending.push(merged)
+    else pending[pendingIndex] = merged
+    this.pendingSubagentChildren.set(merged.parentSessionId, pending)
+    return undefined
+  }
+
+  /** Enrich a previously associated child with descriptor/projection facts. */
+  enrichSubagentChild(
+    sessionId: string,
+    update: Partial<Pick<SubagentChildRecord, 'label' | 'mode' | 'title' | 'agent' | 'cwd'>>,
+  ): SubagentCallRecord | undefined {
+    const child = this.subagentChildren.get(sessionId)
+    if (child === undefined) {
+      const previous = this.subagentDescriptorFacts.get(sessionId) ?? {}
+      this.subagentDescriptorFacts.set(sessionId, { ...previous, ...update })
+      return undefined
+    }
+    const next: SubagentChildRecord = { ...child, ...update }
+    this.subagentChildren.set(sessionId, next)
+    this.sessionOrigins.add(sessionId)
+    if (next.mode !== undefined) {
+      this.sessionAddressModes.set(sessionId, next.mode)
+      const call = [...this.subagentCalls.values()].find((candidate) => candidate.childSessionId === sessionId)
+      if (call !== undefined) call.childMode = next.mode
+    }
+    if (next.title !== undefined && next.title.length > 0) this.setSessionTitle(sessionId, next.title)
+    if (next.agent !== undefined && next.agent.length > 0) this.setSessionAgent(sessionId, next.agent)
+    if (next.cwd !== undefined) this.sessionDirectories.set(sessionId, next.cwd)
+    return [...this.subagentCalls.values()].find((candidate) => candidate.childSessionId === sessionId)
+  }
+
+  /** Store descriptor/projection identity even before host/session-added. */
+  recordSubagentDescriptor(
+    sessionId: string,
+    update: Pick<SubagentChildRecord, 'label' | 'mode'>,
+  ): SubagentCallRecord | undefined {
+    const previous = this.subagentDescriptorFacts.get(sessionId) ?? {}
+    this.subagentDescriptorFacts.set(sessionId, { ...previous, ...update })
+    return this.enrichSubagentChild(sessionId, update)
+  }
+
+  /** Whether a session is a durable subagent child. */
+  isSubagentSession(sessionId: string): boolean {
+    return this.sessionOrigins.has(sessionId)
+  }
 
   recordCommandResult(sessionId: string, entry: V1MessageEntry): void {
     const results = this.recentCommandResults.get(sessionId) ?? []
@@ -411,8 +621,13 @@ export class InteractionState {
 
   /** Record the timestamp chosen for a live assistant card. */
   setAssistantMessageCreatedAt(sessionId: string, assistantId: string, createdAt: number): void {
-    if (!this.assistantMessageTimes.has(`${sessionId}\u0000${assistantId}`)) {
-      this.assistantMessageTimes.set(`${sessionId}\u0000${assistantId}`, createdAt)
+    const key = `${sessionId}\u0000${assistantId}`
+    // This value is part of the official TUI's live message identity.  It is
+    // intentionally first-write-wins: once a provisional card was emitted,
+    // changing its timestamp on a late durable echo makes the final update a
+    // second card. Callers choose the user lower bound before the first write.
+    if (!this.assistantMessageTimes.has(key)) {
+      this.assistantMessageTimes.set(key, createdAt)
     }
   }
 
@@ -576,6 +791,13 @@ export class InteractionState {
     for (const [id, value] of this.sessionDirectories) target.sessionDirectories.set(id, value)
     for (const [id, value] of this.sessionParents) target.sessionParents.set(id, value)
     for (const [id, value] of this.sessionAddressModes) target.sessionAddressModes.set(id, value)
+    for (const id of this.sessionOrigins) target.sessionOrigins.add(id)
+    for (const [key, value] of this.subagentCalls) target.subagentCalls.set(key, { ...value })
+    for (const [id, value] of this.subagentChildren) target.subagentChildren.set(id, { ...value })
+    for (const [id, value] of this.subagentDescriptorFacts) target.subagentDescriptorFacts.set(id, { ...value })
+    for (const [id, value] of this.pendingSubagentChildren) {
+      target.pendingSubagentChildren.set(id, value.map((child) => ({ ...child })))
+    }
     for (const [id, value] of this.sessionTitles) target.sessionTitles.set(id, value)
     for (const [id, value] of this.sessionAgents) target.sessionAgents.set(id, value)
     for (const [id, value] of this.sessionModelSelections) target.sessionModelSelections.set(id, { ...value })
@@ -695,6 +917,18 @@ export class InteractionState {
     this.sessionDirectories.delete(sessionId)
     this.sessionParents.delete(sessionId)
     this.sessionAddressModes.delete(sessionId)
+    this.sessionOrigins.delete(sessionId)
+    this.subagentChildren.delete(sessionId)
+    this.subagentDescriptorFacts.delete(sessionId)
+    for (const [key, call] of this.subagentCalls) {
+      if (call.parentSessionId === sessionId || call.childSessionId === sessionId) this.subagentCalls.delete(key)
+    }
+    this.pendingSubagentChildren.delete(sessionId)
+    for (const [parentId, children] of this.pendingSubagentChildren) {
+      const remaining = children.filter((child) => child.sessionId !== sessionId)
+      if (remaining.length === 0) this.pendingSubagentChildren.delete(parentId)
+      else if (remaining.length !== children.length) this.pendingSubagentChildren.set(parentId, remaining)
+    }
     this.sessionRunning.delete(sessionId)
     this.sessionStatusUpdatedAt.delete(sessionId)
     this.sessionStatusBroadcast.delete(sessionId)

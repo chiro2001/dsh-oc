@@ -80,17 +80,28 @@ function mergeCommandResults(
   commandResults: readonly V1MessageEntry[],
   maxEntries?: number,
 ): void {
+  // Durable history has already been folded in event order.  In particular,
+  // dsh may write turn/start before user/message while the assistant fallback
+  // time is normalized by the converter.  Never sort that list just because
+  // there are no bridge-only command cards to merge.
+  if (commandResults.length === 0) return
   const seen = new Set(entries.map((entry) => String(entry.info.id)))
   for (const entry of commandResults) {
     if (seen.has(String(entry.info.id))) continue
     seen.add(String(entry.info.id))
-    entries.push(entry)
+    const created = (entry.info.time as { created?: unknown } | undefined)?.created
+    const createdAt = typeof created === 'number' ? created : undefined
+    // Insert a synthetic card relative to the durable sequence, leaving every
+    // existing user/assistant entry at its converter-provided index.  The
+    // command store is oldest-first; <= keeps equal-time cards stable.
+    const index = createdAt === undefined
+      ? entries.length
+      : entries.findIndex((candidate) => {
+          const candidateCreated = (candidate.info.time as { created?: unknown } | undefined)?.created
+          return typeof candidateCreated === 'number' && candidateCreated > createdAt
+        })
+    entries.splice(index === -1 ? entries.length : index, 0, entry)
   }
-  entries.sort((left, right) => {
-    const l = (left.info.time as { created?: number } | undefined)?.created ?? 0
-    const r = (right.info.time as { created?: number } | undefined)?.created ?? 0
-    return l - r
-  })
   if (maxEntries !== undefined && entries.length > maxEntries) {
     entries.splice(0, entries.length - maxEntries)
   }
@@ -197,6 +208,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     const limitRaw = req.query.get('limit')
     const limit = limitRaw ? Math.max(1, Math.min(Number(limitRaw) || 100, 500)) : 100
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: limit })
+    await R.ensureSubagentHistoryContext(ctx, id, history.events)
     const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = convertMessagesV1(
       history.events.map((entry) => entry.event),
@@ -204,6 +216,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
         sessionId: id,
         cwd: ctx.cwd,
         defaultModel,
+        subagentForCall: (call) => R.subagentMetadataForHistory(ctx, id, call),
         onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`),
       },
       history.events.map((entry) => entry.view),
@@ -216,6 +229,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     const id = req.params.id as string
     const messageID = req.params.messageID as string
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
+    await R.ensureSubagentHistoryContext(ctx, id, history.events)
     const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = convertMessagesV1(
       history.events.map((entry) => entry.event),
@@ -223,6 +237,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
         sessionId: id,
         cwd: ctx.cwd,
         defaultModel,
+        subagentForCall: (call) => R.subagentMetadataForHistory(ctx, id, call),
         onSkip: (type, reason) => ctx.log(`[bridge/messages] ${type}: ${reason}`),
       },
       history.events.map((entry) => entry.view),

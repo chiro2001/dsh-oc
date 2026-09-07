@@ -74,10 +74,17 @@ if [[ -z "$DSH_PID" ]]; then
   exit 1
 fi
 echo "  SIGKILL dsh $DSH_PID"
-kill -9 "$DSH_PID"
-# The opencode attach child becomes an orphan; kill it too so repeated
-# crash runs do not accumulate stray TUI processes.
+# Capture the exact attach child while its parent relationship still exists.
+# Once dsh is SIGKILLed the child is re-parented to PID 1, so looking it up
+# afterwards cannot find it and repeated crash runs leak a busy opencode TUI.
 ATTACH_PIDS="$(ps -eo ppid=,pid=,args= | awk -v pid="$DSH_PID" '$1 == pid && $0 ~ /opencode attach http:\/\/127\.0\.0\.1:/ { print $2 }')"
+if [[ -z "$ATTACH_PIDS" ]]; then
+  echo "e2e: cannot locate the exact attach child before dsh crash; refusing to run an unscoped kill" >&2
+  exit 1
+fi
+kill -9 "$DSH_PID"
+# The opencode attach child becomes an orphan; kill only the exact child that
+# was observed under this run's dsh parent, never a process found by name.
 if [[ -n "$ATTACH_PIDS" ]]; then
   kill -9 $ATTACH_PIDS 2>/dev/null || true
 fi
@@ -136,6 +143,18 @@ echo "  final graph exactly-once and continues after crash"
 echo "== exit through prompt submit =="
 e2e_tui_exit
 e2e_tui_after_checks
+
+# The crash phase deliberately killed its attach child before reparenting; the
+# restart phase must also leave no run-owned dsh/TUI process behind. Keep this
+# assertion scoped to the current run directory so unrelated/manual sessions
+# remain untouched and diagnosable by their own monitors.
+LEFTOVERS="$(ps -eo pid=,args= | awk -v run="$E2E_RUN_DIR" \
+  '$0 !~ /awk -v run=/ && $0 ~ run && ($0 ~ /dsh --profile/ || $0 ~ /opencode attach http:\/\/127\.0\.0\.1:/) { print }' || true)"
+if [[ -n "$LEFTOVERS" ]]; then
+  echo "e2e: recovery run left owned processes:" >&2
+  echo "$LEFTOVERS" >&2
+  exit 1
+fi
 
 tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
 node "$E2E_ENV_JS" stop "$E2E_RUNID" >/dev/null

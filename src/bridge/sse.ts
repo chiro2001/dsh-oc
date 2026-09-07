@@ -129,6 +129,17 @@ export class SseHub {
     }
   }
 
+  /**
+   * Broadcast a batch while retaining it for the first client when the
+   * bridge has not acquired an SSE subscriber yet.  Unlike calling
+   * `enqueue()` followed by `broadcast()`, this remembers each event in the
+   * Last-Event-ID ring exactly once.
+   */
+  broadcastAndBufferIfIdle(events: BridgeGlobalEvent[]): void {
+    if (this.clients.size === 0) this.pending.push(...events)
+    this.broadcast(events)
+  }
+
   /** Broadcast now, or buffer until the first client connects. */
   enqueue(events: BridgeGlobalEvent[]): void {
     if (this.clients.size === 0) {

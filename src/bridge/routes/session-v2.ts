@@ -3,13 +3,54 @@ import * as R from '../router.js'
 import type { SessionMessagesResponse } from '@opencode-ai/sdk/v2/types'
 import type { SessionSummary } from '../dsh-types.js'
 import { badRequest, notFound } from '../errors.js'
-import { convertMessagesV2 } from '../convert/message.js'
+import { convertMessagesV2, type V1MessageEntry } from '../convert/message.js'
 import { convertSessionSummary, convertSessionSummaryV2 } from '../convert/session.js'
 import { filterGitTrackedDiffs } from '../git.js'
 import { randomUUID } from 'node:crypto'
 import { toPermissionV2 } from '../convert/permission.js'
 import { toQuestionV2 } from '../convert/question.js'
 import type { RouteRegistrar } from '../routes.js'
+
+/** Convert one bridge-only v1 command card to the SDK v2 message shape. */
+function commandResultToV2(entry: V1MessageEntry): SessionMessagesResponse['data'][number] {
+  const info = entry.info as Record<string, unknown>
+  const rawTime = info.time as { created?: unknown } | undefined
+  const created = typeof rawTime?.created === 'number' ? rawTime.created : 0
+  const text = entry.parts
+    .map((part) => part.type === 'text' && 'text' in part ? String((part as { text: unknown }).text) : '')
+    .join('')
+  if (info.role === 'user') {
+    return { id: String(info.id), time: { created }, text, type: 'user' }
+  }
+  return {
+    id: String(info.id),
+    time: { created },
+    type: 'assistant',
+    agent: typeof info.agent === 'string' ? info.agent : 'build',
+    model: {
+      id: typeof info.modelID === 'string' ? info.modelID : 'deepseek-chat',
+      providerID: typeof info.providerID === 'string' ? info.providerID : 'deepseek',
+    },
+    content: text === '' ? [] : [{ type: 'text', id: `${String(info.id)}:0`, text }],
+  }
+}
+
+/** Insert bridge-only cards without reordering durable converter output. */
+function mergeCommandResultsV2(
+  entries: SessionMessagesResponse['data'],
+  commandResults: readonly V1MessageEntry[],
+): void {
+  if (commandResults.length === 0) return
+  const seen = new Set(entries.map((entry) => String(entry.id)))
+  for (const source of commandResults) {
+    const entry = commandResultToV2(source)
+    if (seen.has(String(entry.id))) continue
+    seen.add(String(entry.id))
+    const createdAt = entry.time.created
+    const index = entries.findIndex((candidate) => candidate.time.created > createdAt)
+    entries.splice(index === -1 ? entries.length : index, 0, entry)
+  }
+}
 
 function remapV2Messages(
   ctx: R.BridgeRouteContext,
@@ -25,6 +66,11 @@ function remapV2Messages(
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
     const messageType = 'type' in message ? message.type : undefined
+    // Synthetic command cards carry their own agent (notably the
+    // msg_preset: user echo); do not overwrite that label with the session's
+    // current preset while remapping history.
+    const synthetic = String(message.id).startsWith('msg_cmd:')
+      || String(message.id).startsWith('msg_preset:')
     if (surfaceId === undefined && sessionAgent === undefined) {
       remapped.push(message)
       continue
@@ -34,7 +80,7 @@ function remapV2Messages(
       result = {
         ...message,
         ...(surfaceId === undefined ? {} : { id: surfaceId }),
-        ...(sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
+        ...(!synthetic && sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
           ? { agent: sessionAgent }
           : {}),
       } as SessionMessagesResponse['data'][number]
@@ -49,7 +95,7 @@ function remapV2Messages(
       result = {
         ...message,
         ...(surfaceId === undefined ? {} : { id: surfaceId }),
-        ...(sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
+        ...(!synthetic && sessionAgent !== undefined && (messageType === 'assistant' || messageType === 'user')
           ? { agent: sessionAgent }
           : {}),
         content,
@@ -272,6 +318,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const cursorRaw = req.query.get('cursor')
     const beforeSeq = cursorRaw === null ? undefined : R.decodeMessageCursor(cursorRaw)
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: limit, beforeSeq })
+    await R.ensureSubagentHistoryContext(ctx, id, history.events)
     const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const oldest = R.oldestSurfaceSeq(entries)
@@ -281,10 +328,12 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
         sessionId: id,
         cwd: ctx.cwd,
         defaultModel,
+        subagentForCall: (call) => R.subagentMetadataForHistory(ctx, id, call),
         onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
       },
       entries.map((entry) => entry.view),
     )
+    mergeCommandResultsV2(data, ctx.state.commandResultsFor(id))
     const remapped = remapV2Messages(ctx, id, data)
     const response: SessionMessagesResponse = {
       data: req.query.get('order') === 'desc' ? remapped.reverse() : remapped,
@@ -312,6 +361,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       maxMessages: limit,
       ...(after === undefined ? {} : { beforeSeq: after }),
     })
+    await R.ensureSubagentHistoryContext(ctx, id, history.events)
     const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const anchorSeqs: number[] = []
@@ -321,6 +371,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
         sessionId: id,
         cwd: ctx.cwd,
         defaultModel,
+        subagentForCall: (call) => R.subagentMetadataForHistory(ctx, id, call),
         onSkip: (type, reason) => ctx.log(`[bridge/history-v2] ${type}: ${reason}`),
       },
       entries.map((entry) => entry.view),
@@ -341,6 +392,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
   register('GET', '/api/session/:sessionID/context', 'json', async (req, ctx) => {
     const id = req.params.sessionID as string
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
+    await R.ensureSubagentHistoryContext(ctx, id, history.events)
     const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const data = convertMessagesV2(
@@ -349,6 +401,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
         sessionId: id,
         cwd: ctx.cwd,
         defaultModel,
+        subagentForCall: (call) => R.subagentMetadataForHistory(ctx, id, call),
         onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
       },
       entries.map((entry) => entry.view),
@@ -360,6 +413,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const id = req.params.sessionID as string
     const messageID = req.params.messageID as string
     const history = await R.cachedSessionHistory(ctx, id, { maxMessages: 500 })
+    await R.ensureSubagentHistoryContext(ctx, id, history.events)
     const defaultModel = await R.sessionModelRef(ctx, id)
     const entries = history.events
     const data = convertMessagesV2(
@@ -368,6 +422,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
         sessionId: id,
         cwd: ctx.cwd,
         defaultModel,
+        subagentForCall: (call) => R.subagentMetadataForHistory(ctx, id, call),
         onSkip: (type, reason) => ctx.log(`[bridge/messages-v2] ${type}: ${reason}`),
       },
       entries.map((entry) => entry.view),

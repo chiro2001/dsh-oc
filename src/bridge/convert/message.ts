@@ -27,13 +27,18 @@ import {
   externalProviderId,
   provisionalMessageId,
   provisionalPartId,
+  safeJsonParse,
   textFromBlocks,
 } from './common.js'
 import {
   completedToolPart,
   errorToolPart,
+  normalizedToolInput,
   pendingToolPart,
+  opencodeToolName,
+  subagentMetadataForCall,
   type ToolCallInfo,
+  type SubagentToolMetadata,
   type ToolResultInfo,
 } from './tool.js'
 import { goalChangeText } from './goal.js'
@@ -48,6 +53,8 @@ export interface MessageConvertOptions {
    */
   defaultModel?: { providerID: string; modelID: string }
   onSkip?: (eventType: string, reason: string) => void
+  /** Resolve a dsh delegation's child id from the parent session catalog. */
+  subagentForCall?: (call: ToolCallInfo) => SubagentToolMetadata | undefined
 }
 
 export interface V1MessageEntry {
@@ -201,11 +208,13 @@ export function assistantPartsFromMessage(
         time: { start, end: blockEnd?.(index, 'reasoning') ?? time },
       })
     } else if (block.type === 'tool-call') {
-      const call: ToolCallInfo = {
+      let call: ToolCallInfo = {
         callId: String(block.id),
         name: block.name,
         arguments: block.arguments,
       }
+      const subagent = opts.subagentForCall?.(call)
+      if (subagent !== undefined) call = { ...call, subagent }
       calls.set(call.callId, call)
       parts.push(
         pendingToolPart(call, {
@@ -447,6 +456,14 @@ export function convertMessagesV1(
   const pending = new Map<string, V1MessageEntry>()
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastMessageId = ''
+  // `turn/start` is deliberately emitted before the durable user/message in
+  // dsh 0.1.2.  When a reply has no streamed chunks, falling back to the
+  // turn-start timestamp would therefore make the assistant's
+  // `time.created` earlier than its parent user card.  OpenCode keys live and
+  // hydrated messages by that timestamp, so keep the fallback monotonic with
+  // the visible user transcript.
+  let lastUserMessageTime: number | undefined
+
   for (let eventIndex = 0; eventIndex < events.length; eventIndex++) {
     const event = events[eventIndex] as BridgeEvent
     const view = views?.[eventIndex]
@@ -475,6 +492,7 @@ export function convertMessagesV1(
             : userPartsFromMessage(id, data.content, event.time, opts),
         })
         lastMessageId = id
+        lastUserMessageTime = event.time
         break
       }
       case 'assistant/chunk': {
@@ -489,6 +507,10 @@ export function convertMessagesV1(
           blockEnds.set(key, event.time)
           const start = blockStarts.get(key) ?? event.time
           accumulateStreamBlock(blocksByStep, data.turn, data.step, chunk.index, blockType, chunk.text, start)
+          const created = Math.max(
+            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+            lastUserMessageTime === undefined ? Number.MIN_SAFE_INTEGER : lastUserMessageTime + 1,
+          )
           upsertPartialV1(
             entries,
             pending,
@@ -497,7 +519,7 @@ export function convertMessagesV1(
             opts,
             data.turn,
             data.step,
-            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+            created,
             lastMessageId || `pending:${opts.sessionId}:user`,
           )
         }
@@ -523,6 +545,10 @@ export function convertMessagesV1(
           chunk.data.texts.join(''),
           start,
         )
+        const created = Math.max(
+          earliestBlockStart(blockStarts, chunk.data.turn, chunk.data.step) ?? turnStarts.get(chunk.data.turn) ?? time0,
+          lastUserMessageTime === undefined ? Number.MIN_SAFE_INTEGER : lastUserMessageTime + 1,
+        )
         upsertPartialV1(
           entries,
           pending,
@@ -531,7 +557,7 @@ export function convertMessagesV1(
           opts,
           chunk.data.turn,
           chunk.data.step,
-          earliestBlockStart(blockStarts, chunk.data.turn, chunk.data.step) ?? turnStarts.get(chunk.data.turn) ?? time0,
+          created,
           lastMessageId || `pending:${opts.sessionId}:user`,
         )
         break
@@ -553,6 +579,10 @@ export function convertMessagesV1(
         const pendingIndex = pendingEntry === undefined
           ? -1
           : entries.findIndex((entry) => entry.info.id === pendingEntry.info.id)
+        const created = Math.max(
+          earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+          lastUserMessageTime === undefined ? Number.MIN_SAFE_INTEGER : lastUserMessageTime + 1,
+        )
         entries.push({
           info: assistantMessageInfo(
             data.message,
@@ -560,7 +590,7 @@ export function convertMessagesV1(
             lastMessageId || id,
             opts,
             data.usage,
-            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+            created,
             finishReasons.get(`${data.turn}:${data.step}`) ?? 'stop',
           ),
           parts,
@@ -573,12 +603,14 @@ export function convertMessagesV1(
       }
       case 'tool/call': {
         const data = event.data
-        const call: ToolCallInfo = {
+        let call: ToolCallInfo = {
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
           ...(view === undefined ? {} : { view }),
         }
+        const subagent = opts.subagentForCall?.(call)
+        if (subagent !== undefined) call = { ...call, subagent }
         calls.set(call.callId, call)
         const stepKey = `${data.turn}:${data.step}`
         let stepCalls = pendingCallsByStep.get(stepKey)
@@ -750,7 +782,7 @@ function upsertPartialV2(
       const tool: SessionMessageAssistantTool = {
         type: 'tool',
         id: `tool:${call.callId}`,
-        name: call.name,
+        name: opencodeToolName(call.name, safeJsonParse(call.arguments)),
         state: { status: 'pending', input: call.arguments },
         time: { created },
       }
@@ -794,16 +826,18 @@ function toV2Assistant(
         time: { created: start, completed: event.time },
       })
     } else if (block.type === 'tool-call') {
-      const call: ToolCallInfo = {
+      let call: ToolCallInfo = {
         callId: String(block.id),
         name: block.name,
         arguments: block.arguments,
       }
+      const subagent = opts.subagentForCall?.(call)
+      if (subagent !== undefined) call = { ...call, subagent }
       calls.set(call.callId, call)
       const tool: SessionMessageAssistantTool = {
         type: 'tool',
         id: `tool:${call.callId}`,
-        name: call.name,
+        name: opencodeToolName(call.name, safeJsonParse(call.arguments)),
         state: { status: 'pending', input: call.arguments },
         time: { created: event.time },
       }
@@ -854,17 +888,17 @@ function applyToolResultV2(
   if (data.error !== undefined) {
     tool.state = {
       status: 'error',
-      input: {},
+      input: normalizedToolInput(call.name, safeJsonParse(call.arguments)),
       content: [],
-      structured: {},
+      structured: subagentMetadataForCall(call),
       error: { type: 'unknown', message: data.error.name ?? data.error.code ?? 'tool failed' },
     }
   } else {
     tool.state = {
       status: 'completed',
-      input: {},
+      input: normalizedToolInput(call.name, safeJsonParse(call.arguments)),
       content,
-      structured: {},
+      structured: subagentMetadataForCall(call),
       result: undefined,
     }
   }
@@ -896,6 +930,15 @@ export function convertMessagesV2(
   const pending = new Map<string, SessionMessageAssistant>()
   const pendingCallsByStep = new Map<string, Map<string, ToolCallInfo>>()
   let lastAssistant: V2AssistantState | undefined
+  // Keep an assistant fallback timestamp at or after the latest visible user
+  // card.  dsh emits turn/start before user/message, while OpenCode's live /
+  // history merge orders message keys by time.created.
+  let lastUserMessageTime: number | undefined
+
+  const assistantCreatedAt = (turn: number, step: number, fallback: number): number => Math.max(
+    earliestBlockStart(blockStarts, turn, step) ?? turnStarts.get(turn) ?? fallback,
+    lastUserMessageTime === undefined ? Number.MIN_SAFE_INTEGER : lastUserMessageTime + 1,
+  )
   for (let eventIndex = 0; eventIndex < events.length; eventIndex++) {
     const event = events[eventIndex] as BridgeEvent
     const view = views?.[eventIndex]
@@ -921,6 +964,7 @@ export function convertMessagesV2(
           type: 'user',
         }
         pushMessage(message, event.seq)
+        lastUserMessageTime = event.time
         break
       }
       case 'assistant/chunk': {
@@ -942,7 +986,7 @@ export function convertMessagesV2(
             opts,
             data.turn,
             data.step,
-            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+            assistantCreatedAt(data.turn, data.step, event.time),
             event.seq,
             (message, seq) => pushMessage(message, seq),
           )
@@ -976,7 +1020,7 @@ export function convertMessagesV2(
           opts,
           chunk.data.turn,
           chunk.data.step,
-          earliestBlockStart(blockStarts, chunk.data.turn, chunk.data.step) ?? turnStarts.get(chunk.data.turn) ?? time0,
+          assistantCreatedAt(chunk.data.turn, chunk.data.step, time0),
           chunk.seq,
           (message, seq) => pushMessage(message, seq),
         )
@@ -988,7 +1032,7 @@ export function convertMessagesV2(
         const state = toV2Assistant(
           event,
           opts,
-          earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
+          assistantCreatedAt(data.turn, data.step, event.time),
           (index, blockType) => blockStarts.get(`${data.turn}:${data.step}:${index}:${blockType}`),
         )
         const pendingMessage = pending.get(stepKey)
@@ -1005,12 +1049,14 @@ export function convertMessagesV2(
       }
       case 'tool/call': {
         const data = event.data
-        const call: ToolCallInfo = {
+        let call: ToolCallInfo = {
           callId: String(data.callId),
           name: data.name,
           arguments: data.arguments,
           ...(view === undefined ? {} : { view }),
         }
+        const subagent = opts.subagentForCall?.(call)
+        if (subagent !== undefined) call = { ...call, subagent }
         calls.set(call.callId, call)
         const stepKey = `${data.turn}:${data.step}`
         let stepCalls = pendingCallsByStep.get(stepKey)
@@ -1027,7 +1073,7 @@ export function convertMessagesV2(
           pendingMessage.content.push({
             type: 'tool',
             id: `tool:${call.callId}`,
-            name: call.name,
+            name: opencodeToolName(call.name, safeJsonParse(call.arguments)),
             state: { status: 'pending', input: call.arguments },
             time: { created: event.time },
           })

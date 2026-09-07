@@ -38,6 +38,89 @@ function resultFor(
 }
 
 describe('convert/tool', () => {
+  it('maps dsh subagent tools to the native OpenCode task card', () => {
+    expect(opencodeToolName('subagent', {})).toBe('task')
+    expect(opencodeToolName('subagent_fork', {})).toBe('task')
+
+    const spawn = pendingToolPart(callFor('subagent', {
+      description: 'Inspect the bridge',
+      prompt: 'Read the bridge and report findings',
+    }), opts)
+    expect(spawn.tool).toBe('task')
+    if (spawn.state.status === 'pending') {
+      expect(spawn.state.input).toMatchObject({
+        description: 'Inspect the bridge',
+        prompt: 'Read the bridge and report findings',
+        subagent_type: 'spawn',
+      })
+    }
+
+    const fork = pendingToolPart(callFor('subagent_fork', {
+      description: 'Review the history',
+      prompt: 'Review the inherited history',
+    }), opts)
+    expect(fork.tool).toBe('task')
+    if (fork.state.status === 'pending') {
+      expect(fork.state.input).toMatchObject({
+        description: 'Review the history',
+        prompt: 'Review the inherited history',
+        subagent_type: 'fork',
+      })
+    }
+  })
+
+  it('keeps task child metadata on running, completed, and error parts', () => {
+    const callInfo = {
+      ...callFor('subagent', {
+        description: 'Run a child',
+        prompt: 'Return the result',
+      }),
+      subagent: {
+        sessionId: 'child-1',
+        parentSessionId: 's1',
+        mode: 'one-shot' as const,
+      },
+    }
+    const running = runningToolPart(callInfo, opts)
+    expect(running.tool).toBe('task')
+    expect(running.state).toMatchObject({
+      status: 'running',
+      metadata: { sessionId: 'child-1', parentSessionId: 's1', mode: 'one-shot' },
+    })
+    const completed = completedToolPart(callInfo, resultFor('done'), opts)
+    expect(completed.state).toMatchObject({
+      status: 'completed',
+      metadata: { sessionId: 'child-1', parentSessionId: 's1', mode: 'one-shot' },
+    })
+    const failed = errorToolPart(callInfo, {
+      ...resultFor('failed'),
+      error: { name: 'Child failed', code: 'child-failed' },
+    }, opts)
+    expect(failed.state).toMatchObject({
+      status: 'error',
+      metadata: { sessionId: 'child-1', parentSessionId: 's1', mode: 'one-shot' },
+    })
+  })
+
+  it('fills stable task fields without discarding custom dsh arguments', () => {
+    const part = pendingToolPart(callFor('subagent_fork', {
+      description: 'Keep fields',
+      prompt: 'Do work',
+      run_in_background: false,
+      provider: 'deepseek-official',
+      custom: { retained: true },
+    }), opts)
+    if (part.state.status !== 'pending') throw new Error('expected pending task')
+    expect(part.state.input).toMatchObject({
+      description: 'Keep fields',
+      prompt: 'Do work',
+      subagent_type: 'fork',
+      run_in_background: false,
+      provider: 'deepseek-official',
+      custom: { retained: true },
+    })
+  })
+
   it('maps tool/call to a pending part with parsed input and raw', () => {
     const part = pendingToolPart(call, opts)
     expect(part.type).toBe('tool')

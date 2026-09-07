@@ -9,6 +9,16 @@ export interface ToolCallInfo {
   arguments: string
   /** dsh presenter view carried on the mux/history frame for this call. */
   view?: ToolEventView
+  /** OpenCode Task-compatible runtime metadata learned after child creation. */
+  subagent?: SubagentToolMetadata
+}
+
+/** Runtime facts attached to a dsh delegation's OpenCode Task part. */
+export interface SubagentToolMetadata {
+  sessionId?: string
+  parentSessionId?: string
+  mode?: 'one-shot' | 'continuable'
+  background?: boolean
 }
 
 export interface ToolResultInfo {
@@ -87,12 +97,31 @@ function pathFromArgs(args: RecordValue): string | undefined {
   return stringValue(args.file_path) ?? stringValue(args.path)
 }
 
+/** Recognize dsh's delegation tool family, including configured variants. */
+export function isSubagentToolName(name: string): boolean {
+  return name === 'subagent' || name.startsWith('subagent_')
+}
+
+/**
+ * OpenCode calls this field `subagent_type`; dsh binds the provider into the
+ * tool name instead. Keep a deterministic display value until a child summary
+ * supplies a more specific agent preset.
+ */
+export function subagentTypeFromToolName(name: string): string {
+  if (name === 'subagent') return 'spawn'
+  if (name.startsWith('subagent_') && name.length > 'subagent_'.length) {
+    return name.slice('subagent_'.length)
+  }
+  return 'subagent'
+}
+
 /**
  * Map a dsh tool name to the opencode tool semantic used by the TUI.
  * `str_replace_editor view` is a read card; every mutation command becomes
  * the native edit card.
  */
 export function opencodeToolName(name: string, args: RecordValue): string {
+  if (isSubagentToolName(name)) return 'task'
   switch (name) {
     case 'bash':
     case 'bash-persistent':
@@ -116,6 +145,14 @@ export function opencodeToolName(name: string, args: RecordValue): string {
 
 function normalizedInput(name: string, args: RecordValue): RecordValue {
   const input: RecordValue = { ...args }
+  if (isSubagentToolName(name)) {
+    if (typeof args.description !== 'string') input.description = name
+    if (typeof args.prompt !== 'string') input.prompt = ''
+    if (typeof args.subagent_type !== 'string' || args.subagent_type.trim() === '') {
+      input.subagent_type = subagentTypeFromToolName(name)
+    }
+    return input
+  }
   if (name === 'read' || name === 'fs-read' || name === 'read_image') {
     if (typeof args.file_path === 'string') input.filePath = args.file_path
     return input
@@ -140,9 +177,18 @@ function normalizedInput(name: string, args: RecordValue): RecordValue {
   return input
 }
 
+/** OpenCode-facing input shape, including stable Task fields for dsh calls. */
+export function normalizedToolInput(name: string, args: RecordValue): RecordValue {
+  return normalizedInput(name, args)
+}
+
 function titleFromCall(name: string, args: RecordValue, view?: ToolEventView): string {
   const present = callView(view)
   if (present?.title) return present.title
+  if (isSubagentToolName(name)) {
+    const description = stringValue(args.description)
+    return description ?? `${subagentTypeFromToolName(name)} task`
+  }
   const path = pathFromArgs(args)
   switch (name) {
     case 'bash':
@@ -374,6 +420,12 @@ function descriptionForStrReplace(args: RecordValue): string | undefined {
 function completedMetadata(call: ToolCallInfo, result: ToolResultInfo, tool: string, input: RecordValue): RecordValue {
   const metadata: RecordValue = {}
   if (result.meta !== undefined) metadata.meta = result.meta
+  if (call.subagent !== undefined) {
+    if (call.subagent.sessionId !== undefined) metadata.sessionId = call.subagent.sessionId
+    if (call.subagent.parentSessionId !== undefined) metadata.parentSessionId = call.subagent.parentSessionId
+    if (call.subagent.mode !== undefined) metadata.mode = call.subagent.mode
+    if (call.subagent.background !== undefined) metadata.background = call.subagent.background
+  }
   if (tool === 'bash') {
     const present = resultView(result.view)
     if (present?.card === 'terminal') {
@@ -436,6 +488,17 @@ export function toolResultStructured(result: ToolResultInfo): Record<string, unk
   return text.length > 0 ? { output: text } : {}
 }
 
+/** Convert attached delegation facts to OpenCode's Task metadata shape. */
+export function subagentMetadataForCall(call: ToolCallInfo): RecordValue {
+  if (!isSubagentToolName(call.name) || call.subagent === undefined) return {}
+  return {
+    ...(call.subagent.sessionId === undefined ? {} : { sessionId: call.subagent.sessionId }),
+    ...(call.subagent.parentSessionId === undefined ? {} : { parentSessionId: call.subagent.parentSessionId }),
+    ...(call.subagent.mode === undefined ? {} : { mode: call.subagent.mode }),
+    ...(call.subagent.background === undefined ? {} : { background: call.subagent.background }),
+  }
+}
+
 /** A `tool/call` event alone becomes a pending ToolPart. */
 export function pendingToolPart(call: ToolCallInfo, options: ToolPartOptions): ToolPart {
   const input = safeJsonParse(call.arguments)
@@ -485,6 +548,7 @@ export function streamingToolPart(call: StreamingToolCall, options: ToolPartOpti
 export function runningToolPart(call: ToolCallInfo, options: ToolPartOptions): ToolPart {
   const input = safeJsonParse(call.arguments)
   const tool = opencodeToolName(call.name, input)
+  const metadata = subagentMetadataForCall(call)
   return {
     id: `tool:${call.callId}`,
     sessionID: options.sessionID,
@@ -496,6 +560,7 @@ export function runningToolPart(call: ToolCallInfo, options: ToolPartOptions): T
       status: 'running',
       input: normalizedInput(call.name, input),
       title: titleFromCall(call.name, input, call.view),
+      ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
       time: { start: options.time },
     },
   }
@@ -540,6 +605,7 @@ export function errorToolPart(
   const input = safeJsonParse(call.arguments)
   const tool = opencodeToolName(call.name, input)
   const message = result.error?.name ?? result.error?.code ?? 'tool failed'
+  const metadata = subagentMetadataForCall(call)
   return {
     id: `tool:${call.callId}`,
     sessionID: options.sessionID,
@@ -551,6 +617,7 @@ export function errorToolPart(
       status: 'error',
       input: normalizedInput(call.name, input),
       error: message,
+      ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
       time: {
         start: options.time,
         end: result.time,

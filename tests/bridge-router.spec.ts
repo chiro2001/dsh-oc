@@ -1593,6 +1593,112 @@ describe('bridge router: session routes', () => {
     expect(text).toContain('"metadata":{"origin":"subagent"}')
   })
 
+  it('hydrates subagent task metadata in both v1 and v2 history', async () => {
+    const parent = {
+      sessionId: 'parent-task-history' as never,
+      updatedAt: 5000,
+      running: false,
+      blank: false,
+      cwd: '/work',
+    }
+    const child = {
+      sessionId: 'child-task-history' as never,
+      updatedAt: 4000,
+      running: false,
+      blank: false,
+      parentSessionId: 'parent-task-history' as never,
+      origin: 'subagent' as const,
+      cwd: '/work',
+      projections: {
+        asOfSeq: 7,
+        values: {
+          subagent: { mode: 'one-shot', label: 'Inspect history' },
+          title: 'Inspect history child',
+          agentPreset: 'minimal',
+        },
+      },
+    }
+    const callArguments = JSON.stringify({
+      description: 'Inspect history',
+      prompt: 'Read the historical session',
+      run_in_background: false,
+    })
+    const history = [
+      { event: makeUserEvent('Inspect', 'history-user', 1000) },
+      { event: makeAssistantEvent([
+        { type: 'tool-call', id: 'history-call', name: 'subagent', arguments: callArguments },
+      ], 'history-assistant', 1100) },
+      { event: sessionEvent('tool/call', {
+        turn: 1,
+        step: 1,
+        callId: 'history-call',
+        name: 'subagent',
+        arguments: callArguments,
+      }, 4, 1110) },
+      { event: sessionEvent('tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { kind: 'tool', callId: 'history-call' },
+          content: [{
+            type: 'tool-result',
+            toolCallId: 'history-call',
+            content: [{ type: 'text', text: 'child done' }],
+            isError: false,
+          }],
+        },
+      }, 5, 1120) },
+    ]
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        list: async () => okRpc({ items: [parent, child] }),
+        history: async () => okRpc({ events: history, hasMore: false }),
+      },
+    }
+    const { server } = await boot(api)
+
+    const v1 = await request(server, 'GET', '/session/parent-task-history/message')
+    const v1Parts = (v1.body as Array<{ parts: Array<Record<string, unknown>> }> )
+      .flatMap((entry) => entry.parts)
+    const v1Task = v1Parts.find((part) => part.type === 'tool')
+    expect(v1Task).toMatchObject({
+      tool: 'task',
+      state: {
+        status: 'completed',
+        input: {
+          description: 'Inspect history',
+          prompt: 'Read the historical session',
+          subagent_type: 'spawn',
+        },
+        metadata: {
+          sessionId: 'child-task-history',
+          parentSessionId: 'parent-task-history',
+          mode: 'one-shot',
+        },
+      },
+    })
+
+    const v2 = await request(server, 'GET', '/api/session/parent-task-history/message')
+    const v2Task = (v2.body as { data: Array<{ content?: Array<Record<string, unknown>> }> }).data
+      .flatMap((entry) => entry.content ?? [])
+      .find((part) => part.type === 'tool')
+    expect(v2Task).toMatchObject({
+      name: 'task',
+      state: {
+        status: 'completed',
+        input: {
+          description: 'Inspect history',
+          prompt: 'Read the historical session',
+          subagent_type: 'spawn',
+        },
+        structured: { sessionId: 'child-task-history', parentSessionId: 'parent-task-history' },
+      },
+    })
+  })
+
   it('gets a session and its messages for v1 and v2', async () => {
     const base = fakeApi()
     const history = [makeUserEvent('hello'), makeAssistantEvent([{ type: 'text', text: 'hi back' }])]
@@ -1633,6 +1739,74 @@ describe('bridge router: session routes', () => {
     expect(v2Single.status).toBe(200)
     expect((v2Single.body as { data: { id: string } }).data.id).toBe(v2FirstID)
     expect((await request(server, 'GET', '/api/session/s1/message/nope')).status).toBe(404)
+  })
+
+  it('keeps durable message order while hydrating synthetic command cards', async () => {
+    const base = fakeApi()
+    const history = [
+      { event: sessionEvent('turn/start', { turn: 1 }, 1, 1010) },
+      { event: makeUserEvent('hello', 'm-user-order', 1010) },
+      { event: makeAssistantEvent([{ type: 'text', text: 'answer' }], 'm-assistant-order', 1200) },
+    ]
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        history: async () => okRpc({ events: history, hasMore: false }),
+      },
+    }
+    const { server, router } = await boot(api)
+
+    const v1 = await request(server, 'GET', '/session/s1/message')
+    expect((v1.body as Array<{ info: { role: string; time: { created: number } } }>).map((entry) => entry.info.role))
+      .toEqual(['user', 'assistant'])
+    expect((v1.body as Array<{ info: { time: { created: number } } }>)[1]?.info.time.created).toBe(1011)
+
+    const v2 = await request(server, 'GET', '/api/session/s1/message')
+    expect((v2.body as { data: Array<{ type: string }> }).data.map((entry) => entry.type))
+      .toEqual(['user', 'assistant'])
+
+    // Bridge-only command cards are inserted by timestamp, while the two
+    // durable entries above remain in their converter order.
+    router.ctx.state.recordCommandResult('s1', {
+      info: {
+        id: 'msg_cmd:order-check',
+        sessionID: 's1',
+        role: 'assistant',
+        time: { created: 1100, completed: 1100 },
+        agent: 'build',
+        modelID: 'deepseek-chat',
+        providerID: 'deepseek',
+        mode: 'build',
+        path: { cwd: '/work', root: '/work' },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      } as never,
+      parts: [{
+        id: 'prt_cmd:order-check',
+        sessionID: 's1',
+        messageID: 'msg_cmd:order-check',
+        type: 'text',
+        text: 'command result',
+        time: { start: 1100, end: 1100 },
+      } as never],
+    })
+
+    const mergedV1 = await request(server, 'GET', '/session/s1/message')
+    expect((mergedV1.body as Array<{ info: { id: string; role: string } }>).map((entry) => [entry.info.id, entry.info.role]))
+      .toEqual([
+        ['m-user-order', 'user'],
+        ['m-assistant-order', 'assistant'],
+        ['msg_cmd:order-check', 'assistant'],
+      ])
+
+    const mergedV2 = await request(server, 'GET', '/api/session/s1/message')
+    expect((mergedV2.body as { data: Array<{ id: string; type: string }> }).data.map((entry) => [entry.id, entry.type]))
+      .toEqual([
+        ['m-user-order', 'user'],
+        ['m-assistant-order', 'assistant'],
+        ['msg_cmd:order-check', 'assistant'],
+      ])
   })
 
   it('closes the rc.1 follow iterator after reading the history snapshot', async () => {
@@ -1923,6 +2097,34 @@ describe('bridge router: session routes', () => {
       role: 'user',
       model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro' },
     })
+  })
+
+  it('recovers the optimistic prompt card when POST wins the first SSE race', async () => {
+    const base = fakeApi()
+    const { server, router } = await boot({
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        prompt: async () => okRpc({ accepted: true }),
+      },
+    })
+    const prompted = await request(server, 'POST', '/session/s1/message', {
+      parts: [{ type: 'text', text: 'cold attach prompt' }],
+    })
+    expect(prompted.status).toBe(200)
+
+    const written: string[] = []
+    const fakeRes = {
+      write: (chunk: string) => {
+        written.push(chunk)
+        return true
+      },
+      on: () => fakeRes,
+      destroyed: false,
+    }
+    const client = router.ctx.hub.add(fakeRes as never)
+    expect(written.join('')).toContain('cold attach prompt')
+    router.ctx.hub.remove(client)
   })
 
   it('creates sessions (v1), forks from parentID, and creates v2 sessions', async () => {

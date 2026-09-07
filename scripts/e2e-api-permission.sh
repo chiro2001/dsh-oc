@@ -176,6 +176,14 @@ for _i in 1 2 3 4 5 6 7 8 9 10; do
 done
 e2e_new_run "api-permission-core" "workspace-write" \
   "$CORE_SEQ" "0"
+# A prior interrupted manual run may still own a dsh process whose command
+# line points into `.e2e`. Record that external baseline and only fail on a
+# matching process created after this invocation started; never kill the
+# pre-existing process.
+ORPHAN_BASELINE_FILE="$E2E_RUN_DIR/orphan-baseline.pids"
+ps -eo pid=,args= | awk -v root="$E2E_REPO_ROOT/.e2e/" \
+  '$0 ~ root && $0 ~ /agent-model[.]patch[.]yml/ && ($0 ~ /dsh --profile/ || $0 ~ /fake-opencode/) { print $1 }' \
+  | sort -n -u > "$ORPHAN_BASELINE_FILE"
 E2E_SESSION="dsh-oc-api-permission"
 E2E_ACTIVE_SESSION="$E2E_SESSION"
 e2e_start_dsh "$E2E_SESSION"
@@ -369,9 +377,22 @@ e2e_stop_dsh "$E2E_SESSION"
 e2e_stop_run
 
 echo "== orphan check =="
-ORPHANS="$(ps -eo args= | grep -F "$E2E_REPO_ROOT/.e2e/" | grep -F 'agent-model.patch.yml' | grep -v grep || true)"
+ORPHAN_SCAN="$(ps -eo pid=,args= | awk -v root="$E2E_REPO_ROOT/.e2e/" \
+  '$0 ~ root && $0 ~ /agent-model[.]patch[.]yml/ && ($0 ~ /dsh --profile/ || $0 ~ /fake-opencode/) { print }' || true)"
+PREEXISTING_ORPHANS="$(awk -v baseline="$ORPHAN_BASELINE_FILE" '
+  BEGIN { while ((getline pid < baseline) > 0) seen[pid] = 1; close(baseline) }
+  { pid=$1; if (seen[pid]) print }
+' <<<"$ORPHAN_SCAN")"
+ORPHANS="$(awk -v baseline="$ORPHAN_BASELINE_FILE" '
+  BEGIN { while ((getline pid < baseline) > 0) seen[pid] = 1; close(baseline) }
+  { pid=$1; if (!seen[pid]) print }
+' <<<"$ORPHAN_SCAN")"
+if [[ -n "$PREEXISTING_ORPHANS" ]]; then
+  echo "  pre-existing orphan processes left untouched (diagnostic):" >&2
+  echo "$PREEXISTING_ORPHANS" >&2
+fi
 if [[ -n "$ORPHANS" ]]; then
-  echo "e2e: orphan processes:" >&2
+  echo "e2e: new orphan processes:" >&2
   echo "$ORPHANS" >&2
   exit 1
 fi
