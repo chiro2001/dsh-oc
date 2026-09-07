@@ -1,9 +1,26 @@
 # dsh-oc 下一阶段需求（Roadmap）
 
-> 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读 `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
-> 基线：`main` 当前为协议补全阶段版本（2026-08-16，权限/vcs/fs/lifecycle 已合入）。
+> 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读
+> `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
+> `main` 已包含 `v0.2.0-rc.1`；`develop` 是手动验证和集成交付线，稳定后再回合
+> `main`。
 
-## 当前候选收敛（0.2.0-rc.1，2026-09-07）
+## 当前工作线（feat-issues-4-5，未发布）
+
+Issue #4/#5 当前仍在 `feat-issues-4-5` 功能分支，尚未合入 `develop`。完成用户
+手动 TUI 验证前不合入、不 bump 版本、不打 tag、不发布：
+
+| Issue | 内容 | 当前状态 |
+|---|---|---|
+| #4 | 官方 TUI `!` shell mode，经 Agent idle maintenance 启动用户 OS shell | 已实现，待手动验证 |
+| #5 | `/preset` 完成结果不再持续显示 `QUEUED` | 已修复，待手动验证 |
+
+`!` shell 不触发模型回合；用户显式 `!` 是授权边界，命令继承 OS 用户权限和
+session cwd，由 Agent idle maintenance 管理并只允许精确子进程/进程组取消；shell
+卡片是 bridge 短期投影。`/preset` 在空白会话可切换并供后续新会话继承，已有回复的会话仍受
+agent preset 锁定。用户操作和回归步骤见 [MANUAL-TEST.md](MANUAL-TEST.md)。
+
+## 已发布基线（0.2.0-rc.1，2026-09-07）
 
 本候选面向 dsh `>=0.1.2-rc.1`，是一次 ABI breaking minor。PR #1/#2/#3
 没有原样合入；其模型/preset、队列、approval/question、subagent/history
@@ -21,8 +38,8 @@
 - dsh-dcp rc.6 `session.events` getter shim 是临时兼容边界，待上游 dcp
   完成 dsh 0.1.2 迁移后移除。
 
-本地候选阶段未宣称完整发布门禁：artifact audit、full e2e、真实 TUI 与远端
-full-SHA 安装/回滚留给独立发布验证。
+发布门禁已完成：artifact audit、full e2e、真实 TUI、远端 full-SHA 冷装/回滚和
+真实模型 smoke 均已通过。具体发布清单与回滚契约见 [RELEASE.md](RELEASE.md)。
 
 ## 协议补全记录（2026-08-16）
 

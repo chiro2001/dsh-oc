@@ -217,12 +217,18 @@ export function commandResultMessage(
   const created = Date.now()
   const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
   const agent = deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
+  // The OpenCode TUI treats an assistant message without `time.completed` as
+  // an in-flight turn and marks following user cards QUEUED.  A command has
+  // two phases: the transient "Running …" marker is genuinely busy, while
+  // the final result is already complete.  Preserve that distinction in the
+  // synthetic message as well as in its text part.
+  const finished = options.status !== 'busy'
   const info: Record<string, unknown> = {
         id,
         sessionID: sessionId,
         role: 'assistant',
         agent,
-        time: { created },
+        time: finished ? { created, completed: created } : { created },
         parentID: options.parentID ?? `pending:${sessionId}:user`,
         modelID: model.modelID,
         providerID: model.providerID,
@@ -237,7 +243,7 @@ export function commandResultMessage(
         messageID: id,
         type: 'text',
         text,
-        time: { start: created },
+        time: finished ? { start: created, end: created } : { start: created },
       }
   events.push(makeEvent(directory, 'message.updated', { sessionID: sessionId, info }, project))
   events.push(makeEvent(directory, 'message.part.updated', {

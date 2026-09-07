@@ -10,6 +10,10 @@
 设计来源；当前实现已完成 PR #1/#2/#3 的语义重整合，不再依赖
 `@deepseek-ai/dsh-host-apiproxy`：
 
+> `feat-issues-4-5` 的 `Unreleased` 当前另含 Issue #4 的 `POST /session/:id/shell`。
+> 它在下一次版本发布前仍需完成用户手动 TUI 验证；本节的 shell 路由说明同步
+> 记录该候选前置能力。
+
 - Session/list/history/prompt/cancel/model/fork/rename 直连
   `sessionController`；agent/preset、goal、skill 分别直连对应 host services。
 - SSE 由 `session/event`、`sessionController.control`、approval/question
@@ -146,6 +150,7 @@ GET /api/integration?location[directory]=...
 | `POST /session/{id}/summarize` | MAP | dsh `/compact` command registry（TUI `/compact` 实际调用此路由） |
 | `POST /session/{id}/compact` | MAP | 同上（v1 兼容别名） |
 | `POST /session/{id}/command` | MAP | `/preset`、`/goal`（dsh command registry）、`/help`（bridge 本地） |
+| `POST /session/{id}/shell` | MAP | 官方 TUI `!` shell mode；经 Agent `runMaintenance` 取得 idle ownership 后启动当前 OS shell，返回 OpenCode `WithParts` `{ info, parts }` 并映射 user/assistant/tool 卡片 |
 | `GET /session/{id}` | MAP | history + summary |
 | `PATCH /session/{id}` | MAP | `sessionController.rename` |
 | `GET /session/{id}/message` | MAP | `sessionController.follow/page` history |
@@ -176,6 +181,51 @@ GET /api/integration?location[directory]=...
 | `GET /experimental/workspace` | STUB | `[]` |
 | `GET /experimental/workspace/status` | STUB | 空状态 |
 | 其他未列路由 | LATER | 501 或 schema-valid 空响应 |
+
+### 用户 `!` Shell mode
+
+官方 OpenCode 1.18.18 在输入框按 `!` 进入 shell mode，提交时发送
+`POST /session/{id}/shell`。请求体必须包含非空的 `agent` 和 `command`；`model`
+可选。`agent` 必须是当前 session 的 agent（若指定），且必须是可用 preset；空值、
+不匹配或不可用 agent 返回 400。
+
+工作目录只通过 query `directory` 传入（不是 `cwd`，也不是 body 的 `workdir`）：
+已记录的 session cwd 优先；只有冷启动尚未记录 session cwd 时才使用该 query 值，
+相对 query 路径相对 bridge cwd 解析，绝对路径直接使用；无 query 时回退 bridge
+cwd。`--dir` 改变 bridge cwd，但不会覆盖已记录的 session cwd。
+
+dsh-oc 通过 dsh Agent 的 `runMaintenance` 取得真实 idle ownership；随后以当前 OS
+用户身份启动 shell，因为用户显式输入 `!` 才是此路径的授权边界。POSIX 仅在
+`$SHELL` 是绝对路径时使用它，否则回退 `/bin/sh`；Windows 使用 `ComSpec`，缺失
+时回退 `cmd.exe`。该路径不宣称 dsh model-tool approval 或 sandbox 保护，也不伪造
+dsh turn/tool 持久事件。SSE 先发布 running tool part，完成后发布 completed/error
+tool part、authoritative idle status 与恰好一次 `session.idle`。
+stdout/stderr 每路最多保留 1 MiB；超过后继续读取并在输出中写入截断标记，不会因
+输出量超过阈值主动 kill 子进程。
+该 shell path 只在子进程结束后发布保留输出，不提供实时 stdout/stderr 流。
+
+`POST /session/{id}/abort` 会先中止该 bridge/session 登记的精确 shell 子进程/进程组，
+随后仍调用 dsh `session.cancel`；不会按进程名搜索或结束其他进程。POSIX 终止自有
+process group；Windows 终止自有 PID 的 `taskkill /T` 树，并不把 Windows shell 伪装成
+dsh `pwsh` sandbox。
+
+这里刻意不调用 `ctx.tools.execute({ agent, name: 'bash' })`：dsh-tools 在 PTC
+presentation 下会把 model-direct root bash 判为 `UNKNOWN_TOOL`，而其 nested
+parent token 只能由真实 `run_code` transport 创建，bridge 不能伪造；同时
+dsh-user-approval 的 `approval.request()` 要求 open turn，shell maintenance
+本身不是 model turn。因此没有一个合法的 user-shell host seam 可以同时声称
+model-tool approval/sandbox 语义，bridge 采用上游同等的显式用户授权 + 精确子进程
+归属，并在缺少 `Agent.runMaintenance` ABI 时明确报错。
+
+该请求不属于模型 agent-loop 的 turn/step，因此不能伪造 dsh `tool/call` /
+`tool/result` 持久事件；完成卡片只保存在每 session 有界的 bridge 内存 command-result
+store（最近 20 条），不会写入 dsh durable history。它会注入 v1 的
+`GET /session/{id}/message`（包括单条 message 查询）和 v2 的
+`GET /api/session/{id}/message` hydration；不会注入 v2 的
+`/api/session/{id}/history`、`/context` 或单条 `/message/{messageID}`，这些接口只
+返回 durable dsh history。它不会触发模型回复，也不会把 shell 输出注入下一轮 prompt。
+若 Agent 已有 turn/maintenance，接口返回 409；若 session 不存在返回 404；缺少/非法
+`agent` 或空 command 返回 400。
 
 ### 4.2 v2 `/api` 路由
 

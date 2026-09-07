@@ -25,6 +25,7 @@
     { "method": "POST", "path": "/session/:id/fork", "kind": "json" },
     { "method": "POST", "path": "/session/:id/summarize", "kind": "json" },
     { "method": "POST", "path": "/session/:id/compact", "kind": "json" },
+    { "method": "POST", "path": "/session/:id/shell", "kind": "json" },
     { "method": "POST", "path": "/session/:id/command", "kind": "json" },
     { "method": "GET", "path": "/session/:id/todo", "kind": "json" },
     { "method": "GET", "path": "/session/:id/diff", "kind": "json" },

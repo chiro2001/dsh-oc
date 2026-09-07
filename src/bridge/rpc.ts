@@ -178,7 +178,7 @@ function normalizeRemoteError(error: unknown): RpcCallError {
  * Resolve a Session's live Agent through SessionController; a Session-domain
  * failure becomes an RpcCallError carrying its code.
  */
-async function resolveAgent(
+export async function resolveAgent(
   api: BridgeApi,
   sessionId: string,
 ): Promise<Agent> {

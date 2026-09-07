@@ -660,7 +660,12 @@ describe('bridge events: session event mapping', () => {
       sessionID: 's1',
       status: { type: 'busy' },
     })
-    const info = events[1]?.payload.properties.info as { id: string; role: string; parentID: string }
+    const info = events[1]?.payload.properties.info as {
+      id: string
+      role: string
+      parentID: string
+      time: { completed?: number }
+    }
     expect(info).toMatchObject({
       role: 'assistant',
       agent: 'build',
@@ -670,6 +675,7 @@ describe('bridge events: session event mapping', () => {
     })
     expect(info.id).toMatch(/^msg_cmd:/)
     expect(info.parentID).toBe('pending:s1:user')
+    expect(info.time.completed).toBeUndefined()
     const part = events[2]?.payload.properties.part as { id: string; messageID: string; type: string; text: string }
     expect(part).toMatchObject({
       messageID: info.id,
@@ -678,6 +684,21 @@ describe('bridge events: session event mapping', () => {
     })
     expect(part.id).toMatch(/^prt_cmd:/)
     expect(events[2]?.payload.properties.time).toBeTypeOf('number')
+
+    const finished = commandResultEvents(
+      { cwd: '/work', state, log: () => {} },
+      's1',
+      'Switched dsh agent preset to minimal',
+      { status: 'idle' },
+    )
+    const finishedInfo = finished[1]?.payload.properties.info as {
+      time: { created: number; completed?: number }
+    }
+    const finishedPart = finished[2]?.payload.properties.part as {
+      time: { start: number; end?: number }
+    }
+    expect(finishedInfo.time.completed).toBe(finishedInfo.time.created)
+    expect(finishedPart.time.end).toBe(finishedPart.time.start)
   })
 
   it('streams text chunks through a provisional message and reports real duration', () => {

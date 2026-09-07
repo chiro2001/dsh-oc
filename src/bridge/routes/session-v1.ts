@@ -27,7 +27,9 @@ function remapV1Messages(
       : undefined
     const surfaceId = promptId ?? assistantId
     const sessionAgent = ctx.state.sessionAgentFor(sessionId)
-    const synthetic = dshId.startsWith('msg_cmd:') || dshId.startsWith('msg_preset:')
+    const synthetic = dshId.startsWith('msg_cmd:')
+      || dshId.startsWith('msg_preset:')
+      || dshId.startsWith('msg_shell:')
     const parentDshId = typeof entry.info.parentID === 'string' ? entry.info.parentID : undefined
     const remappedParent = parentDshId === undefined ? undefined : surfaceIdForDshId(parentDshId)
     const info: Record<string, unknown> = {
@@ -208,6 +210,32 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     return R.json(200, true)
   })
 
+  // Official OpenCode shell mode (`!` at the prompt) submits the command to
+  // this v1 endpoint.  The bridge owns the exact user shell process and
+  // streams a synthetic user/assistant/tool card while it runs.
+  register('POST', '/session/:id/shell', 'json', async (req, ctx) => {
+    const id = req.params.id as string
+    const body = R.bodyAsRecord(req.body)
+    if (typeof body.agent !== 'string' || body.agent.trim() === '') {
+      throw badRequest('shell request requires a non-empty agent')
+    }
+    const model = body.model !== null && typeof body.model === 'object' && !Array.isArray(body.model)
+      ? body.model as Record<string, unknown>
+      : undefined
+    const result = await R.runShellCommand(ctx, id, {
+      command: typeof body.command === 'string' ? body.command : '',
+      ...(typeof body.agent === 'string' ? { agent: body.agent } : {}),
+      ...(req.query.get('directory') === null ? {} : { workdir: req.query.get('directory') as string }),
+      ...(model === undefined ? {} : {
+        model: {
+          ...(typeof model.providerID === 'string' ? { providerID: model.providerID } : {}),
+          ...(typeof model.modelID === 'string' ? { modelID: model.modelID } : {}),
+        },
+      }),
+    })
+    return R.json(200, result)
+  })
+
   register('GET', '/session/:id', 'json', async (req, ctx) => {
     const id = req.params.id as string
     const view = await R.sessionView(ctx, id)
@@ -384,6 +412,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
 
   register('POST', '/session/:id/abort', 'json', async (req, ctx) => {
     const id = req.params.id as string
+    R.abortShellCommand(ctx, id)
     await R.rpc(ctx, 'session.cancel', { sessionId: R.sid(id) })
     return R.json(200, true)
   })

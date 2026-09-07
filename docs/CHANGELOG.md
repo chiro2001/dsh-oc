@@ -6,36 +6,17 @@
 
 ## [Unreleased]
 
-- 修复 dsh `subagent` / `subagent_fork` 在 OpenCode TUI 中被当作未知工具的
-  问题：转换为原生 `task` 卡片，保留 `description`、`prompt`、
-  `subagent_type` 与 child `sessionId`；child 的 host/lifecycle 时序和历史
-  v1/v2 hydration 均支持。所有 `session.updated` 替换继续携带 subagent
-  `parentID` / `metadata.origin`，避免 projection/title 更新使 child 脱离会话树。
-- 新增 `scripts/e2e-tui-subagent.sh`，使用隔离 dsh profile、真实
-  `opencode attach` 和精确 PID observe-only I/O monitor 验证 Task 卡片及 child
-  导航；加强短 TUI turn 的首条 user 顺序和两轮去重 oracle。
-- 修复 dsh `turn/start` 先于 `user/message` 时 optimistic user / provisional
-  assistant 的时间键在 final 或 history hydration 阶段漂移，避免官方 TUI 将同一
-  reasoning / tool call 渲染成两张卡；补充延迟 durable user echo 的事件回归，
-  并让真实 TUI turn e2e 对面板中的 tool card 做 exactly-once 断言。API e2e 分页
-  改为跨真实 turn 验证，并对 synthetic command card 与既有外部 orphan 进程做
-  安全隔离诊断。
-- 修复 `e2e-recovery-crash.sh` 在 SIGKILL dsh 后无法找到已 reparent 的
-  `opencode attach` child、导致高 CPU orphan 泄漏的问题；现在在 kill 前锁定
-  精确子 PID，并增加 run-scoped leftover 断言。
-- `flake-mini-scan.sh` 不再按进程名清理外部 orphan；协调器只做 observe-only
-  告警，进程回收由创建该 PID/进程组的具体 e2e 负责。
-- 崩溃恢复 e2e 从当前 tmux pane 精确记录 dsh/attach 父子 PID，避免系统 PID
-  回绕时 `ps | awk` 自匹配并误取低位 awk PID；SIGKILL 仍只作用于该 run 已验证
-  的两个 PID。
-- GitHub e2e workflow 更新到本候选要求的 dsh `0.1.2-rc.1`，失败工件打包允许
-  `.e2e` 尚未创建；perf 在 dsh 启动前退出时立即报告退出码与 stderr，不再只
-  等待 bridge URL 超时。
-- full-SHA 安装/回滚演练现在校验 lockfile 的实际解析 commit 与候选版本；文档
-  明确 `v0.1.0` 是旧 dsh ABI，回滚到该稳定版必须同时回滚 dsh CLI，不能只降
-  dsh-oc 插件。
-- v2 会话摘要与 fallback 现在同样输出 subagent `metadata.origin`；历史中多个
-  同父/同描述 child 按 label 或 parent-local FIFO 绑定，v1/v2 不再复用同一个 child。
+本节当前对应 `feat-issues-4-5`，尚未合入 `develop`；Issue #4/#5 均须完成用户手动
+TUI 验证后才能进入集成和后续版本发布。
+
+- 新增官方 OpenCode `!` shell mode：`POST /session/:id/shell` 通过 dsh Agent 的
+  `runMaintenance` 保证 idle ownership，再以当前 OS 用户身份启动精确 shell
+  子进程/进程组；不绕过或假称 dsh approval/sandbox。running/completed/error、
+  abort、busy/idle、`session.idle` exactly-once 和 bridge history 投影均有回归；
+  新增路由探针、真实 TUI e2e 与协议说明；用户手动 TUI 验证仍待完成。
+- 修复 `/preset` 切换后 synthetic command result 缺少完成时间，导致官方 TUI
+  将 `preset switched to ...` 卡片一直显示为 `QUEUED`，直到下一轮对话才清除；
+  增加 bridge 单测与真实 TUI 回归断言，用户手动复核仍待完成。
 
 ## [0.2.0-rc.1] - 2026-09-07
 
@@ -63,9 +44,24 @@
 
 ### 验证
 
-- typecheck、targeted bridge/TUI tests、status/SSE ring tests、monitor shell
-  self-tests 已通过；完整 e2e、真实 TUI 与 release artifact audit 留待独立
-  发布验证阶段。
+- typecheck、418 个单元测试、协议 probe fixture 全部通过、5000 会话性能测试、
+  发布工件审计和完整真实 TUI e2e 已通过；rc.1 发布时 probe 基线为 62/62，当前
+  未发布工作线新增 shell route 后为 63/63；高风险 flake scan 首跑 30/30，无 retry。
+- GitHub CI、full-SHA 冷装、真实 TUI smoke、同 ABI 回滚演练和真实 DeepSeek
+  quick smoke 已通过。发布四元组与哈希见 GitHub prerelease 说明。
+
+### 发布前收敛
+
+- dsh `subagent` / `subagent_fork` 已转换为原生 OpenCode `task` 卡片，保留
+  delegation 与 child session lineage；新增真实 TUI Task 导航回归。
+- 固定 optimistic user / provisional assistant 的消息时间身份，修复首条回复或
+  reasoning/tool card 重复渲染；真实 TUI 对工具卡做 exactly-once 断言。
+- 收紧 crash recovery 的精确 tmux 父子 PID、run-scoped leftover 检查和
+  observe-only flake scan，避免按名称操作外部 orphan 进程。
+- GitHub e2e workflow 固定 dsh `0.1.2-rc.1`，perf 启动失败即时报告；full-SHA
+  安装/回滚校验 lockfile 实际 commit，并记录旧 dsh ABI 的联合回滚要求。
+- v2 会话摘要/历史按 child label 或 parent-local FIFO 绑定并保留
+  `metadata.origin`，避免同父同描述的多个 child 被错误复用。
 
 ### 修复
 

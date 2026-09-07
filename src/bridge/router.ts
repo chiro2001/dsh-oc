@@ -83,6 +83,14 @@ import { SseHub, type SseClient } from './sse.js'
 import { MuxEventTranslator } from './events.js'
 import type { BridgeGlobalEvent } from './events.js'
 import { stubRoutes } from './stubs.js'
+import { runShellCommand } from './shell.js'
+
+export { runShellCommand } from './shell.js'
+
+/** Abort only user shell calls started by this bridge/session. */
+export function abortShellCommand(ctx: BridgeRouteContext, sessionId: string): boolean {
+  return ctx.state.abortShell(sessionId)
+}
 
 export interface BridgeRequest {
   method: string
@@ -382,6 +390,7 @@ export function recordSessionSummaries(
   }
   for (const item of items) {
     const id = String(item.sessionId)
+    ctx.state.markSessionPresent(id)
     ctx.state.sessionDirectories.set(id, directories.get(id) ?? ctx.cwd)
     // `session.list` is the bounded cold-start source for the status map.
     // Once a live api-session/status edge has arrived, never overwrite it

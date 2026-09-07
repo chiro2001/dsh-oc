@@ -6814,6 +6814,12 @@ declare class InteractionState {
   private readonly stalePresetPrompts;
   /** Recent bridge-only command result cards retained for history hydration. */
   private readonly recentCommandResults;
+  /** User shell executions currently owned by this bridge session. */
+  private readonly shellControllers;
+  /** In-flight shell maintenance promises, awaited during bridge teardown. */
+  private readonly shellPromises;
+  /** Sessions removed by the host while a shell callback is still draining. */
+  private readonly clearedSessions;
   /** Mirror of each session's dsh pending inbox (next-turn / next-step). */
   readonly inboxProjections: Map<string, InboxProjection>;
   /** Message ids already surfaced to the TUI as queued user messages. */
@@ -6891,7 +6897,18 @@ declare class InteractionState {
   /** Whether a session is a durable subagent child. */
   isSubagentSession(sessionId: string): boolean;
   recordCommandResult(sessionId: string, entry: V1MessageEntry): void;
+  /** Insert or replace one bridge-only card (used by running shell history). */
+  upsertCommandResult(sessionId: string, entry: V1MessageEntry): void;
   commandResultsFor(sessionId: string): readonly V1MessageEntry[];
+  /** Register one shell cancellation controller and return its disposer. */
+  trackShellController(sessionId: string, controller: AbortController): () => void;
+  trackShellPromise(sessionId: string, promise: Promise<unknown>): () => void;
+  /** Abort only shell executions owned by this exact session. */
+  abortShell(sessionId: string): boolean;
+  abortAllShells(): void;
+  waitForShells(timeoutMs?: number): Promise<void>;
+  markSessionPresent(sessionId: string): void;
+  isSessionCleared(sessionId: string): boolean;
   getSessionListCache(ttlMs: number): SessionSummary[] | undefined;
   setSessionListCache(items: SessionSummary[]): void;
   getHistoryCache(key: string, ttlMs: number): CachedHistory | undefined;

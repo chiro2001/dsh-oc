@@ -3,9 +3,9 @@
 本文档列出手动验证 dsh-oc 的推荐路径与预期行为，供发布前或升级后快速
 回归；自动化覆盖见 [FEATURES.md](FEATURES.md) 与 `scripts/e2e-*.sh`。
 
-前置：`dsh plugin --profile oc add chiro2001/dsh-oc`（或本地
-`dsh plugin --profile oc add .` + `pnpm build`），在干净终端执行
-`dsh --profile oc`。
+前置：稳定发布线使用 `dsh plugin --profile oc add chiro2001/dsh-oc`；当前
+`feat-issues-4-5` 未推送/未合入 `develop`，使用本地 `dsh plugin --profile oc add .`
+和 `pnpm build`。在干净终端执行 `dsh --profile oc`；profile 名称固定为 `oc`。
 
 ## 1. 启动与品牌
 
@@ -53,18 +53,32 @@
 
 ## 6. agent / preset
 
-- 空白会话：`/preset minimal` 或 Tab 切换 agent 生效，新会话继承。
+- 空白会话：`/preset` 列出可用 preset；`/preset minimal` 或 Tab 切换 agent 生效，
+  之后新建会话继承最近选择。
+- `/preset minimal` 完成后，`preset switched to minimal` 卡片应立即结束，不能
+  持续显示 `QUEUED`；无需再发送下一条消息才能清除。
 - 已开始回复的会话：切换应被 dsh 锁定，切换后第一条消息出现一次
   “Agent switch locked”提示，而不是静默失败。
 
-## 7. mini 模式
+## 7. `!` shell mode
+
+- 在官方 OpenCode TUI 输入框按 `!` 进入 Shell mode，输入
+  `printf DSH_OC_SHELL_OK` 后回车。
+- 预期显示一张 `bash` 工具卡，状态从 running 变为 completed，输出只出现一次，
+  不触发模型回复；API history 中对应 tool part 的 `state.output` 应包含
+  `DSH_OC_SHELL_OK`。
+- 验证脚本：`scripts/e2e-tui-shell.sh`。脚本使用独立的 tmux session，普通
+  shell 命令不会杀其他进程；shell 执行继承当前 OS 用户权限，由 Agent maintenance
+  管理 idle ownership，取消只作用于该 session 自己的精确子进程/进程组。
+
+## 8. mini 模式
 
 - `dsh --profile oc --mini`：回复只渲染一次（无重复）；流式回合连按两次
   Esc 打断；权限 Esc 多一步确认层；退出同第 5 节。
 - `scripts/e2e-tui-mini.sh` 的三次 C-c 可能得到 `DSH_EXIT=130`（SIGINT），
   这是可接受的退出码；无论 0/130 均需看到 dsh-oc 退出提示。
 
-## 8. subagent / Task 面板
+## 9. subagent / Task 面板
 
 - 让模型调用 `subagent` 或 `subagent_fork`，预期父会话显示原生
   `Spawn Task` / `Fork Task` 卡片及 delegation description，而不是未知工具卡。
@@ -73,7 +87,7 @@
 - 自动化回归：`scripts/e2e-tui-subagent.sh`（隔离 dsh profile + 官方
   `opencode attach` + 精确 PID observe-only monitor）。
 
-## 9. 其它入口
+## 10. 其它入口
 
 - `--dir <path>` 改变工作目录（路径、附件校验基准）；`--fork` 从当前会话
   派生；`--log-level` 透传给 opencode。
@@ -83,7 +97,7 @@
   `/goal` + 上一条消息）；自动开启的 goal 回合可用 Esc 打断。
 - `/help` 展示能力摘要；`/preset` 列出 agent preset。
 
-## 10. 协议端点冒烟（可选，开发者）
+## 11. 协议端点冒烟（可选，开发者）
 
 启动后从 attach 进程参数取 bridge URL（`opencode attach http://127.0.0.1:<port>`）：
 
@@ -97,13 +111,13 @@ curl -s "$B/api/fs/find?query=README"       # 文件查找
 curl -s $B/api/permission/request           # 无 pending 时 {"data":[]}
 ```
 
-## 11. 已知限制复核
+## 12. 已知限制复核
 
-- `Allow always` 重启清空；MCP/LSP/formatter/skills/integration 为
+- `Allow always` 重启清空；MCP/LSP/formatter/integration/reference 为
   schema-valid stub；opencode 退出 splash 无法替换（只有下方说明）；
   `ask_user_question` 的 `multiple` 选项在官方 TUI 中无可视多选交互。
 
-## 12. 与官方 opencode 的显示对比（1.18.18 + 本地 mock）
+## 13. 与官方 opencode 的显示对比（1.18.18 + 本地 mock）
 
 在同一 mock provider 下逐项对比官方 `opencode attach` 与 dsh-oc：
 
@@ -145,7 +159,7 @@ TUI 仍把完整后续文本渲染在排队卡片上方（顺序正确，95 帧�
 仍需在最小 server 上复现真实会话的原始事件序列。回合消息的完成时间已推迟
 到回合结束，QUEUED 标记在整轮完成前保持正确。
 
-## 13. 进程 I/O 观察（安全默认）
+## 14. 进程 I/O 观察（安全默认）
 
 `scripts/monitor-process-io.sh` 默认只观察明确指定的 PID，不会结束任何外部
 进程；正常退出默认静默，达到阈值只在 stderr 告警，并继续记录。需要报告正常

@@ -14,17 +14,59 @@ import type { RouteRegistrar } from '../routes.js'
 /** Convert one bridge-only v1 command card to the SDK v2 message shape. */
 function commandResultToV2(entry: V1MessageEntry): SessionMessagesResponse['data'][number] {
   const info = entry.info as Record<string, unknown>
-  const rawTime = info.time as { created?: unknown } | undefined
+  const rawTime = info.time as { created?: unknown; completed?: unknown } | undefined
   const created = typeof rawTime?.created === 'number' ? rawTime.created : 0
+  const completed = typeof rawTime?.completed === 'number' ? rawTime.completed : undefined
   const text = entry.parts
     .map((part) => part.type === 'text' && 'text' in part ? String((part as { text: unknown }).text) : '')
     .join('')
   if (info.role === 'user') {
     return { id: String(info.id), time: { created }, text, type: 'user' }
   }
+  const toolPart = entry.parts.find((part) => part.type === 'tool') as {
+    id?: unknown
+    tool?: unknown
+    callID?: unknown
+    state?: Record<string, unknown>
+  } | undefined
+  if (toolPart !== undefined) {
+    const state = toolPart.state ?? {}
+    const output = typeof state.output === 'string'
+      ? state.output
+      : typeof (state.metadata as Record<string, unknown> | undefined)?.output === 'string'
+        ? String((state.metadata as Record<string, unknown>).output)
+        : ''
+    const status = state.status === 'error' ? 'error' : state.status === 'running' ? 'running' : 'completed'
+    const content = output === '' ? [] : [{ type: 'text', text: output }]
+    return {
+      id: String(info.id),
+      time: completed === undefined ? { created } : { created, completed },
+      type: 'assistant',
+      agent: typeof info.agent === 'string' ? info.agent : 'build',
+      model: {
+        id: typeof info.modelID === 'string' ? info.modelID : 'deepseek-chat',
+        providerID: typeof info.providerID === 'string' ? info.providerID : 'deepseek',
+      },
+      content: [{
+        type: 'tool',
+        id: String(toolPart.id ?? `tool:${String(toolPart.callID ?? '')}`),
+        name: typeof toolPart.tool === 'string' ? toolPart.tool : 'bash',
+        time: { created, ...(completed === undefined ? {} : { completed }) },
+        state: {
+          status,
+          input: state.input ?? {},
+          content,
+          structured: {},
+          ...(status === 'error'
+            ? { error: { type: 'unknown', message: String(state.error ?? output ?? 'shell failed') } }
+            : {}),
+        },
+      }],
+    } as unknown as SessionMessagesResponse['data'][number]
+  }
   return {
     id: String(info.id),
-    time: { created },
+    time: completed === undefined ? { created } : { created, completed },
     type: 'assistant',
     agent: typeof info.agent === 'string' ? info.agent : 'build',
     model: {
@@ -71,6 +113,7 @@ function remapV2Messages(
     // current preset while remapping history.
     const synthetic = String(message.id).startsWith('msg_cmd:')
       || String(message.id).startsWith('msg_preset:')
+      || String(message.id).startsWith('msg_shell:')
     if (surfaceId === undefined && sessionAgent === undefined) {
       remapped.push(message)
       continue

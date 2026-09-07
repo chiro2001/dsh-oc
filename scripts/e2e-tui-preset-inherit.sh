@@ -46,11 +46,35 @@ echo "  TUI ready"
 echo "== /preset minimal before any conversation =="
 tmux send-keys -t "$E2E_TUI_SESSION" '/preset minimal' Enter
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
-sleep 2
-e2e_tui_capture "$E2E_RUN_DIR/tui-preset-cmd.txt"
-if ! grep -qa 'minimal' "$E2E_RUN_DIR/tui-preset-cmd.txt"; then
-  echo "  note: /preset minimal result not matched in pane (continuing)" >&2
+PRESET_RESULT_SEEN=""
+deadline=$((SECONDS + 45))
+while (( SECONDS < deadline )); do
+  e2e_tui_capture "$E2E_RUN_DIR/tui-preset-cmd.txt"
+  if grep -qa 'Switched dsh agent preset to minimal' "$E2E_RUN_DIR/tui-preset-cmd.txt" \
+    || grep -qa 'preset switched to minimal' "$E2E_RUN_DIR/tui-preset-cmd.txt"; then
+    PRESET_RESULT_SEEN="1"
+    break
+  fi
+  if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+    echo "e2e: dsh exited before /preset result rendered: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if [[ -z "$PRESET_RESULT_SEEN" ]]; then
+  echo "e2e: /preset minimal result not rendered in the TUI" >&2
+  tail -40 "$E2E_RUN_DIR/tui-preset-cmd.txt" >&2 || true
+  exit 1
 fi
+# A final synthetic command assistant must carry time.completed. Without it,
+# the official TUI incorrectly labels the preceding "preset switched" card
+# QUEUED until another user prompt closes the turn (issue #5).
+if grep -qa 'QUEUED' "$E2E_RUN_DIR/tui-preset-cmd.txt"; then
+  echo "e2e: /preset switch card is still marked QUEUED" >&2
+  tail -40 "$E2E_RUN_DIR/tui-preset-cmd.txt" >&2 || true
+  exit 1
+fi
+echo "  /preset minimal result rendered without a stale QUEUED badge"
 
 echo "== create a fresh session (same bridge inherits lastAgentPreset) =="
 NEW_SID=""

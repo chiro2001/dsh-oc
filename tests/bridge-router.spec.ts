@@ -1313,6 +1313,222 @@ describe('bridge router: session routes', () => {
     })
   })
 
+  it('executes OpenCode shell mode through Agent maintenance and hydrates the synthetic tool card', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          id: 'live-s1',
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+        }),
+      },
+    }
+    const { server, router } = await boot(api, process.cwd())
+    const liveEvents: Array<{ payload: { type?: string } }> = []
+    const originalBroadcast = router.ctx.hub.broadcast.bind(router.ctx.hub)
+    ;(router.ctx.hub as unknown as {
+      broadcast(events: Array<{ payload: { type?: string } }>): void
+    }).broadcast = (events) => {
+      liveEvents.push(...events)
+      originalBroadcast(events as never)
+    }
+    const result = await request(server, 'POST', '/session/s1/shell', {
+      agent: 'build',
+      model: { providerID: 'deepseek-official', modelID: 'mock-model' },
+      command: 'printf shell-ok',
+    })
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({
+      info: { role: 'assistant', parentID: expect.stringMatching(/^msg_shell:user:/) },
+      parts: [{ type: 'tool', tool: 'bash', state: { status: 'completed' } }],
+    })
+    expect(liveEvents.filter((event) => event.payload.type === 'session.status')).toHaveLength(2)
+    expect(liveEvents.filter((event) => event.payload.type === 'session.idle')).toHaveLength(1)
+
+    const history = await request(server, 'GET', '/session/s1/message')
+    const entries = history.body as Array<{
+      info: { id: string; role: string }
+      parts: Array<{ type: string; tool?: string; state?: { status?: string; output?: string } }>
+    }>
+    expect(entries).toHaveLength(2)
+    expect(entries[0]?.info).toMatchObject({ role: 'user' })
+    expect(entries[0]?.info.id).toMatch(/^msg_shell:user:/)
+    expect(entries[1]?.info).toMatchObject({ role: 'assistant' })
+    expect(entries[1]?.info.id).toMatch(/^msg_shell:/)
+    expect(entries[1]?.parts[0]).toMatchObject({
+      type: 'tool',
+      tool: 'bash',
+      state: { status: 'completed', output: 'shell-ok' },
+    })
+    const v2 = await request(server, 'GET', '/api/session/s1/message')
+    const v2Messages = (v2.body as { data: Array<{ type?: string; content?: Array<{ type?: string; name?: string; state?: { status?: string } }> }> }).data
+    const v2Assistant = v2Messages.find((message) => message.type === 'assistant' && message.content?.some((part) => part.type === 'tool'))
+    expect(v2Assistant?.content?.[0]).toMatchObject({ type: 'tool', name: 'bash', state: { status: 'completed' } })
+  })
+
+  it('rejects shell mode when the host Agent maintenance seam is unavailable', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: { get: () => ({ id: 'live-s1' }) },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/shell', { agent: 'build', command: 'id' })
+    expect(result.status).toBe(500)
+    expect(result.body).toMatchObject({ name: 'InternalServerError', message: expect.stringContaining('runMaintenance') })
+  })
+
+  it('resolves a cold session Agent through sessionController before shell execution', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: { get: () => undefined },
+      sessionController: {
+        ...base.sessionController,
+        resolveAgent: async () => ({
+          agent: {
+            id: 'agent-1',
+            runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+          } as never,
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/shell', { agent: 'build', command: 'printf cold-shell-ok' })
+    expect(result.status).toBe(200)
+  })
+
+  it('rejects a concurrent shell on the same Agent before spawning a second child', async () => {
+    const base = fakeApi()
+    let active = false
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => {
+            if (active) throw new Error('agent already has active work')
+            active = true
+            try {
+              return await task(new AbortController().signal)
+            } finally {
+              active = false
+            }
+          },
+        }),
+      },
+    }
+    const { server } = await boot(api, process.cwd())
+    const first = request(server, 'POST', '/session/s1/shell', { agent: 'build', command: 'sleep 0.2' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const second = await request(server, 'POST', '/session/s1/shell', { agent: 'build', command: 'printf second' })
+    expect(second.status).toBe(409)
+    expect((await first).status).toBe(200)
+  })
+
+  it('maps shell body and missing-session failures to actionable HTTP errors', async () => {
+    const missing = fakeApi()
+    missing.sessionController = {
+      ...missing.sessionController,
+      resolveAgent: async () => errRpc('session-not-found', 'session missing'),
+    }
+    const missingServer = await boot(missing)
+    expect((await request(missingServer.server, 'POST', '/session/s1/shell', { agent: 'build', command: 'id' })).status)
+      .toBe(404)
+
+    const { server } = await boot(fakeApi())
+    expect((await request(server, 'POST', '/session/s1/shell', { command: 'id' })).status).toBe(400)
+    expect((await request(server, 'POST', '/session/s1/shell', { agent: '   ', command: 'id' })).status).toBe(400)
+  })
+
+  it('keeps stderr/exit text and aborts only the owned shell process', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+        }),
+      },
+    }
+    const { server } = await boot(api, process.cwd())
+    const failed = await request(server, 'POST', '/session/s1/shell', {
+      agent: 'build',
+      command: 'printf shell-stderr >&2; exit 7',
+    })
+    expect(failed.status).toBe(200)
+    const failedHistory = await request(server, 'GET', '/session/s1/message')
+    const failedPart = (failedHistory.body as Array<{ parts: Array<{ state?: { output?: string } }> }>)[1]?.parts[0]
+    expect(failedPart?.state?.output).toContain('shell-stderr')
+    expect(failedPart?.state?.output).toContain('[exit code: 7]')
+
+    const pending = request(server, 'POST', '/session/s1/shell', { agent: 'build', command: 'sleep 10' })
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    const aborted = await request(server, 'POST', '/session/s1/abort')
+    expect(aborted.status).toBe(200)
+    expect((await pending).status).toBe(200)
+    const abortedHistory = await request(server, 'GET', '/session/s1/message')
+    const abortedEntries = abortedHistory.body as Array<{
+      parts: Array<{ state?: { status?: string; output?: string; metadata?: { output?: string } } }>
+    }>
+    const abortedPart = abortedEntries.at(-1)?.parts[0]
+    expect(abortedPart?.state?.status).toBe('completed')
+    expect(abortedPart?.state?.output).toContain('User aborted the command')
+    const v2 = await request(server, 'GET', '/api/session/s1/message')
+    const v2Data = (v2.body as { data: Array<{ type?: string; content?: Array<{ type?: string; name?: string; state?: { status?: string; content?: Array<{ text?: string }> } }> }> }).data
+    const v2Shell = v2Data.findLast((message) => message.type === 'assistant'
+      && message.content?.some((part) => part.type === 'tool'
+        && part.state?.content?.some((item) => String(item.text ?? '').includes('User aborted the command'))))
+    expect(v2Shell?.content?.[0]).toMatchObject({
+      type: 'tool',
+      name: 'bash',
+      state: { status: 'completed', content: [{ text: expect.stringContaining('User aborted the command') }] },
+    })
+  })
+
+  it('bounds stdout retention, marks truncation, and lets the child drain to exit', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+        }),
+      },
+    }
+    const { server } = await boot(api, process.cwd())
+    const result = await request(server, 'POST', '/session/s1/shell', {
+      agent: 'build',
+      command: 'yes A | head -c 1200000',
+    })
+    expect(result.status).toBe(200)
+    const history = await request(server, 'GET', '/session/s1/message')
+    const part = (history.body as Array<{ parts: Array<{ state?: { status?: string; output?: string } }> }>)[1]?.parts[0]
+    expect(part?.state?.status).toBe('completed')
+    expect(part?.state?.output).toContain('[stdout truncated after 1048576 bytes]')
+    expect((part?.state?.output?.length ?? 0)).toBeLessThan(1_100_000)
+  })
+
+  it('aborts and forgets an owned shell when the host removes its session', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+        }),
+      },
+    }
+    const { server, router } = await boot(api, process.cwd())
+    const pending = request(server, 'POST', '/session/s1/shell', { agent: 'build', command: 'sleep 10' })
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    router.feedHostFrame({ type: 'host/session-removed', sessionId: 's1' })
+    expect((await pending).status).toBe(200)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    const history = await request(server, 'GET', '/session/s1/message')
+    expect(history.body).toEqual([])
+  })
+
   it('returns an empty skill catalog without sessions', async () => {
     const { server } = await boot(fakeApi())
     expect((await request(server, 'GET', '/skill')).body).toEqual([])
@@ -1945,12 +2161,20 @@ describe('bridge router: session routes', () => {
       ])
 
     const mergedV2 = await request(server, 'GET', '/api/session/s1/message')
-    expect((mergedV2.body as { data: Array<{ id: string; type: string }> }).data.map((entry) => [entry.id, entry.type]))
+    const mergedV2Data = (mergedV2.body as {
+      data: Array<{ id: string; type: string; time?: { created?: number; completed?: number } }>
+    }).data
+    expect(mergedV2Data.map((entry) => [entry.id, entry.type]))
       .toEqual([
         ['m-user-order', 'user'],
         ['m-assistant-order', 'assistant'],
         ['msg_cmd:order-check', 'assistant'],
       ])
+    // v2 hydration must keep the completion marker.  Dropping it here makes
+    // the OpenCode TUI reconstruct the preset command assistant as in-flight
+    // after refresh/reconnect and leaves the preceding echo QUEUED.
+    expect(mergedV2Data.find((entry) => entry.id === 'msg_cmd:order-check')?.time)
+      .toMatchObject({ created: 1100, completed: 1100 })
   })
 
   it('hydrates v1/v2 history with the immutable optimistic message keys', async () => {
@@ -3723,14 +3947,39 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const hub = router.ctx.hub
     const originalBroadcast = hub.broadcast.bind(hub)
     const broadcasts: Array<{ type?: string; agent?: string }> = []
+    const commandCards: Array<{
+      type?: string
+      info?: { id?: string; role?: string; time?: { created?: number; completed?: number } }
+      part?: { messageID?: string; time?: { start?: number; end?: number } }
+    }> = []
     ;(hub as unknown as {
-      broadcast(events: Array<{ payload: { type?: string; properties?: { info?: { agent?: string } } } }>): void
+      broadcast(events: Array<{
+        payload: {
+          type?: string
+          properties?: {
+            info?: { id?: string; role?: string; agent?: string; time?: { created?: number; completed?: number } }
+            part?: { messageID?: string; time?: { start?: number; end?: number } }
+          }
+        }
+      }>): void
     }).broadcast = (events) => {
       for (const event of events) {
         broadcasts.push({
           type: event.payload.type,
           agent: event.payload.properties?.info?.agent,
         })
+        if (event.payload.properties?.info?.id?.startsWith('msg_cmd:')) {
+          commandCards.push({
+            type: event.payload.type,
+            info: event.payload.properties.info,
+          })
+        }
+        if (event.payload.properties?.part?.messageID?.startsWith('msg_cmd:')) {
+          commandCards.push({
+            type: event.payload.type,
+            part: event.payload.properties.part,
+          })
+        }
       }
       originalBroadcast(events as never)
     }
@@ -3740,6 +3989,13 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     })
     expect(switched.status).toBe(200)
     expect(broadcasts).toContainEqual({ type: 'session.updated', agent: 'standard' })
+
+    const finishedInfo = commandCards.find((card) =>
+      card.type === 'message.updated' && card.info?.time?.completed !== undefined)
+    expect(finishedInfo?.info?.time?.completed).toBe(finishedInfo?.info?.time?.created)
+    const finishedPart = commandCards.find((card) =>
+      card.type === 'message.part.updated' && card.part?.time?.end !== undefined)
+    expect(finishedPart?.part?.time?.end).toBe(finishedPart?.part?.time?.start)
   })
 
   it('captures /preset from prompt routes without triggering a model turn', async () => {

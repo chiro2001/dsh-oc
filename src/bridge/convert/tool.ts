@@ -126,6 +126,9 @@ export function opencodeToolName(name: string, args: RecordValue): string {
     case 'bash':
     case 'bash-persistent':
       return 'bash'
+    case 'pwsh':
+    case 'powershell':
+      return 'powershell'
     case 'read':
     case 'fs-read':
     case 'read_image':
@@ -606,6 +609,8 @@ export function errorToolPart(
   const tool = opencodeToolName(call.name, input)
   const message = result.error?.name ?? result.error?.code ?? 'tool failed'
   const metadata = subagentMetadataForCall(call)
+  const output = resultText(result.content)
+  if (output.length > 0) metadata.output = output
   return {
     id: `tool:${call.callId}`,
     sessionID: options.sessionID,

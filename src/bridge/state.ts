@@ -134,6 +134,12 @@ export class InteractionState {
   private readonly stalePresetPrompts = new Map<string, { from: string; to: string }>()
   /** Recent bridge-only command result cards retained for history hydration. */
   private readonly recentCommandResults = new Map<string, V1MessageEntry[]>()
+  /** User shell executions currently owned by this bridge session. */
+  private readonly shellControllers = new Map<string, Set<AbortController>>()
+  /** In-flight shell maintenance promises, awaited during bridge teardown. */
+  private readonly shellPromises = new Map<string, Set<Promise<unknown>>>()
+  /** Sessions removed by the host while a shell callback is still draining. */
+  private readonly clearedSessions = new Set<string>()
   /** Mirror of each session's dsh pending inbox (next-turn / next-step). */
   readonly inboxProjections = new Map<string, InboxProjection>()
   /** Message ids already surfaced to the TUI as queued user messages. */
@@ -378,8 +384,71 @@ export class InteractionState {
     this.recentCommandResults.set(sessionId, results)
   }
 
+  /** Insert or replace one bridge-only card (used by running shell history). */
+  upsertCommandResult(sessionId: string, entry: V1MessageEntry): void {
+    const results = this.recentCommandResults.get(sessionId) ?? []
+    const index = results.findIndex((item) => item.info.id === entry.info.id)
+    if (index === -1) results.push(entry)
+    else results[index] = entry
+    if (results.length > 20) results.splice(0, results.length - 20)
+    this.recentCommandResults.set(sessionId, results)
+  }
+
   commandResultsFor(sessionId: string): readonly V1MessageEntry[] {
     return this.recentCommandResults.get(sessionId) ?? []
+  }
+
+  /** Register one shell cancellation controller and return its disposer. */
+  trackShellController(sessionId: string, controller: AbortController): () => void {
+    const controllers = this.shellControllers.get(sessionId) ?? new Set<AbortController>()
+    controllers.add(controller)
+    this.shellControllers.set(sessionId, controllers)
+    return () => {
+      controllers.delete(controller)
+      if (controllers.size === 0) this.shellControllers.delete(sessionId)
+    }
+  }
+
+  trackShellPromise(sessionId: string, promise: Promise<unknown>): () => void {
+    const promises = this.shellPromises.get(sessionId) ?? new Set<Promise<unknown>>()
+    promises.add(promise)
+    this.shellPromises.set(sessionId, promises)
+    return () => {
+      promises.delete(promise)
+      if (promises.size === 0) {
+        this.shellPromises.delete(sessionId)
+        if (this.clearedSessions.has(sessionId)) this.clearedSessions.delete(sessionId)
+      }
+    }
+  }
+
+  /** Abort only shell executions owned by this exact session. */
+  abortShell(sessionId: string): boolean {
+    const controllers = this.shellControllers.get(sessionId)
+    if (controllers === undefined || controllers.size === 0) return false
+    for (const controller of controllers) controller.abort()
+    return true
+  }
+
+  abortAllShells(): void {
+    for (const sessionId of this.shellControllers.keys()) this.abortShell(sessionId)
+  }
+
+  async waitForShells(timeoutMs = 1000): Promise<void> {
+    const pending = [...this.shellPromises.values()].flatMap((promises) => [...promises])
+    if (pending.length === 0) return
+    await Promise.race([
+      Promise.allSettled(pending).then(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+    ])
+  }
+
+  markSessionPresent(sessionId: string): void {
+    this.clearedSessions.delete(sessionId)
+  }
+
+  isSessionCleared(sessionId: string): boolean {
+    return this.clearedSessions.has(sessionId)
   }
 
   getSessionListCache(ttlMs: number): SessionSummary[] | undefined {
@@ -946,6 +1015,9 @@ export class InteractionState {
   }
 
   clearSession(sessionId: string): void {
+    this.abortShell(sessionId)
+    this.shellControllers.delete(sessionId)
+    this.clearedSessions.add(sessionId)
     this.sessionDirectories.delete(sessionId)
     this.sessionParents.delete(sessionId)
     this.sessionAddressModes.delete(sessionId)

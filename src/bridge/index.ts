@@ -376,6 +376,11 @@ export class OcBridgeService extends Service implements OcBridgeValue {
 
   private async stop(): Promise<void> {
     this.stopped = true
+    const state = this.router?.ctx.state
+    state?.abortAllShells()
+    // Allow the owned shell's SIGTERM grace ladder (3s) to settle before the
+    // bridge closes; this prevents a detached process group from orphaning.
+    await state?.waitForShells(4000)
     this.controlAbort?.abort()
     this.controlAbort = undefined
     this.broadcastPendingUiCleanup()
