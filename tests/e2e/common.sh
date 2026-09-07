@@ -44,6 +44,11 @@ E2E_PERMISSION_MODE=""
 E2E_FAKE_LOG=""
 E2E_BRIDGE_URL=""
 E2E_TUI_SESSION="dsh-oc-${E2E_BRANCH//[^A-Za-z0-9_-]/_}"
+E2E_TUI_ATTACH_PID=""
+E2E_TUI_IO_MONITOR_PID=""
+E2E_TUI_IO_MONITOR_LOG=""
+E2E_TUI_IO_MONITOR_WARN=""
+E2E_TUI_IO_MONITOR_SEQ=0
 
 # curl with retries for transient connect failures (CI/timing robustness).
 e2e_curl() {
@@ -87,6 +92,10 @@ e2e_new_run() {
   E2E_PERMISSION_MODE="$permission"
   E2E_FAKE_LOG="$E2E_RUN_DIR/fake.log"
   E2E_BRIDGE_URL=""
+  e2e_tui_io_monitor_cleanup
+  E2E_TUI_ATTACH_PID=""
+  E2E_TUI_IO_MONITOR_LOG=""
+  E2E_TUI_IO_MONITOR_WARN=""
   echo "e2e: run $E2E_RUNID ready (mock on 127.0.0.1:$E2E_MOCK_PORT)"
 }
 
@@ -140,6 +149,64 @@ e2e_stop_run() {
 
 # ---- real opencode TUI helpers -------------------------------------------
 
+# Stop only the optional observer owned by this shell helper. The observed
+# opencode PID is deliberately never a cleanup target; in normal operation the
+# observer exits itself when that process disappears.
+e2e_tui_io_monitor_cleanup() {
+  local monitor_pid="${E2E_TUI_IO_MONITOR_PID:-}"
+  [[ -n "$monitor_pid" ]] || return 0
+  local deadline=$((SECONDS + 5))
+  while kill -0 "$monitor_pid" 2>/dev/null; do
+    if (( SECONDS >= deadline )); then
+      kill "$monitor_pid" 2>/dev/null || true
+      break
+    fi
+    sleep 0.1
+  done
+  wait "$monitor_pid" 2>/dev/null || true
+  E2E_TUI_IO_MONITOR_PID=""
+}
+
+e2e_tui_io_monitor_start() {
+  local attach_pid="$1"
+  [[ "${DSH_OC_E2E_MONITOR_IO:-0}" == 1 ]] || return 0
+  [[ "$attach_pid" =~ ^[0-9]+$ ]] || {
+    echo "e2e: refusing I/O monitor for invalid attach PID: $attach_pid" >&2
+    return 1
+  }
+  e2e_tui_io_monitor_cleanup
+
+  local interval="${DSH_OC_E2E_MONITOR_INTERVAL:-0.25}"
+  local read_threshold="${DSH_OC_E2E_MONITOR_READ_THRESHOLD:-33554432}"
+  local stem="$E2E_RUN_DIR/opencode-attach-${attach_pid}"
+  local suffix=0
+  local log_file="${stem}.io.tsv"
+  local warning_file="${stem}.io.warn"
+  # A PID normally appears once per run. If a test reuses a PID, retain both
+  # observations instead of truncating the first one.
+  while [[ -e "$log_file" || -e "$warning_file" ]]; do
+    suffix=$((suffix + 1))
+    log_file="${stem}-${suffix}.io.tsv"
+    warning_file="${stem}-${suffix}.io.warn"
+  done
+
+  # No --start/--terminate-owned here: this is an observer for the exact
+  # opencode child found by e2e_tui_wait_attach. tee keeps warnings visible in
+  # the e2e stderr while preserving them beside the run's TSV log.
+  "$E2E_REPO_ROOT/scripts/monitor-process-io.sh" \
+    --pid "$attach_pid" \
+    --include-descendants \
+    --interval "$interval" \
+    --read-threshold "$read_threshold" \
+    --log "$log_file" \
+    2> >(tee -a "$warning_file" >&2) &
+  E2E_TUI_IO_MONITOR_PID=$!
+  E2E_TUI_IO_MONITOR_LOG="$log_file"
+  E2E_TUI_IO_MONITOR_WARN="$warning_file"
+  E2E_TUI_IO_MONITOR_SEQ=$((E2E_TUI_IO_MONITOR_SEQ + 1))
+  echo "e2e: observing opencode attach pid=$attach_pid (log=$log_file)"
+}
+
 # Start the real opencode TUI through dsh inside tmux; `extra` receives any
 # attach flags (e.g. `--session <id>`). `--print-logs` reaches the attach
 # command through oc-tui's arg filter.
@@ -147,6 +214,8 @@ e2e_tui_start() {
   local extra="${1:-}"
   local extra_env="${2:-}"
   local exit_file="$E2E_RUN_DIR/dsh-exit.txt"
+  e2e_tui_io_monitor_cleanup
+  E2E_TUI_ATTACH_PID=""
   tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
   tmux new-session -d -s "$E2E_TUI_SESSION" -x 240 -y 60
   tmux send-keys -t "$E2E_TUI_SESSION" "stty -a > '$E2E_RUN_DIR/stty-before.txt'" Enter
@@ -163,15 +232,31 @@ e2e_tui_wait_attach() {
   while (( SECONDS < deadline )); do
     local dsh_pid
     dsh_pid="$(ps -eo pid=,args= | awk -v overlay="$E2E_OVERLAY" '$0 ~ overlay && $0 ~ /dsh --profile/ { print $1; exit }')"
-    local attach_line
-    attach_line="$(ps -eo pid=,ppid=,args= | awk -v pid="$dsh_pid" '$2 == pid && $0 ~ /opencode attach http:\/\/127\.0\.0\.1:[0-9]/ { print; exit }')"
-    if [[ -n "$attach_line" ]]; then
+    local attach_info attach_pid attach_line
+    attach_info="$(ps -eo pid=,ppid=,args= | awk -v pid="$dsh_pid" '
+      $2 == pid {
+        command = $0
+        sub(/^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+/, "", command)
+        if (command ~ /(^|[[:space:]\/])opencode[[:space:]]+attach[[:space:]]+http:\/\/127\.0\.0\.1:[0-9]+([[:space:]]|$)/) {
+          print $1 "\t" command
+          exit
+        }
+      }')"
+    if [[ -n "$attach_info" ]]; then
+      attach_pid="${attach_info%%$'\t'*}"
+      attach_line="${attach_info#*$'\t'}"
+      if [[ ! "$attach_pid" =~ ^[0-9]+$ ]]; then
+        echo "e2e: parsed an invalid opencode attach PID: $attach_pid" >&2
+        return 1
+      fi
       if ps -eo pid=,ppid=,args= | awk -v pid="$dsh_pid" '$2 == pid && /opencode serve/ { found=1 } END { exit found ? 0 : 1 }'; then
         echo "e2e: unexpected opencode serve process" >&2
         return 1
       fi
       E2E_BRIDGE_URL="$(awk '{ for (i=1;i<=NF;i++) if ($i ~ /^http:\/\/127\.0\.0\.1:/) { print $i; exit } }' <<<"$attach_line")"
+      E2E_TUI_ATTACH_PID="$attach_pid"
       echo "e2e: opencode attach -> $E2E_BRIDGE_URL"
+      e2e_tui_io_monitor_start "$attach_pid"
       return 0
     fi
     if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
@@ -222,6 +307,7 @@ e2e_tui_exit() {
     e2e_tui_capture "$E2E_RUN_DIR/tui-stuck.txt"
     return 1
   fi
+  e2e_tui_io_monitor_cleanup
   grep -q '^DSH_EXIT=0$' "$exit_file"
   echo "  dsh exit: $(cat "$exit_file")"
 }

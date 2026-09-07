@@ -87,6 +87,7 @@ bash scripts/e2e-real-queued-order.sh     # manual：真实模型排队错序 wi
 bash scripts/e2e-minimal-server-repro.sh  # 官方最小 server 归因：脚本化事件 → 官方 TUI 渲染顺序
 scripts/monitor-process-io.sh --pid <pid> --log <tsv> # 默认 observe-only 的 I/O/RSS/CPU 观察
 tests/e2e/fake-opencode-idle.sh           # fake attach 空闲无 EOF 忙循环回归
+tests/e2e/monitor-process-io-attach.sh    # exact attach PID/log/无目标 kill shell 回归
  ```
 
 本地直连 dsh profile（实时验证）：`dsh plugin --profile oc add .`；改代码后
@@ -157,6 +158,12 @@ dsh --profile oc --help                                            # 验证版�
 - **SSE 断线契约**：`SseHub` 保留受事件数/序列化字节双上限约束的 ring，消费
   `Last-Event-ID` 严格回放其后的事件；游标淘汰或未知时记录告警并回放当前
   status/control snapshot。每连接不触发 history/list 扫描。
+- **e2e TUI I/O 观察**：设置 `DSH_OC_E2E_MONITOR_IO=1` 后，
+  `tests/e2e/common.sh` 在 `e2e_tui_wait_attach` 中精确解析当前 run 的
+  `opencode attach` PID，以 observe-only monitor 记录到该 run 目录；默认
+  `0.25s` / `32MiB` read 窗口可由 `DSH_OC_E2E_MONITOR_INTERVAL` /
+  `DSH_OC_E2E_MONITOR_READ_THRESHOLD` 覆盖。监控随目标退出，不按名称结束目标；
+  必要清理只允许结束 monitor 自身 PID。
 - **兼容边界**：dsh-dcp rc.6 仍读取已移除的 `session.events`，bridge 暂时
   安装 `snapshotEvents()` getter shim；dcp 升级到兼容 dsh 0.1.2 后删除。
 

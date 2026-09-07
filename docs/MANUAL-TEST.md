@@ -164,3 +164,12 @@ fake binary 不再因 EOF 忙循环消耗 CPU/I/O。
 `rchar` 增量和阈值告警；`tests/e2e/monitor-process-io-owned.sh` 验证
 忽略 TERM 的 owned child、root 提前退出后仍存活的 child，以及外部 PID
 终止保护。
+
+真实 TUI e2e 可选设置 `DSH_OC_E2E_MONITOR_IO=1`。此时
+`e2e_tui_wait_attach` 精确取得当前 run 的 `opencode attach` PID，并以
+observe-only 模式采样其进程树；日志和告警分别写入当前
+`E2E_RUN_DIR/opencode-attach-<pid>*.io.tsv` / `.io.warn`，告警仍同步到 stderr。
+默认采样间隔为 `0.25s`、read 窗口阈值为 `32MiB`，可用
+`DSH_OC_E2E_MONITOR_INTERVAL` 与 `DSH_OC_E2E_MONITOR_READ_THRESHOLD` 覆盖。
+该接线不传 `--terminate-owned`，不会按名称结束 TUI；目标退出后监控自然结束。
+对应的无 TUI shell 回归为 `tests/e2e/monitor-process-io-attach.sh`。
