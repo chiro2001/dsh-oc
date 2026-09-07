@@ -68,26 +68,24 @@ recovery_signature_v2 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/pre-crash-v2.json"
 recovery_signature_v1 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/pre-crash-v1.json"
 echo "  pre-crash signature saved"
 
-DSH_PID="$(ps -eo pid=,args= | awk -v overlay="$E2E_OVERLAY" '$0 ~ overlay && $0 ~ /dsh --profile/ { print $1; exit }')"
-if [[ -z "$DSH_PID" ]]; then
+DSH_PID="$E2E_TUI_DSH_PID"
+if [[ ! "$DSH_PID" =~ ^[0-9]+$ ]] || ! ps -p "$DSH_PID" >/dev/null 2>&1; then
   echo "e2e: cannot locate dsh process for crash" >&2
   exit 1
 fi
 echo "  SIGKILL dsh $DSH_PID"
-# Capture the exact attach child while its parent relationship still exists.
-# Once dsh is SIGKILLed the child is re-parented to PID 1, so looking it up
-# afterwards cannot find it and repeated crash runs leak a busy opencode TUI.
-ATTACH_PIDS="$(ps -eo ppid=,pid=,args= | awk -v pid="$DSH_PID" '$1 == pid && $0 ~ /opencode attach http:\/\/127\.0\.0\.1:/ { print $2 }')"
-if [[ -z "$ATTACH_PIDS" ]]; then
+ATTACH_PID="$E2E_TUI_ATTACH_PID"
+ATTACH_PARENT="$(ps -p "$ATTACH_PID" -o ppid= 2>/dev/null | tr -d '[:space:]' || true)"
+ATTACH_ARGS="$(ps -p "$ATTACH_PID" -o args= 2>/dev/null || true)"
+if [[ ! "$ATTACH_PID" =~ ^[0-9]+$ || "$ATTACH_PARENT" != "$DSH_PID" \
+  || "$ATTACH_ARGS" != *"opencode attach http://127.0.0.1:"* ]]; then
   echo "e2e: cannot locate the exact attach child before dsh crash; refusing to run an unscoped kill" >&2
   exit 1
 fi
 kill -9 "$DSH_PID"
 # The opencode attach child becomes an orphan; kill only the exact child that
 # was observed under this run's dsh parent, never a process found by name.
-if [[ -n "$ATTACH_PIDS" ]]; then
-  kill -9 $ATTACH_PIDS 2>/dev/null || true
-fi
+kill -9 "$ATTACH_PID" 2>/dev/null || true
 deadline=$((SECONDS + 15))
 while (( SECONDS < deadline )); do
   if ! ps -p "$DSH_PID" >/dev/null 2>&1; then break; fi

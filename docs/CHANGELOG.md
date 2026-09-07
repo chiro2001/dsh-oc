@@ -25,6 +25,9 @@
   精确子 PID，并增加 run-scoped leftover 断言。
 - `flake-mini-scan.sh` 不再按进程名清理外部 orphan；协调器只做 observe-only
   告警，进程回收由创建该 PID/进程组的具体 e2e 负责。
+- 崩溃恢复 e2e 从当前 tmux pane 精确记录 dsh/attach 父子 PID，避免系统 PID
+  回绕时 `ps | awk` 自匹配并误取低位 awk PID；SIGKILL 仍只作用于该 run 已验证
+  的两个 PID。
 - v2 会话摘要与 fallback 现在同样输出 subagent `metadata.origin`；历史中多个
   同父/同描述 child 按 label 或 parent-local FIFO 绑定，v1/v2 不再复用同一个 child。
 

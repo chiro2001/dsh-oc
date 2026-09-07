@@ -45,6 +45,7 @@ E2E_FAKE_LOG=""
 E2E_BRIDGE_URL=""
 E2E_TUI_SESSION="dsh-oc-${E2E_BRANCH//[^A-Za-z0-9_-]/_}"
 E2E_TUI_ATTACH_PID=""
+E2E_TUI_DSH_PID=""
 E2E_TUI_IO_MONITOR_PID=""
 E2E_TUI_IO_MONITOR_LOG=""
 E2E_TUI_IO_MONITOR_WARN=""
@@ -219,6 +220,8 @@ e2e_tui_start() {
   E2E_TUI_ATTACH_PID=""
   tmux kill-session -t "$E2E_TUI_SESSION" 2>/dev/null || true
   tmux new-session -d -s "$E2E_TUI_SESSION" -x 240 -y 60
+  E2E_TUI_DSH_PID=""
+  E2E_TUI_ATTACH_PID=""
   tmux send-keys -t "$E2E_TUI_SESSION" "stty -a > '$E2E_RUN_DIR/stty-before.txt'" Enter
   sleep 1
   local cmd
@@ -231,8 +234,11 @@ e2e_tui_start() {
 e2e_tui_wait_attach() {
   local deadline=$((SECONDS + 60))
   while (( SECONDS < deadline )); do
-    local dsh_pid
-    dsh_pid="$(ps -eo pid=,args= | awk -v overlay="$E2E_OVERLAY" '$0 ~ overlay && $0 ~ /dsh --profile/ { print $1; exit }')"
+    local pane_pid dsh_pid
+    pane_pid="$(tmux display-message -p -t "$E2E_TUI_SESSION" '#{pane_pid}' 2>/dev/null || true)"
+    dsh_pid="$(ps -eo pid=,ppid=,args= | awk -v pane="$pane_pid" -v overlay="$E2E_OVERLAY" '
+      $2 == pane && index($0, overlay) > 0 && /dsh --profile/ { print $1; exit }
+    ')"
     local attach_info attach_pid attach_line
     attach_info="$(ps -eo pid=,ppid=,args= | awk -v pid="$dsh_pid" '
       $2 == pid {
@@ -255,6 +261,7 @@ e2e_tui_wait_attach() {
         return 1
       fi
       E2E_BRIDGE_URL="$(awk '{ for (i=1;i<=NF;i++) if ($i ~ /^http:\/\/127\.0\.0\.1:/) { print $i; exit } }' <<<"$attach_line")"
+      E2E_TUI_DSH_PID="$dsh_pid"
       E2E_TUI_ATTACH_PID="$attach_pid"
       echo "e2e: opencode attach -> $E2E_BRIDGE_URL"
       e2e_tui_io_monitor_start "$attach_pid"

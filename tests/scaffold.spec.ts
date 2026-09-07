@@ -129,6 +129,16 @@ describe('flake scan process safety', () => {
     expect(script).not.toMatch(/^\s*kill(?:\s+-9)?\b/m)
     expect(script).not.toMatch(/xargs[^\n]*\bkill\b/)
   })
+
+  it('pins crash cleanup to the dsh/attach PIDs discovered from its tmux pane', () => {
+    const common = read('tests/e2e/common.sh')
+    const crash = read('scripts/e2e-recovery-crash.sh')
+    expect(common).toContain('E2E_TUI_DSH_PID="$dsh_pid"')
+    expect(common).toContain('$2 == pane && index($0, overlay) > 0')
+    expect(crash).toContain('DSH_PID="$E2E_TUI_DSH_PID"')
+    expect(crash).toContain('ATTACH_PID="$E2E_TUI_ATTACH_PID"')
+    expect(crash).not.toMatch(/ps -eo pid=,args=.*\/dsh --profile\//)
+  })
 })
 
 describe('src constants', () => {
