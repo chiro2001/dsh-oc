@@ -122,6 +122,15 @@ describe('question e2e fixture', () => {
   })
 })
 
+describe('flake scan process safety', () => {
+  it('keeps pre-existing opencode processes observe-only', () => {
+    const script = read('scripts/flake-mini-scan.sh')
+    expect(script).toContain('observe-only warning')
+    expect(script).not.toMatch(/^\s*kill(?:\s+-9)?\b/m)
+    expect(script).not.toMatch(/xargs[^\n]*\bkill\b/)
+  })
+})
+
 describe('src constants', () => {
   it('exports the pinned opencode version and commit', async () => {
     const mod = await import('../src/index.ts')

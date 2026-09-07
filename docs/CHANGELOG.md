@@ -23,6 +23,8 @@
 - 修复 `e2e-recovery-crash.sh` 在 SIGKILL dsh 后无法找到已 reparent 的
   `opencode attach` child、导致高 CPU orphan 泄漏的问题；现在在 kill 前锁定
   精确子 PID，并增加 run-scoped leftover 断言。
+- `flake-mini-scan.sh` 不再按进程名清理外部 orphan；协调器只做 observe-only
+  告警，进程回收由创建该 PID/进程组的具体 e2e 负责。
 - v2 会话摘要与 fallback 现在同样输出 subagent `metadata.origin`；历史中多个
   同父/同描述 child 按 label 或 parent-local FIFO 绑定，v1/v2 不再复用同一个 child。
 

@@ -33,24 +33,29 @@ SUMMARY="$OUT_DIR/summary.json"
 START_EPOCH="$(date +%s)"
 FAILED=0
 
-# Drop orphaned opencode attach processes from previous crash runs (parent
-# dsh is gone); live user sessions have a dsh parent and are left alone.
-cleanup_orphans() {
-  ps -eo ppid=,pid=,args= | awk '
+# External processes are observe-only. Individual e2e scripts own and clean
+# the exact PIDs/process groups they started; this coordinator must never
+# kill a process merely because its command line looks like opencode.
+report_external_orphans() {
+  local pids
+  pids="$(ps -eo ppid=,pid=,args= | awk '
     $1 == 1 && /opencode attach http:\/\/127\.0\.0\.1:/ { print $2 }
-  ' | xargs -r kill -9 2>/dev/null || true
+  ' | xargs 2>/dev/null || true)"
+  if [[ -n "$pids" ]]; then
+    echo "flake-mini-scan: observe-only warning: pre-existing orphan opencode PID(s): $pids" >&2
+  fi
 }
 
 echo "flake-mini-scan: ${RUNS} runs x [${SCRIPTS}]"
 echo "flake-mini-scan: output $OUT_DIR"
 
 results=()
+report_external_orphans
 for script in $SCRIPTS; do
   passes=0
   durations=()
   failures=0
   for (( n = 1; n <= RUNS; n++ )); do
-    cleanup_orphans
     log="$OUT_DIR/${script%.sh}-${n}.log"
     t0="$SECONDS"
     set +e
