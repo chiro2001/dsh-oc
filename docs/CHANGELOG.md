@@ -14,10 +14,12 @@
 - 新增 `scripts/e2e-tui-subagent.sh`，使用隔离 dsh profile、真实
   `opencode attach` 和精确 PID observe-only I/O monitor 验证 Task 卡片及 child
   导航；加强短 TUI turn 的首条 user 顺序和两轮去重 oracle。
-- 修复 dsh `turn/start` 先于 `user/message` 时 provisional assistant 的时间键在
-  final 更新阶段漂移，避免官方 TUI 生成第二张回复卡；补充延迟 durable user echo
-  的事件回归。API e2e 分页改为跨真实 turn 验证，并对 synthetic command card 与
-  既有外部 orphan 进程做安全隔离诊断。
+- 修复 dsh `turn/start` 先于 `user/message` 时 optimistic user / provisional
+  assistant 的时间键在 final 或 history hydration 阶段漂移，避免官方 TUI 将同一
+  reasoning / tool call 渲染成两张卡；补充延迟 durable user echo 的事件回归，
+  并让真实 TUI turn e2e 对面板中的 tool card 做 exactly-once 断言。API e2e 分页
+  改为跨真实 turn 验证，并对 synthetic command card 与既有外部 orphan 进程做
+  安全隔离诊断。
 - 修复 `e2e-recovery-crash.sh` 在 SIGKILL dsh 后无法找到已 reparent 的
   `opencode attach` child、导致高 CPU orphan 泄漏的问题；现在在 kill 前锁定
   精确子 PID，并增加 run-scoped leftover 断言。

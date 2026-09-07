@@ -106,13 +106,16 @@ function remapV2Messages(
       if (created !== undefined && result.type === 'assistant') {
         const time = {
           ...result.time,
-          // Keep the converter's user-aware timestamp when a stale
-          // turn-start canonical value is still present in bridge state.
-          created: Math.max(result.time.created, created),
+          // Reuse the immutable key of the live provisional card.
+          created,
         }
         if (ctx.state.isAssistantPending(sessionId, assistantId)) delete time.completed
         result = { ...result, time }
       }
+    }
+    if (promptId !== undefined && result.type === 'user') {
+      const created = ctx.state.promptMessageCreatedAt(sessionId, promptId)
+      if (created !== undefined) result = { ...result, time: { ...result.time, created } }
     }
     if (surfaceId !== undefined && result.type === 'assistant') {
       const existing = remapped.find((candidate) => candidate.id === surfaceId)

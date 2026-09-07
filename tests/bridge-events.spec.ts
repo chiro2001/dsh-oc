@@ -344,14 +344,14 @@ describe('bridge events: session event mapping', () => {
       .filter((event) => event.payload.type === 'message.updated')
       .map((event) => event.payload.properties.info as { id?: string; role?: string; time?: { created?: number } })
       .filter((info) => info.role === 'assistant' && info.id === 'prompt-assistant-1')
-    // The initial provisional card keeps its original identity; once the
-    // durable user row is observed, final/live updates use the stricter
-    // assistant key that history remapping also exposes.
+    // Every replacement keeps the exact key of the first provisional card.
+    // OpenCode treats a changed `time.created` as a second message even when
+    // the id is unchanged.
     expect(assistantUpdates).toHaveLength(3)
-    expect(assistantUpdates.map((info) => info.time?.created)).toEqual([1101, 1111, 1111])
+    expect(assistantUpdates.map((info) => info.time?.created)).toEqual([1101, 1101, 1101])
   })
 
-  it('raises the provisional canonical time before history remap after a late user', () => {
+  it('does not change the provisional canonical time after a late durable user echo', () => {
     const state = new InteractionState()
     // Keep the optimistic timestamp below the durable event timestamps to
     // reproduce turn/start opening the card before user/message is observed.
@@ -373,7 +373,7 @@ describe('bridge events: session event mapping', () => {
       sessionId: 's1',
       event: makeUserEvent('hello', 'dsh-user-1', 1100),
     })])).toEqual([])
-    expect(state.assistantMessageCreatedAt('s1', 'prompt-assistant-1')).toBe(1101)
+    expect(state.assistantMessageCreatedAt('s1', 'prompt-assistant-1')).toBe(1000)
 
     const reply = translate([frame({
       type: 'session/event',
@@ -383,7 +383,7 @@ describe('bridge events: session event mapping', () => {
     expect(reply.findLast((event) =>
       event.payload.type === 'message.updated'
       && (event.payload.properties.info as { role?: string }).role === 'assistant')?.payload.properties)
-      .toMatchObject({ info: { id: 'prompt-assistant-1', time: { created: 1101, completed: 1200 } } })
+      .toMatchObject({ info: { id: 'prompt-assistant-1', time: { created: 1000, completed: 1200 } } })
   })
 
   it('silently ignores log-only session events without log noise', () => {

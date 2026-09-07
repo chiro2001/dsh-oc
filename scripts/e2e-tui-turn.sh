@@ -25,7 +25,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-e2e_new_run "tui-turn" "danger-full-access" "tool_call_success,success,success,success,success,success,success,success" "0" \
+e2e_new_run "tui-turn" "danger-full-access" "tool_call_success,success,success,tool_call_success,success,success,success,success" "0" \
   '{"command":"echo dsh-oc-e2e-tool","description":"e2e tool call"}'
 
 echo "== seed sessions through the bridge API =="
@@ -180,12 +180,20 @@ FINAL_ASSISTANT_COUNT="$(jq '[.[] | select(.info.role == "assistant")] | length'
 SEED_PROMPT_COUNT="$(jq '[.[] | select(.info.role == "user") | .parts[]?.text // empty | select(. == "e2e seed: tool session")] | length' <<<"$FINAL_HISTORY")"
 KEYBOARD_PROMPT_COUNT="$(jq '[.[] | select(.info.role == "user") | .parts[]?.text // empty | select(. == "e2e tui prompt: hello")] | length' <<<"$FINAL_HISTORY")"
 REPLY_COUNT="$(jq '[.[] | select(.info.role == "assistant") | .parts[]?.text // empty | select(. == "mock response recovered")] | length' <<<"$FINAL_HISTORY")"
+FINAL_TOOL_COUNT="$(jq '[.. | objects | select(.type == "tool" and .tool == "bash")] | length' <<<"$FINAL_HISTORY")"
 if [[ "$FINAL_USER_COUNT" != "2" || "$FINAL_ASSISTANT_COUNT" -le "$SEED_ASSISTANT_COUNT" \
-  || "$SEED_PROMPT_COUNT" != "1" || "$KEYBOARD_PROMPT_COUNT" != "1" || "$REPLY_COUNT" != "2" ]]; then
-  echo "e2e: two-turn duplicate/order oracle failed (users=$FINAL_USER_COUNT assistants=$FINAL_ASSISTANT_COUNT seed=$SEED_PROMPT_COUNT keyboard=$KEYBOARD_PROMPT_COUNT replies=$REPLY_COUNT)" >&2
+  || "$SEED_PROMPT_COUNT" != "1" || "$KEYBOARD_PROMPT_COUNT" != "1" || "$REPLY_COUNT" != "2" \
+  || "$FINAL_TOOL_COUNT" != "2" ]]; then
+  echo "e2e: two-turn duplicate/order oracle failed (users=$FINAL_USER_COUNT assistants=$FINAL_ASSISTANT_COUNT seed=$SEED_PROMPT_COUNT keyboard=$KEYBOARD_PROMPT_COUNT replies=$REPLY_COUNT tools=$FINAL_TOOL_COUNT)" >&2
   exit 1
 fi
-echo "  two-turn history has exactly one copy of each user prompt and reply"
+e2e_tui_capture "$E2E_RUN_DIR/tui-turn-final.txt"
+PANE_TOOL_COUNT="$(grep -Fc '$ echo dsh-oc-e2e-tool' "$E2E_RUN_DIR/tui-turn-final.txt" || true)"
+if [[ "$PANE_TOOL_COUNT" != "2" ]]; then
+  echo "e2e: real TUI rendered the two tool cards $PANE_TOOL_COUNT times (expected 2)" >&2
+  exit 1
+fi
+echo "  two-turn history and real TUI each contain one copy of both tool calls"
 
 echo "== exit through prompt submit =="
 e2e_tui_exit

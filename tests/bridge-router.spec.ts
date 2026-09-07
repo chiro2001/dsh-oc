@@ -914,7 +914,7 @@ describe('bridge router: session routes', () => {
       },
     }
     const { server, router } = await boot(api)
-    router.ctx.state.registerPromptMessageId('s1', 'msg_user_1')
+    router.ctx.state.registerPromptMessageId('s1', 'msg_user_1', 900)
     expect(router.ctx.state.takePromptMessageId('s1', 'dsh-user-1')).toBe('msg_user_1')
     router.ctx.state.recordAssistantId('s1', 'dsh-tool', 'msg_tool_1')
     router.ctx.state.recordAssistantId('s1', 'dsh-text', 'msg_text_1')
@@ -928,21 +928,22 @@ describe('bridge router: session routes', () => {
     expect(v1Body[0]?.info.id).toBe('msg_user_1')
     expect(v1Body[1]?.info.parentID).toBe('msg_user_1')
     expect(v1Body[2]?.info.parentID).toBe('msg_tool_1')
-    expect((v1Body[1]?.info.time as { created?: number }).created).toBe(1100)
-    expect((v1Body[2]?.info.time as { created?: number }).created).toBe(1200)
+    expect((v1Body[0]?.info.time as { created?: number }).created).toBe(900)
+    expect((v1Body[1]?.info.time as { created?: number }).created).toBe(1050)
+    expect((v1Body[2]?.info.time as { created?: number }).created).toBe(1150)
     expect((v1Body[1]?.info.time as { completed?: number }).completed).toBeUndefined()
 
     const v2 = await request(server, 'GET', '/api/session/s1/message')
     const v2Body = v2.body as { data: Array<{ id: string; type?: string; time?: { created?: number; completed?: number } }> }
     expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')).toMatchObject({
       type: 'assistant',
-      time: { created: 1100 },
+      time: { created: 1050 },
     })
     expect(v2Body.data.find((entry) => entry.id === 'msg_text_1')).toMatchObject({
       type: 'assistant',
-      time: { created: 1200 },
+      time: { created: 1150 },
     })
-    expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.created).toBe(1100)
+    expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.created).toBe(1050)
     expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.completed).toBeUndefined()
 
     const ids = new Set(v1Body.map((entry) => entry.info.id))
@@ -1952,7 +1953,7 @@ describe('bridge router: session routes', () => {
       ])
   })
 
-  it('does not let a stale provisional timestamp override v1/v2 history', async () => {
+  it('hydrates v1/v2 history with the immutable optimistic message keys', async () => {
     const base = fakeApi()
     const history = [
       { event: sessionEvent('turn/start', { turn: 1 }, 1, 1000) },
@@ -1967,23 +1968,29 @@ describe('bridge router: session routes', () => {
       },
     }
     const { server, router } = await boot(api)
-    router.ctx.state.registerPromptMessageId('s1', 'prompt-user-order', 0)
+    router.ctx.state.registerPromptMessageId('s1', 'prompt-user-order', 990)
     router.ctx.state.registerAssistantIdForUser('s1', 'prompt-user-order', 'prompt-assistant-order')
     expect(router.ctx.state.takePromptMessageId('s1', 'dsh-user-order')).toBe('prompt-user-order')
     router.ctx.state.recordAssistantId('s1', 'dsh-assistant-order', 'prompt-assistant-order')
-    // Simulate the old turn/start canonical value still present when the
-    // history endpoint is hydrated after the durable user row.
+    // Simulate the exact key already published by turn/start before the
+    // durable user row arrives.
     router.ctx.state.setAssistantMessageCreatedAt('s1', 'prompt-assistant-order', 1000)
 
     const v1 = await request(server, 'GET', '/session/s1/message')
-    const v1Assistant = (v1.body as Array<{ info: { id: string; role: string; time: { created: number } } }>)
+    const v1Body = v1.body as Array<{ info: { id: string; role: string; time: { created: number } } }>
+    const v1User = v1Body.find((entry) => entry.info.role === 'user')
+    const v1Assistant = v1Body
       .find((entry) => entry.info.role === 'assistant')
-    expect(v1Assistant?.info).toMatchObject({ id: 'prompt-assistant-order', time: { created: 1101 } })
+    expect(v1User?.info).toMatchObject({ id: 'prompt-user-order', time: { created: 990 } })
+    expect(v1Assistant?.info).toMatchObject({ id: 'prompt-assistant-order', time: { created: 1000 } })
 
     const v2 = await request(server, 'GET', '/api/session/s1/message')
-    const v2Assistant = (v2.body as { data: Array<{ id: string; type: string; time: { created: number } }> }).data
+    const v2Body = (v2.body as { data: Array<{ id: string; type: string; time: { created: number } }> }).data
+    const v2User = v2Body.find((entry) => entry.type === 'user')
+    const v2Assistant = v2Body
       .find((entry) => entry.type === 'assistant')
-    expect(v2Assistant).toMatchObject({ id: 'prompt-assistant-order', time: { created: 1101 } })
+    expect(v2User).toMatchObject({ id: 'prompt-user-order', time: { created: 990 } })
+    expect(v2Assistant).toMatchObject({ id: 'prompt-assistant-order', time: { created: 1000 } })
   })
 
   it('closes the rc.1 follow iterator after reading the history snapshot', async () => {

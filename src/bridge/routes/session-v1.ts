@@ -41,17 +41,20 @@ function remapV1Messages(
         ? { agent: sessionAgent }
         : {}),
     }
+    if (promptId !== undefined) {
+      const created = ctx.state.promptMessageCreatedAt(sessionId, promptId)
+      const time = info.time as { created?: unknown; completed?: unknown } | undefined
+      if (created !== undefined) info.time = { ...(time ?? {}), created }
+    }
     if (assistantId !== undefined) {
       const created = ctx.state.assistantMessageCreatedAt(sessionId, assistantId)
       const time = info.time as { created?: unknown; completed?: unknown } | undefined
       if (created !== undefined) {
-        const current = typeof time?.created === 'number' ? time.created : undefined
         const normalizedTime = {
           ...(time ?? {}),
-          // History conversion may have observed the user after the
-          // turn-start provisional card.  Never let an older canonical value
-          // move that assistant key backwards during remapping.
-          created: current === undefined ? created : Math.max(current, created),
+          // Reuse the live card's immutable identity. The converter's first
+          // content-block time is often later and would duplicate the card.
+          created,
         }
         if (ctx.state.isAssistantPending(sessionId, assistantId)) delete normalizedTime.completed
         info.time = normalizedTime
@@ -59,13 +62,25 @@ function remapV1Messages(
     }
     const mapped: { info: Record<string, unknown>; parts: Array<Record<string, unknown>> } = {
       info,
-      parts: entry.parts.map((part) => ({
-        ...part,
-        ...(surfaceId === undefined ? {} : {
-          id: String(part.id).replaceAll(dshId, surfaceId),
-          messageID: surfaceId,
-        }),
-      })),
+      parts: entry.parts.map((part) => {
+        const promptCreated = promptId === undefined
+          ? undefined
+          : ctx.state.promptMessageCreatedAt(sessionId, promptId)
+        return {
+          ...part,
+          ...(surfaceId === undefined ? {} : {
+            id: String(part.id).replaceAll(dshId, surfaceId),
+            messageID: surfaceId,
+          }),
+          ...(promptCreated === undefined ? {} : {
+            time: {
+              ...((part.time as Record<string, unknown> | undefined) ?? {}),
+              start: promptCreated,
+              end: promptCreated,
+            },
+          }),
+        }
+      }),
     }
     if (surfaceId !== undefined) {
       // The same bridge id may cover the tool-call step and the follow-up

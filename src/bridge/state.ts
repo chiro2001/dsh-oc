@@ -614,7 +614,9 @@ export class InteractionState {
     if (queue !== undefined && queue.length === 0) this.promptMessageIds.delete(sessionId)
     if (promptId === undefined) return dshId
     this.dshPromptMessageIds.set(`${sessionId}\u0000${dshId}`, promptId)
-    this.promptMessageTimes.delete(`${sessionId}\u0000${promptId}`)
+    // Keep the optimistic timestamp for history hydration. The durable echo
+    // is normally a few milliseconds later, but the TUI has already keyed
+    // and rendered this card with the original value.
     return promptId
   }
 
@@ -655,14 +657,10 @@ export class InteractionState {
   /** Record the timestamp chosen for a live assistant card. */
   setAssistantMessageCreatedAt(sessionId: string, assistantId: string, createdAt: number): void {
     const key = `${sessionId}\u0000${assistantId}`
-    // Keep the canonical timestamp monotonic. A durable user/message can be
-    // observed after turn/start, so its assistant lower bound may be later
-    // than the provisional value recorded for the same prompt. Conversely,
-    // never move an already-later timestamp backwards.
-    const existing = this.assistantMessageTimes.get(key)
-    if (existing === undefined || createdAt > existing) {
-      this.assistantMessageTimes.set(key, createdAt)
-    }
+    // `id + time.created` is the official TUI's message-card identity. Once
+    // a provisional card is published, changing the time creates a second
+    // card instead of updating the first one.
+    if (!this.assistantMessageTimes.has(key)) this.assistantMessageTimes.set(key, createdAt)
   }
 
   markAssistantPending(sessionId: string, assistantId: string): void {

@@ -1129,25 +1129,6 @@ export class MuxEventTranslator {
         const surfaceId = isUserPrompt
           ? this.deps.state.takePromptMessageId(sessionId, dshId)
           : dshId
-        if (isUserPrompt) {
-          // A turn/start may have opened the assistant card before this
-          // durable user row. Advance the canonical assistant timestamp now
-          // so history remapping cannot restore the old turn-start key.
-          const promptId = this.deps.state.promptIdForDshId(sessionId, dshId) ?? surfaceId
-          const assistantId = this.deps.state.assistantIdForUser(sessionId, promptId)
-          if (assistantId !== undefined) {
-            this.deps.state.setAssistantMessageCreatedAt(sessionId, assistantId, event.time + 1)
-            // Keep the stream-local identity in step with the canonical
-            // value. This makes the later assistant/message and turn/end
-            // paths agree with history hydration after a late user echo.
-            for (const [stepKey, provisionalId] of stream.provisionalMessageIds) {
-              if (provisionalId !== assistantId) continue
-              const current = stream.provisionalMessageCreatedAt.get(stepKey)
-              const created = Math.max(current ?? Number.MIN_SAFE_INTEGER, event.time + 1)
-              stream.provisionalMessageCreatedAt.set(stepKey, created)
-            }
-          }
-        }
         if (isUserPrompt && surfaceId !== dshId) {
           // The prompt route already echoed this user message (with the
           // bridge-generated id) so the TUI could render its queued card
@@ -1331,9 +1312,8 @@ export class MuxEventTranslator {
         // it byte-for-byte stable and only apply the user lower bound when no
         // provisional card exists yet.
         const provisionalCreated = state.provisionalMessageCreatedAt.get(stepKey)
-        const created = Math.max(
-          provisionalCreated
-            ?? earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
+        const created = provisionalCreated ?? Math.max(
+          earliestBlockStart(state.blockStarts, event.data.turn, event.data.step)
             ?? state.turnStartTime
             ?? event.time,
           minimumAssistantCreatedAt(state.lastUserMessageCreatedAt),
@@ -1508,9 +1488,8 @@ export class MuxEventTranslator {
         for (const [stepKey, messageID] of [...state.provisionalMessageIds]) {
           if (state.completedMessageIds.has(messageID)) continue
           const provisionalCreated = state.provisionalMessageCreatedAt.get(stepKey)
-          const created = Math.max(
-            provisionalCreated
-              ?? state.blockStarts.get(`${stepKey}:text`)
+          const created = provisionalCreated ?? Math.max(
+            state.blockStarts.get(`${stepKey}:text`)
               ?? state.blockStarts.get(`${stepKey}:reasoning`)
               ?? state.turnStartTime
               ?? event.time,
