@@ -31,6 +31,9 @@
 - GitHub e2e workflow 更新到本候选要求的 dsh `0.1.2-rc.1`，失败工件打包允许
   `.e2e` 尚未创建；perf 在 dsh 启动前退出时立即报告退出码与 stderr，不再只
   等待 bridge URL 超时。
+- full-SHA 安装/回滚演练现在校验 lockfile 的实际解析 commit 与候选版本；文档
+  明确 `v0.1.0` 是旧 dsh ABI，回滚到该稳定版必须同时回滚 dsh CLI，不能只降
+  dsh-oc 插件。
 - v2 会话摘要与 fallback 现在同样输出 subagent `metadata.origin`；历史中多个
   同父/同描述 child 按 label 或 parent-local FIFO 绑定，v1/v2 不再复用同一个 child。
 

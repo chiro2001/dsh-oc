@@ -122,6 +122,15 @@ describe('e2e workflow', () => {
   })
 })
 
+describe('immutable install drill', () => {
+  it('checks both the package version and the lockfile full SHA', () => {
+    const script = read('scripts/e2e-install-rollback.sh')
+    expect(script).toContain('EXPECTED_CANDIDATE_VERSION')
+    expect(script).toContain('resolved commit ${resolved_ref:-unknown}, expected $expected_ref')
+    expect(script).toContain("rg -o 'tar\\.gz/[0-9a-f]{40}'")
+  })
+})
+
 describe('question e2e fixture', () => {
   it('reserves a tool-call slot for both standard question turns', () => {
     const script = read('scripts/e2e-tui-permission-ext.sh')

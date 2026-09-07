@@ -21,6 +21,7 @@ REPO_ROOT="$(pwd)"
 HEAD_SHA="$(git rev-parse HEAD)"
 CANDIDATE="${DSH_OC_INSTALL_CANDIDATE:-github:chiro2001/dsh-oc#$HEAD_SHA}"
 PREVIOUS="${DSH_OC_INSTALL_PREVIOUS:-$REPO_ROOT}"
+EXPECTED_CANDIDATE_VERSION="$(node -p "require('./package.json').version")"
 SMOKE="e2e-tui-turn.sh"
 SKIP_SMOKE=0
 while [[ $# -gt 0 ]]; do
@@ -56,11 +57,23 @@ install_check() {
   local profile="$home/profiles/oc"
   local version
   version="$(node -p "require('$profile/node_modules/@chiro2001/dsh-oc/package.json').version" 2>/dev/null || echo 'missing')"
+  local expected_ref resolved_ref
+  expected_ref="$(rg -o '#[0-9a-f]{40}' <<<"$spec" | tr -d '#' || true)"
+  resolved_ref="$(rg -o 'tar\.gz/[0-9a-f]{40}' "$profile/pnpm-lock.yaml" 2>/dev/null | head -1 | sed 's#tar\.gz/##' || true)"
+  if [[ -n "$expected_ref" && "$resolved_ref" != "$expected_ref" ]]; then
+    echo "FAIL: $label resolved commit ${resolved_ref:-unknown}, expected $expected_ref" >&2
+    exit 1
+  fi
+  if [[ "$label" == "candidate" && "$version" != "$EXPECTED_CANDIDATE_VERSION" ]]; then
+    echo "FAIL: candidate version $version, expected $EXPECTED_CANDIDATE_VERSION" >&2
+    exit 1
+  fi
   if ! DSH_HOME="$home" dsh --profile oc --dump-config | grep -q '# == @chiro2001/dsh-oc'; then
     echo "FAIL: $label bundle block missing from dump-config" >&2
     exit 1
   fi
   echo "  $label resolved version: $version (before: $version_before)"
+  [[ -z "$resolved_ref" ]] || echo "  $label resolved commit: $resolved_ref"
   if [[ -n "$version_before" && "$version" != "$version_before" ]]; then
     echo "  note: version changed $version_before -> $version"
   fi

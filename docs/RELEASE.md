@@ -29,10 +29,11 @@ minor：PR #1/#2/#3 没有原样合入，而是与 dsh 0.1.2 host-services 迁�
    ```bash
    bash scripts/e2e-install-rollback.sh \
      --candidate "github:chiro2001/dsh-oc#<full-sha>" \
-     --previous "github:chiro2001/dsh-oc#<上一不可变 sha>"
+     --previous "github:chiro2001/dsh-oc#<同 dsh-0.1.2-ABI 的上一不可变 sha>"
    ```
    验证：冷装成功、包版本为 `0.2.0-rc.1`、TUI smoke 通过、旧会话可恢复、
-   回滚可操作。
+   回滚可操作；脚本同时断言 `pnpm-lock.yaml` 实际解析到指定 full SHA，不能只
+   用相同版本号冒充回滚成功。
    同版本可变 ref 的 in-place 结果不作为缓存安全证明（版本号变化 +
    full SHA 才是）。
 5. **真实模型 smoke（远端候选）**：
@@ -64,8 +65,11 @@ minor：PR #1/#2/#3 没有原样合入，而是与 dsh 0.1.2 host-services 迁�
 
 任何一步出现 blocker（stale/missing `lib`、版本仍不是 `0.2.0-rc.1`、远端 SHA 安装
 失败、旧会话不兼容、恢复不一致、CI 语义失败靠 retry 洗绿），停止发布；
-修复后从**全新 profile** 重跑对应演练，不在污染环境续测。回滚用户侧 =
-重新安装前一不可变 SHA/tag。
+修复后从**全新 profile** 重跑对应演练，不在污染环境续测。当前 RC 是 dsh ABI
+breaking minor：同 dsh `0.1.2-rc.1` 内回滚可重新安装同 ABI 的前一不可变 SHA；
+若回滚到 `dsh-oc v0.1.0`，必须同时将 dsh CLI 回滚到 `0.1.0-rc.6`。只降
+dsh-oc、保留 dsh 0.1.2 会因旧版 `apiProxy` 与新版 `sessionController` 契约不同
+而无法启动。
 
 ## opencode 二进制升级（独立 lane，不混入本候选）
 
