@@ -104,7 +104,12 @@ function remapV2Messages(
     if (assistantId !== undefined) {
       const created = ctx.state.assistantMessageCreatedAt(sessionId, assistantId)
       if (created !== undefined && result.type === 'assistant') {
-        const time = { ...result.time, created }
+        const time = {
+          ...result.time,
+          // Keep the converter's user-aware timestamp when a stale
+          // turn-start canonical value is still present in bridge state.
+          created: Math.max(result.time.created, created),
+        }
         if (ctx.state.isAssistantPending(sessionId, assistantId)) delete time.completed
         result = { ...result, time }
       }

@@ -6872,6 +6872,13 @@ declare class InteractionState {
   /** Return the child associated with one parent tool call, if known. */
   subagentChildForCall(parentSessionId: string, callId: string): SubagentChildRecord | undefined;
   /**
+   * Bind a historical delegation to one unclaimed child from the same parent.
+   * Labels are authoritative when present; otherwise durable child creation
+   * order is the only stable local signal. Persisting the binding means v1
+   * and v2 hydration (and repeated page reads) cannot reuse the first child.
+   */
+  bindSubagentCallForHistory(call: SubagentCallRecord): SubagentChildRecord | undefined;
+  /**
    * Associate one host/session-added or projection-derived child. The child
    * may arrive before the parent's tool/call event reaches the translator.
    * Label equality wins; otherwise parent-local FIFO is deterministic.

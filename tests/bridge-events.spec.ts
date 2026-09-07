@@ -344,11 +344,46 @@ describe('bridge events: session event mapping', () => {
       .filter((event) => event.payload.type === 'message.updated')
       .map((event) => event.payload.properties.info as { id?: string; role?: string; time?: { created?: number } })
       .filter((info) => info.role === 'assistant' && info.id === 'prompt-assistant-1')
-    // The final streamed replacement intentionally has an intermediate
-    // incomplete update plus a completed update; all three updates must carry
-    // the same identity key so the official TUI reconciles them in place.
+    // The initial provisional card keeps its original identity; once the
+    // durable user row is observed, final/live updates use the stricter
+    // assistant key that history remapping also exposes.
     expect(assistantUpdates).toHaveLength(3)
-    expect(assistantUpdates.map((info) => info.time?.created)).toEqual([1101, 1101, 1101])
+    expect(assistantUpdates.map((info) => info.time?.created)).toEqual([1101, 1111, 1111])
+  })
+
+  it('raises the provisional canonical time before history remap after a late user', () => {
+    const state = new InteractionState()
+    // Keep the optimistic timestamp below the durable event timestamps to
+    // reproduce turn/start opening the card before user/message is observed.
+    state.registerPromptMessageId('s1', 'prompt-user-1', 0)
+    state.registerAssistantIdForUser('s1', 'prompt-user-1', 'prompt-assistant-1')
+    const { translate } = translator(state)
+
+    const started = translate([frame({
+      type: 'session/event',
+      sessionId: 's1',
+      event: sessionEvent('turn/start', { turn: 1 }, 1, 1000),
+    })])
+    expect(started.find((event) => event.payload.type === 'message.updated')?.payload.properties)
+      .toMatchObject({ info: { id: 'prompt-assistant-1', time: { created: 1000 } } })
+
+    // dsh's durable order is turn/start -> user/message -> assistant chunks.
+    expect(translate([frame({
+      type: 'session/event',
+      sessionId: 's1',
+      event: makeUserEvent('hello', 'dsh-user-1', 1100),
+    })])).toEqual([])
+    expect(state.assistantMessageCreatedAt('s1', 'prompt-assistant-1')).toBe(1101)
+
+    const reply = translate([frame({
+      type: 'session/event',
+      sessionId: 's1',
+      event: makeAssistantEvent([{ type: 'text', text: 'answer' }], 'dsh-assistant-1', 1200),
+    })])
+    expect(reply.findLast((event) =>
+      event.payload.type === 'message.updated'
+      && (event.payload.properties.info as { role?: string }).role === 'assistant')?.payload.properties)
+      .toMatchObject({ info: { id: 'prompt-assistant-1', time: { created: 1101, completed: 1200 } } })
   })
 
   it('silently ignores log-only session events without log noise', () => {

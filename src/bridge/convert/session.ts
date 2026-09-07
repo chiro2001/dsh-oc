@@ -25,6 +25,14 @@ export interface SessionConvertOptions {
    * session even after the preset was switched.
    */
   agent?: string
+  /** Optional lineage metadata learned from the live bridge state. */
+  metadata?: Record<string, unknown>
+}
+
+/** OpenCode SDK v2 1.18.18 omits metadata from its generated type, but the TUI accepts
+ * the same lineage marker carried by the v1 Session shape. */
+export type SessionV2InfoWithMetadata = SessionV2Info & {
+  metadata?: Record<string, unknown>
 }
 
 export function sessionTitleFrom(summary: SessionSummary, override?: string): string {
@@ -58,6 +66,7 @@ export function convertSessionSummary(
   const directory = summary.cwd ?? options.cwd
   const createdAt = options.createdAt ?? summary.updatedAt
   const title = sessionTitleFrom(summary, options.title)
+  const metadata = options.metadata ?? sessionMetadataFrom(summary)
   return {
     id: String(summary.sessionId),
     slug: String(summary.sessionId),
@@ -70,9 +79,7 @@ export function convertSessionSummary(
     agent: options.agent ?? summary.agentPreset ?? DEFAULT_AGENT,
     ...(options.model === undefined ? {} : { model: options.model }),
     version: OPENCODE_VERSION,
-    ...(sessionMetadataFrom(summary) === undefined
-      ? {}
-      : { metadata: sessionMetadataFrom(summary) }),
+    ...(metadata === undefined ? {} : { metadata }),
     time: {
       created: createdAt,
       updated: summary.updatedAt,
@@ -84,9 +91,10 @@ export function convertSessionSummary(
 export function convertSessionSummaryV2(
   summary: SessionSummary,
   options: SessionConvertOptions,
-): SessionV2Info {
+): SessionV2InfoWithMetadata {
   const directory = summary.cwd ?? options.cwd
   const createdAt = options.createdAt ?? summary.updatedAt
+  const metadata = options.metadata ?? sessionMetadataFrom(summary)
   return {
     id: String(summary.sessionId),
     ...(summary.origin === 'subagent' && summary.parentSessionId !== undefined
@@ -95,6 +103,7 @@ export function convertSessionSummaryV2(
     projectID: projectIdFor(directory),
     agent: options.agent ?? summary.agentPreset ?? DEFAULT_AGENT,
     ...(options.model === undefined ? {} : { model: options.model }),
+    ...(metadata === undefined ? {} : { metadata }),
     cost: 0,
     tokens: {
       input: 0,
@@ -148,12 +157,13 @@ export function minimalSessionV2(
     createdAt?: number
     parentID?: string
   },
-): SessionV2Info {
+): SessionV2InfoWithMetadata {
   const directory = options.cwd
   const created = options.createdAt ?? Date.now()
   return {
     id: sessionId,
     ...(options.parentID === undefined ? {} : { parentID: options.parentID }),
+    ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
     projectID: projectIdFor(directory),
     cost: 0,
     tokens: {

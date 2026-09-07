@@ -201,7 +201,7 @@ GET /api/integration?location[directory]=...
 | `POST /api/session/{id}/interrupt` | MAP | 同 v1 abort：`sessionController.cancel`（SDK v2 打断入口，204） |
 | `POST /session/{id}/command` | MAP | `/preset`、`/goal` 经 dsh command registry 执行并广播 busy/idle；`/help` 本地返回能力摘要 |
 | `GET /session/{id}/children` | MAP | 会话列表中 `parentSessionId == id` 的 subagent 子会话（`convertSessionSummary`） |
-| `GET /api/session/{id}` | MAP | 同 v1 |
+| `GET /api/session/{id}` | MAP | 同 v1；subagent child 保留 `parentID` 与 `metadata.origin`（即使 SDK v2 生成类型未声明该扩展字段） |
 | `GET /api/session/{id}/message` | MAP | 同 v1；`cursor.previous` 提供上一页锚点 |
 | `GET /api/session/{id}/history` | MAP | v2 历史分页：`limit` + `after`（独占上界，映射 dsh `beforeSeq` 向后翻页），返回 `{ data, hasMore, next }` |
 | `GET /api/session/{id}/context` | MAP | `{ data: SessionMessage[] }`（复用 v2 消息转换，无游标） |
@@ -267,8 +267,9 @@ approval/question answerer 产出 host frames，oc-bridge 翻译为 opencode
 > **Task 子代理关联**：OpenCode 1.18.18 TUI 读取 `ToolPart.state.input.description` /
 > `subagent_type` 渲染 Task，并读取 `ToolPart.state.metadata.sessionId` 导航 child。
 > dsh `api-session/added`、`subagent/descriptor` 与 `subagent` projection 可能跨
-> session 到达，bridge 按 parent pending call 做暂存/FIFO 关联；所有 child
-> `session.updated` 替换都保留 `parentID` 与 `metadata.origin`。
+> session 到达，bridge 按 parent pending call 做暂存，历史则按 label/FIFO
+> 做 parent-local 绑定；所有 child 的 v1/v2 Session 与 `session.updated` 替换都保留
+> `parentID` 与 `metadata.origin`。
 
 > **排队消息可见性**：bridge 丢弃旧的 `session/queue` 会导致排队中的 prompt 在
 > TUI 无任何反馈，用户以为发送失败而重发，队列积压后模型回复旧消息。现在

@@ -204,6 +204,12 @@ export class InteractionState {
     if (child.cwd !== undefined) this.sessionDirectories.set(child.sessionId, child.cwd)
     if (child.title !== undefined && child.title.length > 0) this.setSessionTitle(child.sessionId, child.title)
     if (child.agent !== undefined && child.agent.length > 0) this.setSessionAgent(child.sessionId, child.agent)
+    const pending = this.pendingSubagentChildren.get(child.parentSessionId)
+    if (pending !== undefined) {
+      const remaining = pending.filter((candidate) => candidate.sessionId !== child.sessionId)
+      if (remaining.length === 0) this.pendingSubagentChildren.delete(child.parentSessionId)
+      else if (remaining.length !== pending.length) this.pendingSubagentChildren.set(child.parentSessionId, remaining)
+    }
   }
 
   private matchPendingChildForCall(call: SubagentCallRecord): SubagentChildRecord | undefined {
@@ -249,6 +255,33 @@ export class InteractionState {
   subagentChildForCall(parentSessionId: string, callId: string): SubagentChildRecord | undefined {
     const call = this.subagentCallFor(parentSessionId, callId)
     return call?.childSessionId === undefined ? undefined : this.subagentChildren.get(call.childSessionId)
+  }
+
+  /**
+   * Bind a historical delegation to one unclaimed child from the same parent.
+   * Labels are authoritative when present; otherwise durable child creation
+   * order is the only stable local signal. Persisting the binding means v1
+   * and v2 hydration (and repeated page reads) cannot reuse the first child.
+   */
+  bindSubagentCallForHistory(call: SubagentCallRecord): SubagentChildRecord | undefined {
+    const key = InteractionState.subagentCallKey(call.parentSessionId, call.callId)
+    const registered = this.subagentCalls.get(key) ?? call
+    if (!this.subagentCalls.has(key)) this.subagentCalls.set(key, registered)
+    if (registered.childSessionId !== undefined) return this.subagentChildren.get(registered.childSessionId)
+
+    const claimed = new Set<string>()
+    for (const candidate of this.subagentCalls.values()) {
+      if (candidate.childSessionId !== undefined) claimed.add(candidate.childSessionId)
+    }
+    const candidates = [...this.subagentChildren.values()]
+      .filter((child) => child.parentSessionId === registered.parentSessionId && !claimed.has(child.sessionId))
+      .sort((left, right) => left.addedAt - right.addedAt || left.sessionId.localeCompare(right.sessionId))
+    const child = candidates.find((candidate) => candidate.label !== undefined
+      && candidate.label.length > 0
+      && candidate.label === registered.description) ?? candidates[0]
+    if (child === undefined) return undefined
+    this.attachSubagentChild(child, registered)
+    return child
   }
 
   /**
@@ -622,11 +655,12 @@ export class InteractionState {
   /** Record the timestamp chosen for a live assistant card. */
   setAssistantMessageCreatedAt(sessionId: string, assistantId: string, createdAt: number): void {
     const key = `${sessionId}\u0000${assistantId}`
-    // This value is part of the official TUI's live message identity.  It is
-    // intentionally first-write-wins: once a provisional card was emitted,
-    // changing its timestamp on a late durable echo makes the final update a
-    // second card. Callers choose the user lower bound before the first write.
-    if (!this.assistantMessageTimes.has(key)) {
+    // Keep the canonical timestamp monotonic. A durable user/message can be
+    // observed after turn/start, so its assistant lower bound may be later
+    // than the provisional value recorded for the same prompt. Conversely,
+    // never move an already-later timestamp backwards.
+    const existing = this.assistantMessageTimes.get(key)
+    if (existing === undefined || createdAt > existing) {
       this.assistantMessageTimes.set(key, createdAt)
     }
   }

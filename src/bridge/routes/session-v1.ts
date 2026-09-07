@@ -44,8 +44,15 @@ function remapV1Messages(
     if (assistantId !== undefined) {
       const created = ctx.state.assistantMessageCreatedAt(sessionId, assistantId)
       const time = info.time as { created?: unknown; completed?: unknown } | undefined
-      if (created !== undefined && time !== undefined) {
-        const normalizedTime = { ...time, created }
+      if (created !== undefined) {
+        const current = typeof time?.created === 'number' ? time.created : undefined
+        const normalizedTime = {
+          ...(time ?? {}),
+          // History conversion may have observed the user after the
+          // turn-start provisional card.  Never let an older canonical value
+          // move that assistant key backwards during remapping.
+          created: current === undefined ? created : Math.max(current, created),
+        }
         if (ctx.state.isAssistantPending(sessionId, assistantId)) delete normalizedTime.completed
         info.time = normalizedTime
       }

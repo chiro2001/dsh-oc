@@ -24,7 +24,6 @@ import type {
   Session as V2Session,
   SessionMessagesResponse,
   SessionStatus,
-  SessionV2Info,
 } from '@opencode-ai/sdk/v2/types'
 import type { Agent as V2Agent, AgentV2Info } from '@opencode-ai/sdk/v2/types'
 import type { BridgeApi, BridgeCommandExecution } from './rpc.js'
@@ -43,6 +42,7 @@ import {
   minimalSession,
   minimalSessionV2,
   sessionTitleFrom,
+  type SessionV2InfoWithMetadata,
 } from './convert/session.js'
 import {
   convertMessagesV1,
@@ -270,16 +270,20 @@ export function subagentMetadataForHistory(
   call: ToolCallInfo,
 ): Record<string, unknown> | undefined {
   if (!isSubagentToolName(call.name)) return undefined
-  const child = ctx.state.subagentChildForCall(parentSessionId, call.callId)
-    ?? (() => {
-      const input = bodyAsRecord(safeJsonParse(call.arguments))
-      const description = typeof input.description === 'string' ? input.description : undefined
-      const candidates = [...ctx.state.subagentChildren.values()]
-        .filter((candidate) => candidate.parentSessionId === parentSessionId)
-        .filter((candidate) => description === undefined || candidate.label === description)
-        .sort((left, right) => left.addedAt - right.addedAt || left.sessionId.localeCompare(right.sessionId))
-      return candidates[0]
-    })()
+  const existing = ctx.state.subagentChildForCall(parentSessionId, call.callId)
+  const record = subagentCallRecord(
+    parentSessionId,
+    call,
+    `history:${call.callId}`,
+    0,
+  )
+  // History conversion can see an assistant tool-call before its explicit
+  // tool/call row, and v1 then runs before v2 on the same bridge state. Bind
+  // both passes through the shared parent-local resolver so same-description
+  // children are consumed once in label/FIFO order instead of reusing child 0.
+  const child = existing ?? (record === undefined
+    ? undefined
+    : ctx.state.bindSubagentCallForHistory(record))
   if (child === undefined) return undefined
   return {
     sessionId: child.sessionId,
@@ -821,8 +825,9 @@ export function toV1Session(view: SessionView, id: string, ctx: BridgeRouteConte
   })
 }
 
-export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteContext): SessionV2Info {
+export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteContext): SessionV2InfoWithMetadata {
   if (view.summary) {
+    const lineage = sessionLineageOptions(ctx, id)
     return convertSessionSummaryV2(view.summary, {
       cwd: view.cwd ?? ctx.cwd,
       createdAt: view.createdAt,
@@ -830,6 +835,7 @@ export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteConte
       ...(ctx.state.sessionAgentFor(id) === undefined
         ? {}
         : { agent: ctx.state.sessionAgentFor(id) }),
+      ...(lineage.metadata === undefined ? {} : { metadata: lineage.metadata }),
     })
   }
   return minimalSessionV2(id, {
@@ -841,6 +847,7 @@ export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteConte
     ...(ctx.state.sessionParents.get(id) === undefined
       ? {}
       : { parentID: ctx.state.sessionParents.get(id) }),
+    ...sessionLineageOptions(ctx, id),
   })
 }
 

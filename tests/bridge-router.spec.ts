@@ -928,21 +928,21 @@ describe('bridge router: session routes', () => {
     expect(v1Body[0]?.info.id).toBe('msg_user_1')
     expect(v1Body[1]?.info.parentID).toBe('msg_user_1')
     expect(v1Body[2]?.info.parentID).toBe('msg_tool_1')
-    expect((v1Body[1]?.info.time as { created?: number }).created).toBe(1050)
-    expect((v1Body[2]?.info.time as { created?: number }).created).toBe(1150)
+    expect((v1Body[1]?.info.time as { created?: number }).created).toBe(1100)
+    expect((v1Body[2]?.info.time as { created?: number }).created).toBe(1200)
     expect((v1Body[1]?.info.time as { completed?: number }).completed).toBeUndefined()
 
     const v2 = await request(server, 'GET', '/api/session/s1/message')
     const v2Body = v2.body as { data: Array<{ id: string; type?: string; time?: { created?: number; completed?: number } }> }
     expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')).toMatchObject({
       type: 'assistant',
-      time: { created: 1050 },
+      time: { created: 1100 },
     })
     expect(v2Body.data.find((entry) => entry.id === 'msg_text_1')).toMatchObject({
       type: 'assistant',
-      time: { created: 1150 },
+      time: { created: 1200 },
     })
-    expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.created).toBe(1050)
+    expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.created).toBe(1100)
     expect(v2Body.data.find((entry) => entry.id === 'msg_tool_1')?.time?.completed).toBeUndefined()
 
     const ids = new Set(v1Body.map((entry) => entry.info.id))
@@ -1458,7 +1458,12 @@ describe('bridge router: session routes', () => {
     expect(v2.status).toBe(200)
     expect(v2.body).toMatchObject({
       data: [
-        { id: 'child-1', parentID: 'parent-1', location: { directory: '/work' } },
+        {
+          id: 'child-1',
+          parentID: 'parent-1',
+          metadata: { origin: 'subagent' },
+          location: { directory: '/work' },
+        },
         { id: 'parent-1' },
       ],
     })
@@ -1560,6 +1565,25 @@ describe('bridge router: session routes', () => {
     })
     expect(router.ctx.state.sessionParents.get('child-1')).toBe('parent-1')
     expect(router.ctx.state.sessionDirectories.get('child-1')).toBe('/work')
+  })
+
+  it('keeps subagent metadata in a v2 session fallback after list eviction', async () => {
+    const { server, router } = await boot(fakeApi())
+    hostSessionAddedEvents(router.ctx, {
+      sessionId: 'child-fallback',
+      cwd: '/work',
+      origin: 'subagent',
+      parentSessionId: 'parent-1',
+    })
+    const response = await request(server, 'GET', '/api/session/child-fallback')
+    expect(response.status).toBe(200)
+    expect(response.body).toMatchObject({
+      data: {
+        id: 'child-fallback',
+        parentID: 'parent-1',
+        metadata: { origin: 'subagent' },
+      },
+    })
   })
 
   it('pushes host/session-added subagent children over the SSE stream', async () => {
@@ -1699,6 +1723,125 @@ describe('bridge router: session routes', () => {
     })
   })
 
+  it('binds same-parent historical tasks to distinct children in FIFO order', async () => {
+    const parent = {
+      sessionId: 'parent-task-fifo' as never,
+      updatedAt: 5000,
+      running: false,
+      blank: false,
+      cwd: '/work',
+    }
+    // Deliberately omit labels so the resolver must use durable child order;
+    // both calls have the same description and must not reuse child-fifo-a.
+    const childA = {
+      sessionId: 'child-fifo-a' as never,
+      updatedAt: 4000,
+      running: false,
+      blank: false,
+      parentSessionId: 'parent-task-fifo' as never,
+      origin: 'subagent' as const,
+      cwd: '/work',
+      projections: {
+        asOfSeq: 7,
+        values: { subagent: { mode: 'one-shot' } },
+      },
+    }
+    const childB = {
+      sessionId: 'child-fifo-b' as never,
+      updatedAt: 3900,
+      running: false,
+      blank: false,
+      parentSessionId: 'parent-task-fifo' as never,
+      origin: 'subagent' as const,
+      cwd: '/work',
+      projections: {
+        asOfSeq: 8,
+        values: { subagent: { mode: 'continuable' } },
+      },
+    }
+    const callArguments = JSON.stringify({
+      description: 'same description',
+      prompt: 'run one of the same-description children',
+      run_in_background: false,
+    })
+    const history = [
+      { event: makeUserEvent('Inspect', 'fifo-user', 1000) },
+      { event: makeAssistantEvent([
+        { type: 'tool-call', id: 'fifo-call-a', name: 'subagent', arguments: callArguments },
+        { type: 'tool-call', id: 'fifo-call-b', name: 'subagent', arguments: callArguments },
+      ], 'fifo-assistant', 1100) },
+      { event: sessionEvent('tool/call', {
+        turn: 1,
+        step: 1,
+        callId: 'fifo-call-a',
+        name: 'subagent',
+        arguments: callArguments,
+      }, 4, 1110) },
+      { event: sessionEvent('tool/call', {
+        turn: 1,
+        step: 1,
+        callId: 'fifo-call-b',
+        name: 'subagent',
+        arguments: callArguments,
+      }, 5, 1111) },
+      { event: sessionEvent('tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { kind: 'tool', callId: 'fifo-call-a' },
+          content: [{
+            type: 'tool-result',
+            toolCallId: 'fifo-call-a',
+            content: [{ type: 'text', text: 'child a done' }],
+            isError: false,
+          }],
+        },
+      }, 6, 1120) },
+      { event: sessionEvent('tool/result', {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { kind: 'tool', callId: 'fifo-call-b' },
+          content: [{
+            type: 'tool-result',
+            toolCallId: 'fifo-call-b',
+            content: [{ type: 'text', text: 'child b done' }],
+            isError: false,
+          }],
+        },
+      }, 7, 1121) },
+    ]
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        list: async () => okRpc({ items: [parent, childA, childB] }),
+        history: async () => okRpc({ events: history, hasMore: false }),
+      },
+    }
+    const { server, router } = await boot(api)
+
+    const v1 = await request(server, 'GET', '/session/parent-task-fifo/message')
+    const v1Tasks = (v1.body as Array<{ parts: Array<Record<string, unknown>> }>).flatMap((entry) => entry.parts)
+      .filter((part) => part.type === 'tool' && part.tool === 'task')
+    expect(v1Tasks.map((part) => (part.state as { metadata?: { sessionId?: string } }).metadata?.sessionId))
+      .toEqual(['child-fifo-a', 'child-fifo-b'])
+    expect(new Set(v1Tasks.map((part) => (part.state as { metadata?: { sessionId?: string } }).metadata?.sessionId)).size)
+      .toBe(2)
+
+    const v2 = await request(server, 'GET', '/api/session/parent-task-fifo/message')
+    const v2Tasks = (v2.body as { data: Array<{ content?: Array<Record<string, unknown>> }> }).data
+      .flatMap((entry) => entry.content ?? [])
+      .filter((part) => part.type === 'tool' && part.name === 'task')
+    expect(v2Tasks.map((part) => (part.state as { structured?: { sessionId?: string } }).structured?.sessionId))
+      .toEqual(['child-fifo-a', 'child-fifo-b'])
+    expect(router.ctx.state.subagentChildForCall('parent-task-fifo', 'fifo-call-a')?.sessionId)
+      .toBe('child-fifo-a')
+    expect(router.ctx.state.subagentChildForCall('parent-task-fifo', 'fifo-call-b')?.sessionId)
+      .toBe('child-fifo-b')
+  })
+
   it('gets a session and its messages for v1 and v2', async () => {
     const base = fakeApi()
     const history = [makeUserEvent('hello'), makeAssistantEvent([{ type: 'text', text: 'hi back' }])]
@@ -1807,6 +1950,40 @@ describe('bridge router: session routes', () => {
         ['m-assistant-order', 'assistant'],
         ['msg_cmd:order-check', 'assistant'],
       ])
+  })
+
+  it('does not let a stale provisional timestamp override v1/v2 history', async () => {
+    const base = fakeApi()
+    const history = [
+      { event: sessionEvent('turn/start', { turn: 1 }, 1, 1000) },
+      { event: makeUserEvent('hello', 'dsh-user-order', 1100) },
+      { event: makeAssistantEvent([{ type: 'text', text: 'answer' }], 'dsh-assistant-order', 1200) },
+    ]
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        history: async () => okRpc({ events: history, hasMore: false }),
+      },
+    }
+    const { server, router } = await boot(api)
+    router.ctx.state.registerPromptMessageId('s1', 'prompt-user-order', 0)
+    router.ctx.state.registerAssistantIdForUser('s1', 'prompt-user-order', 'prompt-assistant-order')
+    expect(router.ctx.state.takePromptMessageId('s1', 'dsh-user-order')).toBe('prompt-user-order')
+    router.ctx.state.recordAssistantId('s1', 'dsh-assistant-order', 'prompt-assistant-order')
+    // Simulate the old turn/start canonical value still present when the
+    // history endpoint is hydrated after the durable user row.
+    router.ctx.state.setAssistantMessageCreatedAt('s1', 'prompt-assistant-order', 1000)
+
+    const v1 = await request(server, 'GET', '/session/s1/message')
+    const v1Assistant = (v1.body as Array<{ info: { id: string; role: string; time: { created: number } } }>)
+      .find((entry) => entry.info.role === 'assistant')
+    expect(v1Assistant?.info).toMatchObject({ id: 'prompt-assistant-order', time: { created: 1101 } })
+
+    const v2 = await request(server, 'GET', '/api/session/s1/message')
+    const v2Assistant = (v2.body as { data: Array<{ id: string; type: string; time: { created: number } }> }).data
+      .find((entry) => entry.type === 'assistant')
+    expect(v2Assistant).toMatchObject({ id: 'prompt-assistant-order', time: { created: 1101 } })
   })
 
   it('closes the rc.1 follow iterator after reading the history snapshot', async () => {

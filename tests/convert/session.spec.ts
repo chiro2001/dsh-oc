@@ -4,6 +4,7 @@ import {
   convertSessionSummary,
   convertSessionSummaryV2,
   minimalSession,
+  minimalSessionV2,
   sessionTitleFrom,
 } from '../../src/bridge/convert/session.js'
 
@@ -75,7 +76,16 @@ describe('convert/session', () => {
 
     const v2 = convertSessionSummaryV2(child, { cwd: '/parent' })
     expect(v2.parentID).toBe('session-parent')
+    expect(v2.metadata).toEqual({ origin: 'subagent' })
     expect(v2.title).toBe('Subagent session')
+
+    const minimalV2 = minimalSessionV2('child-session', {
+      cwd: '/parent',
+      parentID: 'session-parent',
+      metadata: { origin: 'subagent' },
+    })
+    expect(minimalV2.parentID).toBe('session-parent')
+    expect(minimalV2.metadata).toEqual({ origin: 'subagent' })
   })
 
   it('treats dsh forks as independent sessions without parentID or subagent metadata', () => {
