@@ -41,7 +41,7 @@ export FAKE_ATTACH_PID_FILE="$ATTACH_PID_FILE"
 export FAKE_OVERLAY="$OVERLAY"
 export DSH_OC_E2E_MONITOR_IO=1
 export DSH_OC_E2E_MONITOR_INTERVAL=0.05
-export DSH_OC_E2E_MONITOR_READ_THRESHOLD=0
+export DSH_OC_E2E_MONITOR_READ_THRESHOLD=33554432
 E2E_RUN_DIR="$RUN_DIR"
 E2E_OVERLAY="$OVERLAY"
 E2E_TUI_SESSION='attach-monitor-test'
@@ -70,8 +70,8 @@ run_one() {
   wait "$ATTACH_PID" 2>/dev/null || true
   ATTACH_PID=""
   e2e_tui_io_monitor_cleanup
-  [[ -s "$warning_file" ]]
-  grep -q 'observed PID' "$warning_file"
+  [[ -f "$warning_file" ]]
+  [[ ! -s "$warning_file" ]]
 }
 
 run_one
@@ -82,4 +82,17 @@ second_log="$E2E_TUI_IO_MONITOR_LOG"
 [[ "$first_log" != "$second_log" ]]
 [[ "$(find "$RUN_DIR" -name '*.io.tsv' -type f | wc -l)" -eq 2 ]]
 [[ "$(find "$RUN_DIR" -name '*.io.warn' -type f | wc -l)" -eq 2 ]]
+
+# `--report-exit` is an explicit diagnostic opt-in; the default observer above
+# must stay quiet when its external target exits normally.
+sleep 1 &
+report_target=$!
+report_log="$RUN_DIR/report.tsv"
+report_warn="$RUN_DIR/report.warn"
+"$ROOT/scripts/monitor-process-io.sh" --pid "$report_target" --interval 0.05 \
+  --report-exit --log "$report_log" 2>"$report_warn" &
+report_monitor=$!
+wait "$report_target"
+wait "$report_monitor"
+grep -q 'observed PID' "$report_warn"
 echo 'monitor-process-io-attach: PASSED'

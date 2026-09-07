@@ -189,6 +189,7 @@ e2e_tui_io_monitor_start() {
     log_file="${stem}-${suffix}.io.tsv"
     warning_file="${stem}-${suffix}.io.warn"
   done
+  : > "$warning_file"
 
   # No --start/--terminate-owned here: this is an observer for the exact
   # opencode child found by e2e_tui_wait_attach. tee keeps warnings visible in

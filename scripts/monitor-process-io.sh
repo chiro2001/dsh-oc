@@ -10,7 +10,8 @@
 #
 # Default mode is observe-only. The script never kills an externally supplied
 # PID, even when thresholds are exceeded. Thresholds only print warnings and
-# sampling continues.
+# sampling continues. Normal external-PID exit is silent unless
+# `--report-exit` is explicitly requested.
 set -euo pipefail
 
 usage() {
@@ -29,6 +30,7 @@ options:
   --wchar-threshold BYTES   Warn when wchar delta reaches this value
   --cpu-threshold JIFFIES   Warn when CPU jiffies delta reaches this value
   --rss-threshold BYTES     Warn when aggregate RSS reaches this value
+  --report-exit             Report normal external PID exit on stderr
   --terminate-owned          Only valid with --start; terminate owned PGID on exit
   -h, --help                 Show this help
 EOF
@@ -47,6 +49,7 @@ rchar_threshold=''
 wchar_threshold=''
 cpu_threshold=''
 rss_threshold=''
+report_exit=0
 command=()
 
 die() { echo "monitor-process-io: $*" >&2; exit 2; }
@@ -81,6 +84,7 @@ while (($# > 0)); do
     --wchar-threshold) (($# >= 2)) || die '--wchar-threshold requires bytes'; wchar_threshold=$2; shift 2 ;;
     --cpu-threshold) (($# >= 2)) || die '--cpu-threshold requires jiffies'; cpu_threshold=$2; shift 2 ;;
     --rss-threshold) (($# >= 2)) || die '--rss-threshold requires bytes'; rss_threshold=$2; shift 2 ;;
+    --report-exit) report_exit=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --) shift; command=("$@"); break ;;
     *) die "unknown argument: $1" ;;
@@ -260,7 +264,7 @@ while :; do
   pids=()
   while read -r item; do [[ -n "$item" ]] && pids+=("$item"); done < <(pid_set | sort -n -u)
   if ((${#pids[@]} == 0)); then
-    if [[ "$start_owned" == 0 ]]; then
+    if [[ "$start_owned" == 0 && "$report_exit" == 1 ]]; then
       echo "monitor-process-io: observed PID $pid exited or became unreadable" >&2
     fi
     break
@@ -317,7 +321,9 @@ while :; do
   done
   ((identity_changed == 0)) || break
   if ((${#live_pids[@]} == 0)); then
-    if [[ "$start_owned" == 1 ]]; then
+    if [[ "$start_owned" == 0 && "$report_exit" == 1 ]]; then
+      echo "monitor-process-io: observed PID $pid exited or became unreadable" >&2
+    elif [[ "$start_owned" == 1 ]]; then
       if wait "$pid"; then owned_exit_code=0; else owned_exit_code=$?; fi
       owned_natural_exit=1
     fi

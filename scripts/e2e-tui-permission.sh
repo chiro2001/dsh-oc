@@ -70,6 +70,65 @@ wait_permission_dialog() {
   return 1
 }
 
+wait_always_confirmation() {
+  local file="$1"
+  local deadline=$((SECONDS + 15))
+  while (( SECONDS < deadline )); do
+    e2e_tui_capture "$file"
+    if grep -qa 'This will allow\|Confirm' "$file"; then
+      return 0
+    fi
+    if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+      echo "e2e: dsh exited while waiting for Allow always confirmation" >&2
+      tmux capture-pane -p -S -200 -t "$E2E_TUI_SESSION" >&2 2>/dev/null || true
+      return 1
+    fi
+    sleep 0.25
+  done
+  echo "e2e: Allow always confirmation did not appear" >&2
+  tail -40 "$file" >&2 || true
+  return 1
+}
+
+wait_prompt_started() {
+  local bridge="$1"
+  local sid="$2"
+  local prompt="$3"
+  local evidence="$4"
+  local deadline=$((SECONDS + 30))
+  local mock_before=0
+  if [[ -n "${E2E_MOCK_ERR:-}" && -f "$E2E_MOCK_ERR" ]]; then
+    mock_before="$(wc -l < "$E2E_MOCK_ERR")"
+  fi
+  while (( SECONDS < deadline )); do
+    local messages status mock_lines
+    messages="$(curl -s "$bridge/session/$sid/message" 2>/dev/null || true)"
+    if jq -e --arg prompt "$prompt" \
+      '[.. | objects | select(has("text")) | .text] | any(. == $prompt)' \
+      <<<"$messages" >/dev/null 2>&1; then
+      return 0
+    fi
+    status="$(curl -s "$bridge/session/status" 2>/dev/null | jq -r --arg sid "$sid" '.[$sid].type // empty' 2>/dev/null || true)"
+    if [[ "$status" == 'busy' ]]; then return 0; fi
+    if [[ -n "${E2E_MOCK_ERR:-}" && -f "$E2E_MOCK_ERR" ]]; then
+      mock_lines="$(wc -l < "$E2E_MOCK_ERR")"
+      if (( mock_lines > mock_before )); then return 0; fi
+    fi
+    e2e_tui_capture "$evidence"
+    if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+      echo "e2e: dsh exited before prompt started ($prompt)" >&2
+      tmux capture-pane -p -S -200 -t "$E2E_TUI_SESSION" >&2 2>/dev/null || true
+      return 1
+    fi
+    sleep 0.25
+  done
+  echo "e2e: prompt did not start: $prompt" >&2
+  tail -40 "$evidence" >&2 2>/dev/null || true
+  curl -s "$bridge/session/$sid/message" >&2 2>/dev/null || true
+  tail -8 "$E2E_MOCK_ERR" >&2 2>/dev/null || true
+  return 1
+}
+
 wait_reply_count() {
   local bridge="$1"
   local sid="$2"
@@ -114,6 +173,7 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'permission once' "$E2E_RUN_DIR/prompt-permission-once.txt"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-once-dialog.txt"
 echo "  dialog 1 shown (once)"
@@ -121,14 +181,10 @@ tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-always-dialog.txt"
 echo "  dialog 2 shown (always)"
 tmux send-keys -t "$E2E_TUI_SESSION" Right
-sleep 1
+tmux send-keys -t "$E2E_TUI_SESSION" Enter
+wait_always_confirmation "$E2E_RUN_DIR/perm-always-confirm.txt"
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 sleep 1
-e2e_tui_capture "$E2E_RUN_DIR/perm-always-confirm.txt"
-if grep -qa 'This will allow\|Confirm' "$E2E_RUN_DIR/perm-always-confirm.txt"; then
-  tmux send-keys -t "$E2E_TUI_SESSION" Enter
-  sleep 1
-fi
 AUTO_OK="1"
 deadline=$((SECONDS + 90))
 while (( SECONDS < deadline )); do
@@ -154,6 +210,7 @@ jq -e --arg s "$SID" '.data | any(.sessionID == $s and .id == "\($s):bash")' <<<
 echo "  allow once + allow always + auto-approve verified; bash grant saved"
 
 tmux send-keys -t "$E2E_TUI_SESSION" 'permission after always' Enter
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'permission after always' "$E2E_RUN_DIR/prompt-permission-after-always.txt"
 wait_reply_count "$E2E_BRIDGE_URL" "$SID" 2
 echo "  third tool call auto-approved without a dialog"
 
@@ -181,6 +238,7 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'permission reject' "$E2E_RUN_DIR/prompt-permission-reject.txt"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-reject-dialog.txt"
 tmux send-keys -t "$E2E_TUI_SESSION" Right
@@ -238,6 +296,7 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'ask me a question' "$E2E_RUN_DIR/prompt-question.txt"
 
 QUESTION_SEEN=""
 deadline=$((SECONDS + 60))
@@ -291,6 +350,7 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'mini permission once' "$E2E_RUN_DIR/prompt-mini-once.txt"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-dialog.txt"
 echo "  mini permission dialog shown"
@@ -327,17 +387,15 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'mini permission always' "$E2E_RUN_DIR/prompt-mini-always.txt"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-always-dialog.txt"
 tmux send-keys -t "$E2E_TUI_SESSION" Right
 sleep 1
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
+wait_always_confirmation "$E2E_RUN_DIR/perm-mini-always-confirm.txt"
+tmux send-keys -t "$E2E_TUI_SESSION" Enter
 sleep 1
-e2e_tui_capture "$E2E_RUN_DIR/perm-mini-always-confirm.txt"
-if grep -qa 'This will allow\|Confirm' "$E2E_RUN_DIR/perm-mini-always-confirm.txt"; then
-  tmux send-keys -t "$E2E_TUI_SESSION" Enter
-  sleep 1
-fi
 AUTO_OK="1"
 deadline=$((SECONDS + 90))
 while (( SECONDS < deadline )); do
@@ -391,6 +449,7 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'mini permission reject' "$E2E_RUN_DIR/prompt-mini-reject.txt"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-reject-dialog.txt"
 tmux send-keys -t "$E2E_TUI_SESSION" Right
@@ -452,6 +511,7 @@ while (( SECONDS < deadline )); do
 done
 [[ -n "$SID" ]]
 echo "  session $SID"
+wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'mini ask a question' "$E2E_RUN_DIR/prompt-mini-question.txt"
 
 QUESTION_SEEN=""
 deadline=$((SECONDS + 60))

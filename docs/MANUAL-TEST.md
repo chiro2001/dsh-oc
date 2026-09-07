@@ -139,7 +139,8 @@ TUI 仍把完整后续文本渲染在排队卡片上方（顺序正确，95 帧�
 ## 12. 进程 I/O 观察（安全默认）
 
 `scripts/monitor-process-io.sh` 默认只观察明确指定的 PID，不会结束任何外部
-进程；达到阈值只在 stderr 告警，并继续记录。日志为 TSV，包含
+进程；正常退出默认静默，达到阈值只在 stderr 告警，并继续记录。需要报告正常
+退出时显式加 `--report-exit`。日志为 TSV，包含
 `read_bytes/write_bytes/rchar/wchar/RSS/CPU` 及 CPU 增量：
 日志同时保留当前累计值与本窗口 delta；外部 PID 的首样本只建立 baseline，
 `--start` 自有进程可计入首样本已有计数，并按 PID/starttime 防止子进程退出或
