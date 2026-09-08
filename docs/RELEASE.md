@@ -1,9 +1,8 @@
 # dsh-oc 发布与回滚流程
 
-`v0.2.0-rc.1` 已于 2026-09-07 发布，是面向 dsh `>=0.1.2-rc.1` 的 ABI
-breaking minor。后续候选复用本清单，把文中的 `<candidate-version>` 替换为实际
-版本；当前 `feat-issues-4-5` 上尚未发布的改动尚未合入 `develop`，必须先完成
-用户手动验证，再按分支流程集成。
+`v0.2.0-rc.1` 已于 2026-09-07 发布；`v0.2.0-rc.2` 是面向 dsh
+`>=0.1.2-rc.1` 的后续候选。后续候选复用本清单，把文中的
+`<candidate-version>` 替换为实际版本。
 
 发布决策依据见 `expert-advice/round-0002/decision.md`；npm 继续 NO-GO。包
 `@chiro2001/dsh-oc` 只走 GitHub 源安装，发布物以**完整 commit SHA** 为真相源，
@@ -65,6 +64,15 @@ breaking minor。后续候选复用本清单，把文中的 `<candidate-version>
   冷装、真实 TUI smoke、同 ABI 回滚和真实 DeepSeek quick smoke 已通过。
 - 发布四元组：opencode `1.18.18`、dsh-oc commit、tarball SHA256、package
   tree hash，详见 GitHub prerelease notes。
+
+## v0.2.0-rc.2 发布记录（待发布）
+
+- 新增官方 OpenCode `!` shell mode；用户命令和输出通过非唤醒 context 注入下一次
+  模型 prompt，并保留精确 PID/进程组取消和输出预算。
+- 修复 `/preset` 最终 assistant 卡片的模型/variant 回显与 `QUEUED` 完成状态，
+  增加 v1/v2 history 与真实 TUI 回归。
+- 完善 profile 隔离与 dsh-tui/dsh-dcp ABI 排障文档；修复构建工件跨路径 hash 漂移，
+  并收紧 TUI e2e 的状态驱动等待。
 
 ## 回滚
 

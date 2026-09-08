@@ -2,18 +2,19 @@
 
 > 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读
 > `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
-> `main` 已包含 `v0.2.0-rc.1`；`develop` 是手动验证和集成交付线，稳定后再回合
+> `main` 已包含 `v0.2.0-rc.1`；RC.2 候选在 `feat-issues-4-5` 完成验证，`develop` 是
+> 手动验证和集成交付线，稳定后再回合
 > `main`。
 
-## 当前工作线（feat-issues-4-5，未发布）
+## RC.2 候选线（feat-issues-4-5，待远端发布）
 
-Issue #4/#5 当前仍在 `feat-issues-4-5` 功能分支，尚未合入 `develop`。完成用户
-手动 TUI 验证前不合入、不 bump 版本、不打 tag、不发布：
+Issue #4/#5 当前在 `feat-issues-4-5` 功能分支，尚未合入 `develop`。本地门禁和用户
+手动 TUI 验证已完成，下一步是远端 CI、full-SHA 演练和 RC.2 发布：
 
 | Issue | 内容 | 当前状态 |
 |---|---|---|
-| #4 | 官方 TUI `!` shell mode，经 Agent idle maintenance 启动用户 OS shell | 已实现，待手动验证 |
-| #5 | `/preset` 完成结果不再持续显示 `QUEUED` | 已修复，待手动验证 |
+| #4 | 官方 TUI `!` shell mode，经 Agent idle maintenance 启动用户 OS shell | 已实现，门禁与手测通过，待远端发布 |
+| #5 | `/preset` 完成结果不再持续显示 `QUEUED` | 已修复，门禁与手测通过，待远端发布 |
 
 `!` shell 不触发模型回合；用户显式 `!` 是授权边界，命令继承 OS 用户权限和
 session cwd，由 Agent idle maintenance 管理并只允许精确子进程/进程组取消；shell

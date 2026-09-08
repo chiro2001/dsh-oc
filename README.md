@@ -20,9 +20,8 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 
 当前兼容基线：dsh `>=0.1.2-rc.1`、官方 opencode `1.18.18`。
 `main` 当前指向 GitHub prerelease [v0.2.0-rc.1](https://github.com/chiro2001/dsh-oc/releases/tag/v0.2.0-rc.1)，
-不是无标记的稳定版；npm registry 暂未发布，安装和更新走 GitHub 源。当前未发布的
-Issue #4/#5 改动仍在 `feat-issues-4-5`，完成手动验证后才会合入 `develop`，再由
-`develop` 合并到 `main` 发布。
+不是无标记的稳定版；npm registry 暂未发布，安装和更新走 GitHub 源。`v0.2.0-rc.2`
+候选已在 `feat-issues-4-5` 完成门禁，待推送并合入 `develop`/`main` 后发布。
 
 ## 安装并启动
 
@@ -37,7 +36,7 @@ dsh --profile oc
 
 ### 手动测试当前功能分支
 
-当前 #4/#5 位于 `feat-issues-4-5`，且在用户确认前不应假定已进入 `develop`。
+当前 RC.2 候选位于 `feat-issues-4-5`，在正式发布前仍不应假定已进入 `develop`。
 未推送到 GitHub 时，直接使用本地 link：
 
 ```bash
