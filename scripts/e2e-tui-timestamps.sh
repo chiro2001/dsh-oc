@@ -24,7 +24,7 @@ trap cleanup EXIT
 e2e_new_run "tui-timestamps" "danger-full-access" "success" "1"
 
 echo "== seed a session through the bridge API =="
-E2E_ACTIVE_SESSION="dsh-oc-timestamp-seed"
+E2E_ACTIVE_SESSION="dsh-oc-timestamp-seed-${E2E_RUNID}"
 e2e_start_dsh "$E2E_ACTIVE_SESSION"
 e2e_wait_bridge_url
 SEED_URL="$E2E_BRIDGE_URL"
@@ -55,25 +55,39 @@ e2e_tui_start "--session $SESSION" "DSH_OC_TUI_TIMESTAMPS=1"
 e2e_tui_wait_attach
 
 TUI_HINT=""
+TUI_PREV=""
 deadline=$((SECONDS + 45))
 while (( SECONDS < deadline )); do
   e2e_tui_capture "$E2E_RUN_DIR/tui-timestamps.txt"
-  if grep -qa "e2e seed: timestamp session" "$E2E_RUN_DIR/tui-timestamps.txt"; then
-    TUI_HINT=yes
-    break
+  # History hydration can paint the user seed before the assistant row and
+  # timestamp setting have reached the same frame. Require the user seed,
+  # recovered assistant reply, and a time-of-day timestamp in one pane capture
+  # and keep it stable for two consecutive polls.
+  if grep -qa "e2e seed: timestamp session" "$E2E_RUN_DIR/tui-timestamps.txt" \
+    && grep -qa "mock response recovered" "$E2E_RUN_DIR/tui-timestamps.txt" \
+    && grep -qaE '(^|[^0-9])[0-9]{1,2}:[0-9]{2}([^0-9]|$)' "$E2E_RUN_DIR/tui-timestamps.txt"; then
+    current="$(e2e_tui_frame_fingerprint "$E2E_RUN_DIR/tui-timestamps.txt")"
+    if [[ -n "$TUI_PREV" && "$current" == "$TUI_PREV" ]]; then
+      TUI_HINT=yes
+      break
+    fi
+    TUI_PREV="$current"
   fi
   if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
     echo "e2e: dsh exited while waiting for TUI render: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
-    tmux capture-pane -p -S -200 -t "$E2E_TUI_SESSION" >&2 2>/dev/null || true
+    e2e_tui_capture_diagnostic "$E2E_RUN_DIR/tui-timestamps-exit-failure"
+    tail -80 "$E2E_RUN_DIR/tui-timestamps-exit-failure.scrollback.txt" >&2 || true
     exit 1
   fi
-  sleep 1
+  sleep 0.2
 done
 if [[ -z "$TUI_HINT" ]]; then
-  echo "e2e: seeded session content not visible in TUI pane" >&2
+  echo "e2e: user seed, assistant reply, and timestamp did not stabilize in one TUI pane" >&2
+  e2e_tui_capture_diagnostic "$E2E_RUN_DIR/tui-timestamps-failure"
+  tail -80 "$E2E_RUN_DIR/tui-timestamps-failure.scrollback.txt" >&2 || true
   exit 1
 fi
-echo "  seeded content visible"
+echo "  seeded user+assistant content and timestamp stable in one pane"
 
 KV_FILE="$E2E_DSH_HOME/opencode/state/opencode/kv.json"
 if [[ ! -f "$KV_FILE" ]] || [[ "$(jq -r .timestamps "$KV_FILE")" != "show" ]]; then

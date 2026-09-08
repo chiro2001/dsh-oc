@@ -287,6 +287,30 @@ e2e_tui_capture() {
   tmux capture-pane -p -t "$E2E_TUI_SESSION" > "$file" || true
 }
 
+# POSIX frame fingerprint used for polling stable TUI states. `sha256sum` is
+# not available by default on macOS; cksum's CRC and byte count are sufficient
+# here because this is only an equality check between adjacent captures.
+e2e_tui_frame_fingerprint() {
+  local file="$1"
+  cksum < "$file" | awk '{print $1 ":" $2}'
+}
+
+# Preserve enough state to diagnose a first-attempt TUI timing failure. The
+# normal capture contains only the visible screen; the scrollback and the
+# exact tmux/process ownership make it possible to tell whether a key was
+# sent before the TUI had rendered its next state. This is read-only and never
+# targets a process for cleanup.
+e2e_tui_capture_diagnostic() {
+  local stem="$1"
+  e2e_tui_capture "${stem}.txt"
+  tmux capture-pane -p -S -300 -t "$E2E_TUI_SESSION" > "${stem}.scrollback.txt" 2>/dev/null || true
+  tmux display-message -p -t "$E2E_TUI_SESSION" \
+    'session=#{session_name} window=#{window_index} pane=#{pane_index} pane_pid=#{pane_pid} cols=#{pane_width} rows=#{pane_height}' \
+    > "${stem}.tmux.txt" 2>/dev/null || true
+  ps -eo pid=,ppid=,stat=,args= | awk -v pane="$(tmux display-message -p -t "$E2E_TUI_SESSION" '#{pane_pid}' 2>/dev/null || true)" \
+    -v run="${E2E_RUN_DIR:-}" '((run != "" && index($0, run) > 0) || (pane != "" && $2 == pane))' > "${stem}.ps.txt" 2>/dev/null || true
+}
+
 # Send `exit` (or fallbacks) and wait for dsh to leave; asserts exit code 0.
 e2e_tui_exit() {
   local exit_file="$E2E_RUN_DIR/dsh-exit.txt"
