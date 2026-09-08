@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`4141cf9`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`24406bc`（2026-09-08）。
 
 ### 路由注册表
 
@@ -285,7 +285,7 @@
 | `scripts/e2e-tui-permission.sh` | d94f52e fix(e2e): harden permission waits and monitor output |
 | `scripts/e2e-tui-preset-inherit.sh` | 6e48eda fix(bridge): preserve preset model and inject shell context |
 | `scripts/e2e-tui-print-logs.sh` | 7561559 test(e2e): assert --log-level value passthrough to opencode child |
-| `scripts/e2e-tui-queue-live.sh` | e37d7fd test(e2e): keyboard queue while a live stream is running |
+| `scripts/e2e-tui-queue-live.sh` | 24406bc test(e2e): synchronize live queue submission |
 | `scripts/e2e-tui-queue.sh` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `scripts/e2e-tui-shell.sh` | 6e48eda fix(bridge): preserve preset model and inject shell context |
 | `scripts/e2e-tui-skill.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
