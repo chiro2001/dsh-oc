@@ -1370,7 +1370,7 @@ describe('bridge router: session routes', () => {
     expect(injected[0]?.content[0]?.text).toContain('The user manually executed a shell command')
     expect(injected[0]?.content[0]?.text).toContain('Command:\nprintf shell-ok')
     expect(injected[0]?.content[0]?.text).toContain('Output:\nshell-ok')
-    expect(injected[0]?.content[0]?.text).toContain('not from the model')
+    expect(injected[0]?.content[0]?.text).toContain('not a model-requested tool call')
     expect(inbox.nextStep).toHaveLength(1)
     expect(inboxSession.snapshotEvents()).toContainEqual(expect.objectContaining({
       type: 'agent/inbox/spliced',
@@ -1452,6 +1452,33 @@ describe('bridge router: session routes', () => {
     const output = (history.body as Array<{ parts: Array<{ state?: { output?: string } }> }>)[1]?.parts[0]?.state?.output ?? ''
     expect(output).toContain('shell-budget-ok')
     expect(Buffer.byteLength(output, 'utf8')).toBeGreaterThan(128 * 1024)
+  })
+
+  it('keeps provenance, exit status, and both stream truncation notices before large model output', async () => {
+    const base = fakeApi()
+    const injected: Array<{ content: Array<{ text?: string }> }> = []
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          inject: (message: typeof injected[number]) => { injected.push(message) },
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+        }),
+      },
+    }
+    const { server } = await boot(api, process.cwd())
+    const result = await request(server, 'POST', '/session/s1/shell', {
+      agent: 'build',
+      command: 'yes O | head -c 90000; yes E | head -c 90000 >&2; exit 7',
+    })
+    expect(result.status).toBe(200)
+    const context = injected[0]?.content[0]?.text ?? ''
+    expect(Buffer.byteLength(context, 'utf8')).toBeLessThanOrEqual(144 * 1024)
+    expect(context).toContain('Source: user manually executed this command; it was not a model-requested tool call.')
+    expect(context).toContain('[stdout truncated for model context after 65536 UTF-8 bytes]')
+    expect(context).toContain('[stderr truncated for model context after 65536 UTF-8 bytes]')
+    expect(context).toContain('[exit code: 7]')
+    expect(context.indexOf('[exit code: 7]')).toBeLessThan(context.indexOf('Output:\n'))
   })
 
   it('keeps a completed shell card and surfaces a warning when context injection fails', async () => {

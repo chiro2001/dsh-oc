@@ -316,6 +316,19 @@ function compactContextWarning(error: unknown): string {
   return truncateUtf8(oneLine, SHELL_CONTEXT_WARNING_LIMIT_BYTES, ' [truncated]')
 }
 
+function shellContextStatus(result: ShellRunResult): string {
+  const status: string[] = []
+  if (result.errorMessage !== undefined) status.push(`Error: ${compactContextWarning(result.errorMessage)}`)
+  if (result.aborted) {
+    status.push('User aborted the command')
+  } else if (result.signal !== null) {
+    status.push(`killed by signal: ${result.signal}`)
+  } else if (result.exitCode !== null && result.exitCode !== 0) {
+    status.push(`[exit code: ${result.exitCode}]`)
+  }
+  return status.join('\n')
+}
+
 function renderShellContextOutput(result: ShellRunResult): string {
   const stdoutMarker = `[stdout truncated for model context after ${SHELL_CONTEXT_STREAM_LIMIT_BYTES} UTF-8 bytes]`
   const stderrMarker = `[stderr truncated for model context after ${SHELL_CONTEXT_STREAM_LIMIT_BYTES} UTF-8 bytes]`
@@ -340,20 +353,6 @@ function renderShellContextOutput(result: ShellRunResult): string {
     output += '[stderr]\n'
     output += truncateUtf8(result.stderr, stderrLimit, '')
   }
-  if (result.errorMessage !== undefined) {
-    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
-    output += `Error: ${result.errorMessage}`
-  }
-  if (result.aborted) {
-    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
-    output += '<metadata>\nUser aborted the command\n</metadata>'
-  } else if (result.signal !== null) {
-    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
-    output += `[killed by signal: ${result.signal}]`
-  } else if (result.exitCode !== null && result.exitCode !== 0) {
-    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
-    output += `[exit code: ${result.exitCode}]`
-  }
   return output.length === 0 ? '(no output)' : output
 }
 
@@ -373,12 +372,14 @@ function shellContextMessage(command: string, result: ShellRunResult) {
     SHELL_CONTEXT_COMMAND_LIMIT_BYTES,
     `[command truncated for model context after ${SHELL_CONTEXT_COMMAND_LIMIT_BYTES} UTF-8 bytes]`,
   )
+  const status = shellContextStatus(result)
   const contextText = truncateUtf8(
     [
       'The user manually executed a shell command through OpenCode ! shell mode.',
+      'Source: user manually executed this command; it was not a model-requested tool call.',
+      ...(status === '' ? [] : [`Status:\n${status}`]),
       `Command:\n${commandText}`,
       `Output:\n${renderShellContextOutput(result)}`,
-      'This command and output came from the user, not from the model or a model-requested tool call.',
     ].join('\n\n'),
     SHELL_CONTEXT_TOTAL_LIMIT_BYTES,
     `[dsh-oc] shell model context truncated after ${SHELL_CONTEXT_TOTAL_LIMIT_BYTES} UTF-8 bytes`,
@@ -560,7 +561,9 @@ export async function runShellCommand(
             // Injection is deliberately non-waking. The maintenance lease is
             // still held here, so a following prompt cannot race the durable
             // context insertion; it will be consumed at that prompt's next
-            // step.
+            // step. If session.cancel cleared the inbox while aborting this
+            // maintenance task, this synchronous append happens afterward and
+            // deliberately re-establishes the completed-command context.
             agent.inject(shellContextMessage(body.command, result))
           } catch (error) {
             const reason = compactContextWarning(error)
