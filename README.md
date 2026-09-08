@@ -86,9 +86,13 @@ dsh-oc 以当前 OS 用户身份启动精确的 shell 子进程（POSIX 仅使�
 `$SHELL -c`，否则回退 `/bin/sh`；Windows 使用 `ComSpec`，缺失时回退
 `cmd.exe`）。`!` 本身就是用户授权边界；它不经过 dsh 的模型工具、approval 或
 sandbox waterfall。TUI 显示一张 shell tool card、输出和退出结果，但不会触发模型
-回复，也不会把输出注入下一轮 prompt。
+回复；命令完成后会以明确标注“用户手动执行”的非唤醒 context 注入下一次真实 prompt，
+让模型能看到命令和输出。注入本身不会开启新的 turn，session 被清理时不会迟到注入。
 stdout/stderr 各自最多保留 1 MiB；超过后继续 drain 子进程，但在卡片中追加截断标记，
-不会因为输出超过阈值而 kill 命令。
+不会因为输出超过阈值而 kill 命令。发送给模型的 context 有独立预算：命令最多 16 KiB、
+stdout/stderr 各最多 64 KiB、完整文本最多约 144 KiB，并带明确截断标记。
+命令和输出会发送给当前配置的模型，可能包含 token、密码或个人数据；使用 `!` 前请
+确认不会泄露敏感信息。
 
 `--dir <path>` 会设置 bridge cwd；已记录的 session cwd 优先，只有冷启动时才用它作
 shell cwd fallback。shell 卡片属于 bridge 的短期投影，不伪造 dsh agent-loop 事件；
@@ -154,8 +158,9 @@ dsh --profile oc --dir ~/project --mini
   的 `taskkill /T` 树。Windows 使用 `ComSpec`（不是 dsh 的 pwsh sandbox），这项
   平台差异应在 Windows 主机上单独验收。
 - shell 路径只在子进程结束后发布保留的 stdout/stderr，不提供实时输出流；每路最多
-  保留 1 MiB，超出后继续 drain 并追加截断标记。shell-only 卡片是 bridge 内存投影，
-  重启 bridge 后不保证作为 dsh 持久事件恢复。
+  保留 1 MiB，超出后继续 drain 并追加截断标记。shell-only 卡片是 bridge 内存投影；
+  另有一条 dsh `agent/inbox/spliced` pending context 供下一次 prompt 使用，claim 后
+  如发生 compaction 不保证逐字长期保留。
 - `Allow always` 只在当前会话内记忆，重启后清空。
 - 官方退出 splash 无法替换；dsh-oc 会在下方补一行 dsh 恢复说明，可用
   `DSH_OC_DISABLE_EXIT_NOTE=1` 关闭。
@@ -167,6 +172,38 @@ dsh --profile oc --dir ~/project --mini
   不丢失、不重复，重新进入会话后顺序正确。
 - MCP/LSP/formatter/integration/reference 等外围路由目前只提供 schema-valid stub，
   不伪造结果。
+
+## 排障：Profile 隔离与 dsh-tui
+
+`dsh-oc` 只在 `dsh --profile oc` 的 dsh 进程中加载。它的 bridge、OpenCode 配置和
+兼容 shim 都是该进程的本地状态，不会跨进程修改其它 profile；不要把 dsh-oc 安装
+到 dsh-tui 所用的 profile 来修复 dsh-tui。
+
+dsh-tui launcher 当前固定使用 `dsh --profile dsh-tui`，不是泛称的 `tui`。两者可以
+同时存在；只读查看实际组合树：
+
+```bash
+dsh --profile oc --dump-config
+dsh --profile tui --dump-config
+dsh --profile dsh-tui --dump-config
+```
+
+如果你明确希望 profile 名称就是 `tui`，可以考虑安装 dsh-tui bundle 并直接使用该
+profile（以下只是建议命令，本轮没有替用户 profile 执行）：
+
+```bash
+dsh plugin --profile tui add '@deepseek-harness-tui/dsh-tui@0.10.0-beta.5'
+dsh --profile tui
+```
+
+该安装路径不要再添加旧版 dsh-dcp；全局 `dsh-tui` 命令仍会查找 `dsh-tui` profile，
+不会自动转向 `tui`。
+
+如果 dsh-tui 显示 `turn error · events is not iterable`，优先检查其 dsh-dcp 版本和
+peer ABI。旧版 dsh-dcp 仍读取 dsh 0.1.2 已移除的 `session.events`，而新接口是
+`session.snapshotEvents()`；这不是 dsh-oc 与 dsh-tui 的冲突。应升级到与当前 dsh
+ABI 匹配的 dsh-dcp，或仅在 dsh-tui 自己的 profile patch/诊断 overlay 中暂时禁用
+`dcp`（`- id: dcp` / `disabled: true`），再向 dsh-dcp/dsh-tui 上游反馈。
 
 ## 更新与开发
 

@@ -223,7 +223,18 @@ store（最近 20 条），不会写入 dsh durable history。它会注入 v1 �
 `GET /session/{id}/message`（包括单条 message 查询）和 v2 的
 `GET /api/session/{id}/message` hydration；不会注入 v2 的
 `/api/session/{id}/history`、`/context` 或单条 `/message/{messageID}`，这些接口只
-返回 durable dsh history。它不会触发模型回复，也不会把 shell 输出注入下一轮 prompt。
+返回 durable dsh history。命令完成后，bridge 通过 dsh Agent 的 `inject()` 追加一条
+非唤醒的 plugin context（`plugin: dsh-oc`、`form: notice`），内容明确标注为“用户手动
+执行的命令”以及 stdout/stderr、截断标记和退出状态；模型注入有独立的 UTF-8 预算：
+命令最多 16 KiB、stdout/stderr 各最多 64 KiB，完整 context 文本最多约 144 KiB；TUI
+工具卡仍保留每路 1 MiB 的显示预算。shell 输出会发送给当前配置的模型，命令或输出
+可能含 token、密码、个人数据等敏感信息，使用者必须先确认再执行 `!`。若注入失败，
+shell 卡仍会 completed，但输出会追加 `[dsh-oc] ... was not added to model context`。
+该 context 首先持久化为合法的 dsh `agent/inbox/spliced`（`next-step` pending）事件，
+只有在后续 step claim 后才进入该 step 的 model request；注入本身不会唤醒 Agent、不会
+打开新的 turn，也不会自动触发模型回复。对同一 session，下一次真实 prompt 保证能看到
+该 context（除非 session 被清理）；重启/恢复会重建尚未 claim 的 inbox。claim 后如发生
+compaction，dsh 可能摘要或丢弃逐字原文，因此不保证压缩后仍逐字长期保留。
 若 Agent 已有 turn/maintenance，接口返回 409；若 session 不存在返回 404；缺少/非法
 `agent` 或空 command 返回 400。
 

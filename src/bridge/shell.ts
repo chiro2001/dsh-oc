@@ -3,6 +3,7 @@ import type { ChildProcessByStdio } from 'node:child_process'
 import type { Readable } from 'node:stream'
 import { isAbsolute, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { createUserMessage } from '@deepseek-ai/dsh-llm/message'
 import type { Message, Part } from '@opencode-ai/sdk/client'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { resolveAgent as resolveHostAgent, RpcCallError } from './rpc.js'
@@ -34,6 +35,8 @@ interface MaintenanceAgent extends Agent {
   runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>
 }
 
+const SHELL_CONTEXT_PLUGIN = 'dsh-oc'
+
 interface ShellRunResult {
   stdout: string
   stderr: string
@@ -43,10 +46,18 @@ interface ShellRunResult {
   signal: string | null
   aborted: boolean
   errorMessage?: string
+  /** Set when the shell card completed but model-context injection failed. */
+  contextWarning?: string
 }
 
 /** Bounded per-stream retention; the child is always drained past the cap. */
 export const SHELL_OUTPUT_LIMIT_BYTES = 1024 * 1024
+
+/** Separate, smaller budgets for text sent to the configured model. */
+export const SHELL_CONTEXT_COMMAND_LIMIT_BYTES = 16 * 1024
+export const SHELL_CONTEXT_STREAM_LIMIT_BYTES = 64 * 1024
+export const SHELL_CONTEXT_TOTAL_LIMIT_BYTES = 144 * 1024
+export const SHELL_CONTEXT_WARNING_LIMIT_BYTES = 1024
 
 interface ShellInvocation {
   file: string
@@ -266,7 +277,124 @@ function renderShellOutput(result: ShellRunResult): string {
     if (output.length > 0 && !output.endsWith('\n')) output += '\n'
     output += `[exit code: ${result.exitCode}]`
   }
+  if (result.contextWarning !== undefined) {
+    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
+    output += result.contextWarning
+  }
   return output.length === 0 ? '(no output)' : output
+}
+
+/** Truncate on Unicode code-point boundaries while accounting in UTF-8 bytes. */
+function truncateUtf8(value: string, limitBytes: number, marker: string): string {
+  if (Buffer.byteLength(value, 'utf8') <= limitBytes) return value
+  const markerBytes = Buffer.byteLength(marker, 'utf8')
+  if (markerBytes >= limitBytes) {
+    let clipped = ''
+    let used = 0
+    for (const character of marker) {
+      const size = Buffer.byteLength(character, 'utf8')
+      if (used + size > limitBytes) break
+      clipped += character
+      used += size
+    }
+    return clipped
+  }
+  let clipped = ''
+  let used = 0
+  for (const character of value) {
+    const size = Buffer.byteLength(character, 'utf8')
+    if (used + size + markerBytes > limitBytes) break
+    clipped += character
+    used += size
+  }
+  return clipped + marker
+}
+
+function compactContextWarning(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error)
+  const oneLine = raw.replace(/\s+/gu, ' ').trim() || 'unknown injection error'
+  return truncateUtf8(oneLine, SHELL_CONTEXT_WARNING_LIMIT_BYTES, ' [truncated]')
+}
+
+function renderShellContextOutput(result: ShellRunResult): string {
+  const stdoutMarker = `[stdout truncated for model context after ${SHELL_CONTEXT_STREAM_LIMIT_BYTES} UTF-8 bytes]`
+  const stderrMarker = `[stderr truncated for model context after ${SHELL_CONTEXT_STREAM_LIMIT_BYTES} UTF-8 bytes]`
+  const stdoutNeedsMarker = result.stdoutTruncated
+    || Buffer.byteLength(result.stdout, 'utf8') > SHELL_CONTEXT_STREAM_LIMIT_BYTES
+  const stderrNeedsMarker = result.stderrTruncated
+    || Buffer.byteLength(result.stderr, 'utf8') > SHELL_CONTEXT_STREAM_LIMIT_BYTES
+  const stdoutLimit = stdoutNeedsMarker
+    ? Math.max(0, SHELL_CONTEXT_STREAM_LIMIT_BYTES - Buffer.byteLength(stdoutMarker, 'utf8') - 1)
+    : SHELL_CONTEXT_STREAM_LIMIT_BYTES
+  const stderrLimit = stderrNeedsMarker
+    ? Math.max(0, SHELL_CONTEXT_STREAM_LIMIT_BYTES - Buffer.byteLength(stderrMarker, 'utf8') - 1)
+    : SHELL_CONTEXT_STREAM_LIMIT_BYTES
+  let output = ''
+  // Put all truncation notices before the large payload so a separate total
+  // budget cannot cut away the explanation for the later stream bytes.
+  if (stdoutNeedsMarker) output += `${stdoutMarker}\n`
+  if (stderrNeedsMarker) output += `${stderrMarker}\n`
+  output += truncateUtf8(result.stdout, stdoutLimit, '')
+  if (result.stderr.length > 0 || result.stderrTruncated) {
+    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
+    output += '[stderr]\n'
+    output += truncateUtf8(result.stderr, stderrLimit, '')
+  }
+  if (result.errorMessage !== undefined) {
+    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
+    output += `Error: ${result.errorMessage}`
+  }
+  if (result.aborted) {
+    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
+    output += '<metadata>\nUser aborted the command\n</metadata>'
+  } else if (result.signal !== null) {
+    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
+    output += `[killed by signal: ${result.signal}]`
+  } else if (result.exitCode !== null && result.exitCode !== 0) {
+    if (output.length > 0 && !output.endsWith('\n')) output += '\n'
+    output += `[exit code: ${result.exitCode}]`
+  }
+  return output.length === 0 ? '(no output)' : output
+}
+
+/**
+ * Build the model-facing record for a completed `!` shell command.
+ *
+ * `Agent.inject()` is the dsh host seam for non-waking context.  The command
+ * therefore enters the durable `agent/inbox/spliced` next-step pending queue;
+ * after the agent claims it, the message is included in the next model request
+ * together with the real prompt, without opening an LLM turn by itself. Keep
+ * the prose explicit: the model must distinguish a command the human ran from
+ * a command it requested through a tool call.
+ */
+function shellContextMessage(command: string, result: ShellRunResult) {
+  const commandText = truncateUtf8(
+    command,
+    SHELL_CONTEXT_COMMAND_LIMIT_BYTES,
+    `[command truncated for model context after ${SHELL_CONTEXT_COMMAND_LIMIT_BYTES} UTF-8 bytes]`,
+  )
+  const contextText = truncateUtf8(
+    [
+      'The user manually executed a shell command through OpenCode ! shell mode.',
+      `Command:\n${commandText}`,
+      `Output:\n${renderShellContextOutput(result)}`,
+      'This command and output came from the user, not from the model or a model-requested tool call.',
+    ].join('\n\n'),
+    SHELL_CONTEXT_TOTAL_LIMIT_BYTES,
+    `[dsh-oc] shell model context truncated after ${SHELL_CONTEXT_TOTAL_LIMIT_BYTES} UTF-8 bytes`,
+  )
+  return createUserMessage({
+    content: [{
+      type: 'text',
+      text: contextText,
+    }],
+    source: {
+      kind: 'plugin',
+      plugin: SHELL_CONTEXT_PLUGIN,
+      form: 'notice',
+      summary: 'The user manually executed a shell command',
+    },
+  })
 }
 
 function shellError(result: ShellRunResult): ToolResultInfo['error'] | undefined {
@@ -316,6 +444,9 @@ export async function runShellCommand(
   }
   const agent = agentForShell(resolvedAgent)
   if (agent === undefined) throw internalError('shell mode unavailable: Agent.runMaintenance ABI is missing', { sessionId })
+  if (typeof agent.inject !== 'function') {
+    throw internalError('shell mode unavailable: Agent.inject ABI is missing', { sessionId })
+  }
 
   const requestedAgent = body.agent?.trim()
   if (body.agent !== undefined && requestedAgent === '') throw badRequest('shell request agent must be non-empty')
@@ -421,6 +552,25 @@ export async function runShellCommand(
         ctx.state.recordCommandResult(sessionId, { info: userInfo, parts: [userPart] })
         ctx.state.recordCommandResult(sessionId, { info: assistantInfo, parts: [running] })
         result = await runShellProcess(body.command, directory, controller.signal)
+        // A removed session must never receive a late context message. The
+        // check and synchronous inject call cannot be interleaved by a host
+        // event, so this also closes the remove-vs-finish race.
+        if (!ctx.state.isSessionCleared(sessionId)) {
+          try {
+            // Injection is deliberately non-waking. The maintenance lease is
+            // still held here, so a following prompt cannot race the durable
+            // context insertion; it will be consumed at that prompt's next
+            // step.
+            agent.inject(shellContextMessage(body.command, result))
+          } catch (error) {
+            const reason = compactContextWarning(error)
+            result = {
+              ...result,
+              contextWarning: `[dsh-oc] shell command/output was not added to model context: ${reason}`,
+            }
+            ctx.log(`[bridge] shell context injection failed: ${reason}`)
+          }
+        }
       } catch (error) {
         result = {
           stdout: '',

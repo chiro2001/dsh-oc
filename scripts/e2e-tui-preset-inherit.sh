@@ -76,6 +76,59 @@ if grep -qa 'QUEUED' "$E2E_RUN_DIR/tui-preset-cmd.txt"; then
 fi
 echo "  /preset minimal result rendered without a stale QUEUED badge"
 
+# The blank session is created lazily by the TUI and may not be listed until
+# the first command has completed. Resolve it now for the model comparison.
+PRESET_SESSION="$(e2e_curl -s "$E2E_BRIDGE_URL/session" \
+  | jq -r 'map(select(.agent == "minimal")) | .[0].id // empty')"
+if [[ -z "$PRESET_SESSION" ]]; then
+  # A host list refresh can lag the live session.updated edge; the newest
+  # listed session is still a safe fallback in this fresh per-run profile.
+  PRESET_SESSION="$(e2e_curl -s "$E2E_BRIDGE_URL/session" | jq -r '.[-1].id // empty')"
+fi
+if [[ -z "$PRESET_SESSION" ]]; then
+  echo "e2e: could not identify the TUI session after /preset" >&2
+  exit 1
+fi
+# Compare the final completed command assistant, not the preceding user echo.
+# Filter by the exact result text so a seeded history page cannot make an old
+# completed msg_cmd look like the current /preset result.
+SESSION_JSON="$(e2e_curl -s "$E2E_BRIDGE_URL/api/session/$PRESET_SESSION")"
+SESSION_MODEL="$(jq -r '.data.model.id // empty' <<<"$SESSION_JSON")"
+SESSION_PROVIDER="$(jq -r '.data.model.providerID // empty' <<<"$SESSION_JSON")"
+PRESET_MESSAGES="$(e2e_curl -s "$E2E_BRIDGE_URL/session/$PRESET_SESSION/message")"
+PRESET_COMMAND="$(jq -c '
+  [ .[]
+    | select((.info.id // "") | startswith("msg_cmd:"))
+    | select(.info.time.completed != null)
+    | select(([.parts[]? | select(.type == "text") | .text] | join("\n"))
+      | contains("Switched dsh agent preset to minimal"))
+  ] | last // {}
+' <<<"$PRESET_MESSAGES")"
+PRESET_MODEL="$(jq -r '.info.modelID // empty' <<<"$PRESET_COMMAND")"
+PRESET_PROVIDER="$(jq -r '.info.providerID // empty' <<<"$PRESET_COMMAND")"
+if [[ -z "$SESSION_MODEL" || -z "$PRESET_MODEL" || "$SESSION_MODEL" != "$PRESET_MODEL" \
+  || "$SESSION_PROVIDER" != "$PRESET_PROVIDER" ]]; then
+  echo "e2e: final completed /preset command model differs from session model" >&2
+  echo "  session=$SESSION_PROVIDER/$SESSION_MODEL command=$PRESET_PROVIDER/$PRESET_MODEL" >&2
+  exit 1
+fi
+echo "  final completed /preset command model matches session: $PRESET_PROVIDER/$PRESET_MODEL"
+
+# The visible pane must show the actual mock model and must not show the
+# bridge's historical deepseek-chat fallback. These assertions are kept on
+# the current capture and therefore cannot pass from unrelated seeded rows.
+if ! grep -Eqa 'mock-model|Mock Model' "$E2E_RUN_DIR/tui-preset-cmd.txt"; then
+  echo "e2e: TUI /preset pane did not display the mock-model label" >&2
+  tail -60 "$E2E_RUN_DIR/tui-preset-cmd.txt" >&2 || true
+  exit 1
+fi
+if grep -qa 'deepseek-chat' "$E2E_RUN_DIR/tui-preset-cmd.txt"; then
+  echo "e2e: TUI /preset pane displayed stale deepseek-chat" >&2
+  tail -60 "$E2E_RUN_DIR/tui-preset-cmd.txt" >&2 || true
+  exit 1
+fi
+echo "  TUI /preset pane shows Mock Model (mock-model) without deepseek-chat"
+
 echo "== create a fresh session (same bridge inherits lastAgentPreset) =="
 NEW_SID=""
 deadline=$((SECONDS + 30))

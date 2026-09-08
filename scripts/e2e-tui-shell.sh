@@ -137,6 +137,71 @@ TUI_OUTPUT_COUNT="$(grep -aE '┃[[:space:]]+DSH_OC_SHELL_OK[[:space:]]*$' "$E2E
 [[ "$TUI_OUTPUT_COUNT" == 1 ]] || { echo "e2e: expected one TUI shell output, got $TUI_OUTPUT_COUNT" >&2; exit 1; }
 echo "  official TUI rendered shell output"
 
+echo "== ask the model about the user-owned shell command =="
+tmux send-keys -t "$E2E_TUI_SESSION" -l 'What command did I just run manually, and what output did it produce?'
+tmux send-keys -t "$E2E_TUI_SESSION" Enter
+FOLLOWUP_HINT=""
+deadline=$((SECONDS + 60))
+while (( SECONDS < deadline )); do
+  FOLLOWUP_COUNT="$(curl -s "$TUI_URL/session/$SESSION/message" | grep -o 'mock response recovered' | wc -l | tr -d ' ')"
+  if [[ "$FOLLOWUP_COUNT" == "$((LLM_REPLY_COUNT_BEFORE + 1))" ]]; then
+    FOLLOWUP_HINT="follow-up model turn completed"
+    break
+  fi
+  if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
+    echo "e2e: dsh exited before shell-context follow-up: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if [[ -z "$FOLLOWUP_HINT" ]]; then
+  echo "e2e: follow-up model turn did not complete" >&2
+  exit 1
+fi
+echo "  $FOLLOWUP_HINT"
+
+# The mock server captures the provider request body.  This proves the shell
+# turn itself did not call the model, while the next real prompt received a
+# clearly user-owned command/output context message.
+deadline=$((SECONDS + 20))
+while (( SECONDS < deadline )); do
+  if jq -e 'any(.[]; any(.body.messages[]?; ((.content // "") | tostring | contains("The user manually executed a shell command through OpenCode ! shell mode."))))' "$E2E_MOCK_REQUEST_LOG" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! jq -e 'any(.[]; any(.body.messages[]?; ((.content // "") | tostring | contains("The user manually executed a shell command through OpenCode ! shell mode."))))' "$E2E_MOCK_REQUEST_LOG" >/dev/null 2>&1; then
+  echo "e2e: next model request did not contain user-owned shell context" >&2
+  cat "$E2E_MOCK_REQUEST_LOG" >&2 2>/dev/null || true
+  exit 1
+fi
+REQUEST_COUNT="$(jq 'length' "$E2E_MOCK_REQUEST_LOG" 2>/dev/null || echo 0)"
+[[ "$REQUEST_COUNT" == 2 ]] || {
+  echo "e2e: expected exactly two model requests (seed + follow-up), got $REQUEST_COUNT" >&2
+  exit 1
+}
+if ! jq -e '
+  any(.[]; .attempt == 2 and (
+    [ .body.messages[]? | { role, text: ((.content // "") | tostring) } ] as $messages
+    | ($messages | map(.text | contains("The user manually executed a shell command through OpenCode ! shell mode."))) as $contexts
+    | ($messages | map(.text | contains("What command did I just run manually, and what output did it produce?"))) as $prompts
+    | ($contexts | index(true)) as $contextIndex
+    | ($prompts | index(true)) as $promptIndex
+    | $contextIndex != null and $promptIndex != null and $contextIndex < $promptIndex
+  ))' "$E2E_MOCK_REQUEST_LOG" >/dev/null 2>&1; then
+  echo "e2e: shell context was not ordered before the follow-up user prompt" >&2
+  exit 1
+fi
+if ! jq -e 'any(.[]; any(.body.messages[]?; ((.content // "") | tostring | contains("Command:\nprintf DSH_OC_SHELL_OK"))))' "$E2E_MOCK_REQUEST_LOG" >/dev/null 2>&1; then
+  echo "e2e: next model request did not contain the exact shell command" >&2
+  exit 1
+fi
+if ! jq -e 'any(.[]; any(.body.messages[]?; ((.content // "") | tostring | contains("Output:\nDSH_OC_SHELL_OK"))))' "$E2E_MOCK_REQUEST_LOG" >/dev/null 2>&1; then
+  echo "e2e: next model request did not contain the exact shell output" >&2
+  exit 1
+fi
+echo "  next model request contained the annotated command and output"
+
 e2e_tui_exit
 e2e_tui_after_checks
 

@@ -13,7 +13,11 @@ TUI 验证后才能进入集成和后续版本发布。
   `runMaintenance` 保证 idle ownership，再以当前 OS 用户身份启动精确 shell
   子进程/进程组；不绕过或假称 dsh approval/sandbox。running/completed/error、
   abort、busy/idle、`session.idle` exactly-once 和 bridge history 投影均有回归；
-  新增路由探针、真实 TUI e2e 与协议说明；用户手动 TUI 验证仍待完成。
+  完成后通过 `Agent.inject()` 将带 `plugin: dsh-oc` 标记的用户手动命令与
+  stdout/stderr 注入下一次模型 prompt，但不会自动开启模型回合；模型注入有独立
+  UTF-8 预算，并在注入失败时把可见警告写入 shell 卡；命令/输出可能包含敏感信息，
+  会发送给当前配置的模型；新增路由探针、真实 TUI + mock 模型 e2e 与协议说明；
+  用户手动 TUI 验证仍待完成。
 - 修复 `/preset` 切换后 synthetic command result 缺少完成时间，导致官方 TUI
   将 `preset switched to ...` 卡片一直显示为 `QUEUED`，直到下一轮对话才清除；
   增加 bridge 单测与真实 TUI 回归断言，用户手动复核仍待完成。

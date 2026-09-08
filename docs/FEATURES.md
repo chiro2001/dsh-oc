@@ -32,7 +32,7 @@
 | 会话列表分页（v2 `cursor` next/previous + order） | ✅ | `src/bridge/router.ts` `/api/session` offset 游标 | `tests/bridge-router.spec.ts` | 本提交 |
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
 | Prompt（v1 message、v1 alias、v2 prompt） | ✅ | `POST /session/:id/message`、`POST /session/:id/prompt`、`POST /api/session/:sessionID/prompt` | `e2e-api.sh`、`e2e-tui-turn.sh` | `f30b156` |
-| `!` Shell mode（用户命令） | 🟡（待用户手测） | 官方 TUI `!` → `POST /session/:id/shell`；经 Agent `runMaintenance` 独占 idle 后启动 OS shell，映射 user/assistant/tool 卡片 | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-shell.sh`、手工 TUI | 本分支 |
+| `!` Shell mode（用户命令） | 🟡（待用户手测） | 官方 TUI `!` → `POST /session/:id/shell`；经 Agent `runMaintenance` 独占 idle 后启动 OS shell，映射 user/assistant/tool 卡片，并经非唤醒 `Agent.inject()` 将用户手动命令/输出注入下一次模型 prompt | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-shell.sh`、手工 TUI | 本分支 |
 | `--mini` promptAsync 提交 | ✅ | `POST /session/:id/prompt_async`（204，slash/模型/agent 处理） | `tests/bridge-router.spec.ts`、`e2e-tui-mini.sh` | 本提交 |
 | Abort / cancel | ✅ | `POST /session/:id/abort` | `e2e-api.sh` | `f30b156` |
 | Fork（`parentID`） | ✅ | `POST /session/:id/fork`、`POST /api/session/:id/fork`，messageID→atSeq | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |

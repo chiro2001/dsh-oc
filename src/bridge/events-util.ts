@@ -199,7 +199,11 @@ export function commandResultMessage(
   deps: TranslateDeps,
   sessionId: string,
   text: string,
-  options: { status?: 'busy' | 'idle'; parentID?: string } = {},
+  options: {
+    status?: 'busy' | 'idle'
+    parentID?: string
+    model?: { providerID: string; modelID: string; variant?: string }
+  } = {},
 ): { events: BridgeGlobalEvent[]; entry: V1MessageEntry } {
   const directory = directoryFor(sessionId, deps)
   const project = projectIdFor(directory)
@@ -215,7 +219,13 @@ export function commandResultMessage(
   const id = `msg_cmd:${randomUUID()}`
   const partId = `prt_cmd:${randomUUID()}`
   const created = Date.now()
-  const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  // A command is rendered in the active session, not in the connection-wide
+  // catalog.  The latter is only a startup fallback and may differ after the
+  // user selected another model/variant in the TUI.
+  const model: { providerID: string; modelID: string; variant?: string } = options.model
+    ?? deps.state.sessionModelSelectionFor(sessionId)
+    ?? deps.defaultModel
+    ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
   const agent = deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
   // The OpenCode TUI treats an assistant message without `time.completed` as
   // an in-flight turn and marks following user cards QUEUED.  A command has
@@ -232,6 +242,7 @@ export function commandResultMessage(
         parentID: options.parentID ?? `pending:${sessionId}:user`,
         modelID: model.modelID,
         providerID: model.providerID,
+        ...(model.variant === undefined ? {} : { variant: model.variant }),
         mode: agent,
         path: { cwd: directory, root: directory },
         cost: 0,

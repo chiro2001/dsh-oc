@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Inbox } from '@deepseek-ai/dsh-agent'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { createBridgeRouter, hostSessionAddedEvents, recordSessionSummaries, type BridgeRouter } from '../src/bridge/router.js'
 import { installSessionEventsCompat, installSessionEventsOnLiveSessions } from '../src/bridge/index.js'
@@ -18,6 +20,7 @@ import type { BridgeApi } from '../src/bridge/rpc.js'
 import { expandRecord } from '../src/bridge/rpc.js'
 import type { BridgeHostFrame, ToolEventView } from '../src/bridge/dsh-types.js'
 import { InteractionState } from '../src/bridge/state.js'
+import { SHELL_CONTEXT_WARNING_LIMIT_BYTES } from '../src/bridge/shell.js'
 import {
   errRpc,
   fakeApi,
@@ -1315,11 +1318,26 @@ describe('bridge router: session routes', () => {
 
   it('executes OpenCode shell mode through Agent maintenance and hydrates the synthetic tool card', async () => {
     const base = fakeApi()
+    const inboxSession = Session.create(SessionId('s1'))
+    const inbox = new Inbox(inboxSession, {
+      inserted: () => {},
+      discarded: () => {},
+      claimed: () => {},
+    })
+    const injected: Array<{
+      role: string
+      source: { kind: string; plugin?: string; form?: string; summary?: string }
+      content: Array<{ type: string; text?: string }>
+    }> = []
     const api: BridgeApi = {
       ...base,
       agents: {
         get: () => ({
           id: 'live-s1',
+          inject: (message: typeof injected[number]) => {
+            injected.push(message)
+            inbox.append('next-step', message as never)
+          },
           runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
         }),
       },
@@ -1339,6 +1357,31 @@ describe('bridge router: session routes', () => {
       command: 'printf shell-ok',
     })
     expect(result.status).toBe(200)
+    expect(injected).toHaveLength(1)
+    expect(injected[0]).toMatchObject({
+      role: 'user',
+      source: {
+        kind: 'plugin',
+        plugin: 'dsh-oc',
+        form: 'notice',
+        summary: 'The user manually executed a shell command',
+      },
+    })
+    expect(injected[0]?.content[0]?.text).toContain('The user manually executed a shell command')
+    expect(injected[0]?.content[0]?.text).toContain('Command:\nprintf shell-ok')
+    expect(injected[0]?.content[0]?.text).toContain('Output:\nshell-ok')
+    expect(injected[0]?.content[0]?.text).toContain('not from the model')
+    expect(inbox.nextStep).toHaveLength(1)
+    expect(inboxSession.snapshotEvents()).toContainEqual(expect.objectContaining({
+      type: 'agent/inbox/spliced',
+      data: expect.objectContaining({
+        target: 'next-step',
+        inserted: [expect.objectContaining({
+          role: 'user',
+          source: expect.objectContaining({ kind: 'plugin', plugin: 'dsh-oc', form: 'notice' }),
+        })],
+      }),
+    }))
     expect(result.body).toMatchObject({
       info: { role: 'assistant', parentID: expect.stringMatching(/^msg_shell:user:/) },
       parts: [{ type: 'tool', tool: 'bash', state: { status: 'completed' } }],
@@ -1379,6 +1422,68 @@ describe('bridge router: session routes', () => {
     expect(result.body).toMatchObject({ name: 'InternalServerError', message: expect.stringContaining('runMaintenance') })
   })
 
+  it('uses an independent UTF-8 budget for model shell context while retaining the larger TUI output', async () => {
+    const base = fakeApi()
+    const injected: Array<{ content: Array<{ text?: string }> }> = []
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          inject: (message: typeof injected[number]) => { injected.push(message) },
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+        }),
+      },
+    }
+    const { server } = await boot(api, process.cwd())
+    const command = `printf shell-budget-ok; #${'x'.repeat(20 * 1024)}\n`
+    const result = await request(server, 'POST', '/session/s1/shell', {
+      agent: 'build',
+      command: `${command}; yes O | head -c 90000; yes E | head -c 90000 >&2`,
+    })
+    expect(result.status).toBe(200)
+    expect(injected).toHaveLength(1)
+    const context = injected[0]?.content[0]?.text ?? ''
+    expect(Buffer.byteLength(context, 'utf8')).toBeLessThanOrEqual(144 * 1024)
+    expect(context).toContain('[command truncated for model context after 16384 UTF-8 bytes]')
+    expect(context).toContain('[stdout truncated for model context after 65536 UTF-8 bytes]')
+    expect(context).toContain('[stderr truncated for model context after 65536 UTF-8 bytes]')
+
+    const history = await request(server, 'GET', '/session/s1/message')
+    const output = (history.body as Array<{ parts: Array<{ state?: { output?: string } }> }>)[1]?.parts[0]?.state?.output ?? ''
+    expect(output).toContain('shell-budget-ok')
+    expect(Buffer.byteLength(output, 'utf8')).toBeGreaterThan(128 * 1024)
+  })
+
+  it('keeps a completed shell card and surfaces a warning when context injection fails', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      agents: {
+        get: () => ({
+          inject: () => { throw new Error(`inbox unavailable\n${'x'.repeat(2000)}`) },
+          runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
+        }),
+      },
+    }
+    const { server } = await boot(api, process.cwd())
+    const result = await request(server, 'POST', '/session/s1/shell', {
+      agent: 'build',
+      command: 'printf context-injection-warning',
+    })
+    expect(result.status).toBe(200)
+    const history = await request(server, 'GET', '/session/s1/message')
+    const output = (history.body as Array<{ parts: Array<{ state?: { output?: string } }> }>)[1]?.parts[0]?.state?.output ?? ''
+    expect(output).toContain('context-injection-warning')
+    const warning = output.split('\n').find((line) => line.startsWith('[dsh-oc]'))
+    expect(warning).toContain('[dsh-oc] shell command/output was not added to model context: inbox unavailable')
+    expect(warning).toContain('[truncated]')
+    expect(warning).not.toMatch(/[\r\n]/u)
+    expect(Buffer.byteLength(warning ?? '', 'utf8')).toBeLessThanOrEqual(
+      Buffer.byteLength('[dsh-oc] shell command/output was not added to model context: ', 'utf8')
+        + SHELL_CONTEXT_WARNING_LIMIT_BYTES,
+    )
+  })
+
   it('resolves a cold session Agent through sessionController before shell execution', async () => {
     const base = fakeApi()
     const api: BridgeApi = {
@@ -1389,6 +1494,7 @@ describe('bridge router: session routes', () => {
         resolveAgent: async () => ({
           agent: {
             id: 'agent-1',
+            inject: () => {},
             runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
           } as never,
         }),
@@ -1406,6 +1512,7 @@ describe('bridge router: session routes', () => {
       ...base,
       agents: {
         get: () => ({
+          inject: () => {},
           runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => {
             if (active) throw new Error('agent already has active work')
             active = true
@@ -1447,6 +1554,7 @@ describe('bridge router: session routes', () => {
       ...base,
       agents: {
         get: () => ({
+          inject: () => {},
           runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
         }),
       },
@@ -1492,6 +1600,7 @@ describe('bridge router: session routes', () => {
       ...base,
       agents: {
         get: () => ({
+          inject: () => {},
           runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
         }),
       },
@@ -1511,10 +1620,12 @@ describe('bridge router: session routes', () => {
 
   it('aborts and forgets an owned shell when the host removes its session', async () => {
     const base = fakeApi()
+    const injected: unknown[] = []
     const api: BridgeApi = {
       ...base,
       agents: {
         get: () => ({
+          inject: (message: unknown) => { injected.push(message) },
           runMaintenance: async (task: (signal: AbortSignal) => Promise<unknown>) => task(new AbortController().signal),
         }),
       },
@@ -1524,6 +1635,7 @@ describe('bridge router: session routes', () => {
     await new Promise((resolve) => setTimeout(resolve, 80))
     router.feedHostFrame({ type: 'host/session-removed', sessionId: 's1' })
     expect((await pending).status).toBe(200)
+    expect(injected).toHaveLength(0)
     await new Promise((resolve) => setTimeout(resolve, 20))
     const history = await request(server, 'GET', '/session/s1/message')
     expect(history.body).toEqual([])
@@ -3996,6 +4108,142 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     const finishedPart = commandCards.find((card) =>
       card.type === 'message.part.updated' && card.part?.time?.end !== undefined)
     expect(finishedPart?.part?.time?.end).toBe(finishedPart?.part?.time?.start)
+  })
+
+  it('uses the session model for live and hydrated /preset cards', async () => {
+    const base = fakeApi()
+    let currentModel = {
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: 'high',
+    }
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        models: async () => okRpc({ current: currentModel }),
+      },
+      agentPresets: {
+        ...base.agentPresets,
+        list: async () => okRpc([{ id: 'liangshen', name: 'Liangshen' }]),
+        select: async () => {
+          currentModel = {
+            provider: 'deepseek-official',
+            model: 'deepseek-v4-pro-next',
+            reasoningEffort: 'max',
+          }
+          return 'liangshen'
+        },
+      },
+    }
+    const { server, router } = await boot(api)
+    const cards: Array<{
+      type?: string
+      info?: {
+        id?: string
+        role?: string
+        time?: { created?: number; completed?: number }
+        model?: { providerID?: string; modelID?: string; variant?: string }
+        modelID?: string
+        providerID?: string
+        variant?: string
+      }
+    }> = []
+    const originalBroadcast = router.ctx.hub.broadcast.bind(router.ctx.hub)
+    ;(router.ctx.hub as unknown as {
+      broadcast(events: Array<{
+        payload: {
+          type?: string
+          properties?: { info?: typeof cards[number]['info'] }
+        }
+      }>): void
+    }).broadcast = (events) => {
+      for (const event of events) {
+        if (event.payload.type === 'message.updated' && event.payload.properties?.info !== undefined) {
+          cards.push({ type: event.payload.type, info: event.payload.properties.info })
+        }
+      }
+      originalBroadcast(events as never)
+    }
+
+    const switched = await request(server, 'POST', '/session/s1/command', {
+      command: 'preset',
+      arguments: 'liangshen',
+    })
+    expect(switched.status).toBe(200)
+    const beforeModel = { providerID: 'deepseek', modelID: 'deepseek-v4-pro', variant: 'high' }
+    const model = { providerID: 'deepseek', modelID: 'deepseek-v4-pro-next', variant: 'max' }
+    const livePreset = cards.find((card) => card.info?.id?.startsWith('msg_preset:'))
+    expect(livePreset?.info).toMatchObject({ role: 'user', agent: 'liangshen', model })
+    const liveCommands = cards.filter((card) => card.info?.id?.startsWith('msg_cmd:'))
+    expect(liveCommands).toHaveLength(2)
+    const busyCommand = liveCommands.find((card) => card.info?.time?.completed === undefined)
+    expect(busyCommand?.info?.time?.completed).toBeUndefined()
+    expect(busyCommand?.info).toMatchObject({
+      modelID: beforeModel.modelID,
+      providerID: beforeModel.providerID,
+      variant: beforeModel.variant,
+    })
+    const finalCommand = liveCommands.find((card) => card.info?.time?.completed !== undefined)
+    expect(finalCommand?.info).toMatchObject({
+      time: { completed: expect.any(Number) },
+      modelID: model.modelID,
+      providerID: model.providerID,
+      variant: model.variant,
+    })
+    const finalCommandID = finalCommand?.info?.id
+    expect(finalCommandID).toMatch(/^msg_cmd:/)
+
+    const v1 = await request(server, 'GET', '/session/s1/message')
+    const v1Entries = v1.body as Array<{
+      info: {
+        id: string
+        role: string
+        modelID?: string
+        providerID?: string
+        variant?: string
+        time?: { completed?: number }
+      }
+    }>
+    const v1Final = v1Entries.find((entry) => entry.info.id === finalCommandID)
+    expect(v1Final?.info).toMatchObject({
+      role: 'assistant',
+      modelID: 'deepseek-v4-pro-next',
+      providerID: 'deepseek',
+      variant: 'max',
+      time: { completed: expect.any(Number) },
+    })
+
+    const v2 = await request(server, 'GET', '/api/session/s1/message')
+    const v2Preset = (v2.body as {
+      data: Array<{ id: string; type?: string; model?: unknown }>
+    }).data.find((entry) => entry.id.startsWith('msg_preset:'))
+    expect(v2Preset).toMatchObject({
+      type: 'user',
+      model: { id: 'deepseek-v4-pro-next', providerID: 'deepseek', variant: 'max' },
+    })
+    const v2Final = (v2.body as {
+      data: Array<{ id: string; type?: string; time?: { completed?: number }; model?: unknown }>
+    }).data.find((entry) => entry.id === finalCommandID)
+    expect(v2Final).toMatchObject({
+      type: 'assistant',
+      time: { completed: expect.any(Number) },
+      model: { id: 'deepseek-v4-pro-next', providerID: 'deepseek', variant: 'max' },
+    })
+
+    // A later bridge-only command must consume the successful host read from
+    // state instead of reverting to the pre-switch model cached at startup.
+    const help = await request(server, 'POST', '/session/s1/command', {
+      command: 'help',
+      arguments: '',
+    })
+    expect(help.status).toBe(200)
+    const latestCommand = cards.filter((card) => card.info?.id?.startsWith('msg_cmd:')).at(-1)
+    expect(latestCommand?.info).toMatchObject({
+      modelID: model.modelID,
+      providerID: model.providerID,
+      variant: model.variant,
+    })
   })
 
   it('captures /preset from prompt routes without triggering a model turn', async () => {

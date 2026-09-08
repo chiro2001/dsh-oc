@@ -66,7 +66,10 @@
   `printf DSH_OC_SHELL_OK` 后回车。
 - 预期显示一张 `bash` 工具卡，状态从 running 变为 completed，输出只出现一次，
   不触发模型回复；API history 中对应 tool part 的 `state.output` 应包含
-  `DSH_OC_SHELL_OK`。
+  `DSH_OC_SHELL_OK`。随后发送普通问题询问刚才执行的命令，模型应能看到一条明确
+  标注为“用户手动执行”的命令/输出上下文；shell 完成阶段本身不能额外产生模型回合。
+  注意：命令与输出会发送给当前配置的模型，不要在 `!` 中执行会泄露 token、密码或
+  个人数据的命令；过长命令/输出会显示明确截断标记。
 - 验证脚本：`scripts/e2e-tui-shell.sh`。脚本使用独立的 tmux session，普通
   shell 命令不会杀其他进程；shell 执行继承当前 OS 用户权限，由 Agent maintenance
   管理 idle ownership，取消只作用于该 session 自己的精确子进程/进程组。
@@ -199,3 +202,31 @@ observe-only 模式采样其进程树；日志和告警分别写入当前
 `DSH_OC_E2E_MONITOR_INTERVAL` 与 `DSH_OC_E2E_MONITOR_READ_THRESHOLD` 覆盖。
 该接线不传 `--terminate-owned`，不会按名称结束 TUI；目标退出后监控自然结束。
 对应的无 TUI shell 回归为 `tests/e2e/monitor-process-io-attach.sh`。
+
+## 15. Profile 隔离与 dsh-tui 排障
+
+- dsh-oc 只应通过 `dsh --profile oc` 启动；bridge 的兼容 shim 只存在于该
+  dsh 进程，不会污染 `tui` 或 `dsh-tui` profile。
+- dsh-tui launcher 固定使用 `dsh --profile dsh-tui`。`dsh --profile tui` 是另一个
+  profile，可能为空或只有 dsh-base；先用以下只读命令确认实际组合树：
+
+  ```bash
+  dsh --profile oc --dump-config
+  dsh --profile tui --dump-config
+  dsh --profile dsh-tui --dump-config
+  ```
+
+- 如果明确要使用名为 `tui` 的 profile，可考虑以下建议命令；本轮没有替用户
+  profile 执行，也不要额外添加旧版 dsh-dcp：
+
+  ```bash
+  dsh plugin --profile tui add '@deepseek-harness-tui/dsh-tui@0.10.0-beta.5'
+  dsh --profile tui
+  ```
+
+  全局 `dsh-tui` 命令仍固定查找 `dsh-tui` profile，不会自动转向 `tui`。
+
+- 若 dsh-tui 显示 `turn error · events is not iterable`，检查 dsh-dcp 是否仍
+  读取 `session.events`。dsh 0.1.2 的接口是 `session.snapshotEvents()`；应升级
+  dsh-dcp，或在 dsh-tui 的 profile patch/临时诊断 overlay 中禁用 `dcp`。不要把
+  dsh-oc 安装到 dsh-tui profile，这不会修复 ABI 不兼容，也会混淆 profile 隔离。

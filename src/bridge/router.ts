@@ -1107,6 +1107,57 @@ export async function defaultModelRef(ctx: BridgeRouteContext): Promise<{ provid
   return defaultAgents(ctx)
 }
 
+export interface SessionModelSelectionRef {
+  providerID: string
+  modelID: string
+  variant?: string
+}
+
+/**
+ * Resolve the model currently attached to one dsh session.  The bridge-level
+ * default is only a last-resort fallback: a blank session may already have a
+ * model selected by the TUI, and a preset command must show that selection in
+ * its synthetic cards.  Keep a cached explicit variant when the host's read
+ * does not return one but still reports the same provider/model; this avoids
+ * making a preset switch look like it silently changed reasoning effort.
+ */
+export async function sessionModelSelectionRef(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  fallback?: SessionModelSelectionRef,
+): Promise<SessionModelSelectionRef> {
+  const cached = ctx.state.sessionModelSelectionFor(sessionId)
+  try {
+    const selection = await rpc<{
+      current: { provider: string; model: string; reasoningEffort?: string }
+    }>(ctx, 'session.models', { sessionId: sid(sessionId) })
+    const providerID = externalProviderId(selection.current.provider)
+    const variant = selection.current.reasoningEffort
+    let resolved: SessionModelSelectionRef
+    if (variant !== undefined) {
+      resolved = { providerID, modelID: selection.current.model, variant }
+    } else if (cached !== undefined
+      && cached.providerID === providerID
+      && cached.modelID === selection.current.model
+      && cached.variant !== undefined) {
+      resolved = { ...cached }
+    } else {
+      resolved = { providerID, modelID: selection.current.model }
+    }
+    // A successful host read is authoritative for subsequent synthetic
+    // command cards. Keep the variant when the host omits it but the same
+    // explicit provider/model is already cached (dsh can temporarily omit
+    // reasoningEffort during preset/model transitions).
+    ctx.state.setSessionModelSelection(sessionId, resolved)
+    return resolved
+  } catch (error) {
+    ctx.log(`[bridge] session model selection unavailable for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+    if (cached !== undefined) return { ...cached }
+    if (fallback !== undefined) return { ...fallback }
+    return defaultAgents(ctx)
+  }
+}
+
 /**
  * The opencode-facing model ref a session is actually running. The TUI
  * restores its prompt model from the last user message when the session
@@ -1118,16 +1169,8 @@ export async function sessionModelRef(
   ctx: BridgeRouteContext,
   sessionId: string,
 ): Promise<{ providerID: string; modelID: string }> {
-  try {
-    const selection = await rpc<{ current: { provider: string; model: string } }>(ctx, 'session.models', { sessionId: sid(sessionId) })
-    return {
-      providerID: externalProviderId(selection.current.provider),
-      modelID: selection.current.model,
-    }
-  } catch (error) {
-    ctx.log(`[bridge] session model selection unavailable for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
-    return defaultAgents(ctx)
-  }
+  const selection = await sessionModelSelectionRef(ctx, sessionId)
+  return { providerID: selection.providerID, modelID: selection.modelID }
 }
 
 /** The model ref carried by a prompt body, if any (for prompt echo cards). */
@@ -1315,12 +1358,16 @@ export function broadcastCommandResult(
   sessionId: string,
   text: string,
   status?: 'busy' | 'idle',
+  model?: { providerID: string; modelID: string; variant?: string },
 ): void {
   const { events, entry } = commandResultMessage(
     { cwd: ctx.cwd, state: ctx.state, log: ctx.log },
     sessionId,
     text,
-    status === undefined ? {} : { status },
+    {
+      ...(status === undefined ? {} : { status }),
+      ...(model === undefined ? {} : { model }),
+    },
   )
   ctx.hub.broadcast(events)
   if (status !== 'busy') ctx.state.recordCommandResult(sessionId, entry)
@@ -1349,21 +1396,24 @@ export function broadcastSessionAgent(
 }
 
 /** Persist an ephemeral `/preset` switch card so a fresh TUI sync keeps it. */
-export function broadcastPresetSwitchEcho(
+export async function broadcastPresetSwitchEcho(
   ctx: BridgeRouteContext,
   sessionId: string,
   agent: string,
-): void {
+  model?: { providerID: string; modelID: string; variant?: string },
+): Promise<void> {
   const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
   const project = projectIdFor(directory)
   const id = `msg_preset:${randomUUID()}`
   const partId = `prt_preset:${randomUUID()}`
   const created = Date.now()
+  const resolvedModel = model ?? await sessionModelSelectionRef(ctx, sessionId)
   const info = {
     id,
     sessionID: sessionId,
     role: 'user' as const,
     agent,
+    model: resolvedModel,
     time: { created },
   }
   const part = {
@@ -1434,17 +1484,22 @@ export async function runPresetCommand(
   sessionId: string,
   argument: string,
 ): Promise<PresetCommandOutcome> {
-  broadcastCommandResult(ctx, sessionId, 'Running /preset…', 'busy')
+  let model = await sessionModelSelectionRef(ctx, sessionId)
+  broadcastCommandResult(ctx, sessionId, 'Running /preset…', 'busy', model)
   const previousAgent = ctx.state.sessionAgentFor(sessionId) ?? ctx.state.lastAgentPreset ?? DEFAULT_AGENT_NAME
   const outcome = await presetCommandOutcome(ctx, sessionId, argument)
   if (outcome.kind === 'success' && argument.trim() !== '') {
+    // A host may derive the model from the newly selected preset. Re-read
+    // after the selection so both the user echo and the completed command
+    // card describe the model that is active for the next turn.
+    model = await sessionModelSelectionRef(ctx, sessionId, model)
     const targetAgent = outcome.targetAgent ?? argument.trim()
     broadcastSessionAgent(ctx, sessionId, targetAgent)
     ctx.state.markStalePresetPrompt(sessionId, previousAgent, targetAgent)
-    broadcastPresetSwitchEcho(ctx, sessionId, targetAgent)
+    await broadcastPresetSwitchEcho(ctx, sessionId, targetAgent, model)
   }
   ctx.state.invalidateSession(sessionId)
-  broadcastCommandResult(ctx, sessionId, outcome.text, 'idle')
+  broadcastCommandResult(ctx, sessionId, outcome.text, 'idle', model)
   return outcome
 }
 

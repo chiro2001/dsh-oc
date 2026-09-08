@@ -31,6 +31,7 @@ const toolArguments = option(
   '{"command":"echo dsh-oc-e2e-tool","description":"e2e tool call","sandbox_permissions":"danger-full-access","justification":"e2e approval flow"}',
 )
 const portFile = option('--port-file', '')
+const requestLog = option('--request-log', process.env.DSH_OC_E2E_MOCK_REQUEST_LOG ?? '')
 
 const candidates = [
   profileDir === '' ? '' : join(profileDir, 'node_modules', '@deepseek-ai', 'dsh-llm-mock-server', 'lib', 'index.js'),
@@ -61,12 +62,31 @@ const server = await startMockLlmServer({
   },
 })
 
+function flushRequestLog() {
+  if (requestLog === '') return
+  const records = server.requests.map((request) => ({
+    attempt: request.attempt,
+    scriptBehavior: request.scriptBehavior,
+    behavior: request.behavior,
+    path: request.path,
+    body: request.body,
+    chunksSent: request.chunksSent,
+    ...(request.outcome === undefined ? {} : { outcome: request.outcome }),
+  }))
+  writeFileSync(requestLog, `${JSON.stringify(records)}\n`)
+}
+
+const requestLogTimer = requestLog === '' ? undefined : setInterval(flushRequestLog, 100)
+requestLogTimer?.unref()
+
 process.stdout.write(`READY ${server.port}\n`)
 if (portFile !== '') {
   writeFileSync(portFile, `${server.port}\n`)
 }
 
 const shutdown = async () => {
+  if (requestLogTimer !== undefined) clearInterval(requestLogTimer)
+  flushRequestLog()
   await server.close()
   process.exit(0)
 }

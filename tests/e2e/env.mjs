@@ -136,6 +136,7 @@ async function newRun(argv) {
   const mockLog = join(runDir, 'mock.out')
   const mockErr = join(runDir, 'mock.err')
   const mockPortFile = join(runDir, 'mock.port')
+  const mockRequestLog = join(runDir, 'mock-requests.json')
   const mockOutFd = openSync(mockLog, 'w')
   const mockErrFd = openSync(mockErr, 'w')
   const mock = spawn(
@@ -151,6 +152,7 @@ async function newRun(argv) {
       '--tool-name', toolName,
       '--tool-arguments', resolvedToolArguments,
       '--port-file', mockPortFile,
+      '--request-log', mockRequestLog,
     ],
     {
       env: dshEnv,
@@ -206,6 +208,7 @@ async function newRun(argv) {
     mockPid: mock.pid,
     mockLog,
     mockErr,
+    mockRequestLog,
     permissionMode,
     sequence,
     repeatLast,

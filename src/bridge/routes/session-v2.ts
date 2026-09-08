@@ -17,11 +17,38 @@ function commandResultToV2(entry: V1MessageEntry): SessionMessagesResponse['data
   const rawTime = info.time as { created?: unknown; completed?: unknown } | undefined
   const created = typeof rawTime?.created === 'number' ? rawTime.created : 0
   const completed = typeof rawTime?.completed === 'number' ? rawTime.completed : undefined
+  const rawModel = info.model as { providerID?: unknown; modelID?: unknown; variant?: unknown } | undefined
+  const providerID = typeof rawModel?.providerID === 'string'
+    ? rawModel.providerID
+    : typeof info.providerID === 'string' ? info.providerID : undefined
+  const modelID = typeof rawModel?.modelID === 'string'
+    ? rawModel.modelID
+    : typeof info.modelID === 'string' ? info.modelID : undefined
+  const model = providerID !== undefined && modelID !== undefined
+    ? {
+        id: modelID,
+        providerID,
+        ...(typeof rawModel?.variant === 'string'
+          ? { variant: rawModel.variant }
+          : typeof info.variant === 'string' ? { variant: info.variant } : {}),
+      }
+    : undefined
   const text = entry.parts
     .map((part) => part.type === 'text' && 'text' in part ? String((part as { text: unknown }).text) : '')
     .join('')
   if (info.role === 'user') {
-    return { id: String(info.id), time: { created }, text, type: 'user' }
+    // v2's generated user shape does not declare the extra agent/model fields,
+    // but the official TUI reads them from the live v1-compatible event when a
+    // synthetic preset card is hydrated. Keep them on the wire so history does
+    // not fall back to the catalog-first deepseek-chat model.
+    return {
+      id: String(info.id),
+      time: { created },
+      text,
+      type: 'user',
+      ...(typeof info.agent === 'string' ? { agent: info.agent } : {}),
+      ...(model === undefined ? {} : { model }),
+    } as unknown as SessionMessagesResponse['data'][number]
   }
   const toolPart = entry.parts.find((part) => part.type === 'tool') as {
     id?: unknown
@@ -46,6 +73,7 @@ function commandResultToV2(entry: V1MessageEntry): SessionMessagesResponse['data
       model: {
         id: typeof info.modelID === 'string' ? info.modelID : 'deepseek-chat',
         providerID: typeof info.providerID === 'string' ? info.providerID : 'deepseek',
+        ...(typeof info.variant === 'string' ? { variant: info.variant } : {}),
       },
       content: [{
         type: 'tool',
@@ -72,6 +100,7 @@ function commandResultToV2(entry: V1MessageEntry): SessionMessagesResponse['data
     model: {
       id: typeof info.modelID === 'string' ? info.modelID : 'deepseek-chat',
       providerID: typeof info.providerID === 'string' ? info.providerID : 'deepseek',
+      ...(typeof info.variant === 'string' ? { variant: info.variant } : {}),
     },
     content: text === '' ? [] : [{ type: 'text', id: `${String(info.id)}:0`, text }],
   }
