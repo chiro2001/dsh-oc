@@ -230,8 +230,14 @@ wait_effort_idle() {
   local session_id="$1"
   local deadline=$((SECONDS + 30))
   while (( SECONDS < deadline )); do
-    if [[ "$(curl -s "$BRIDGE/session/status" | jq -r --arg s "$session_id" '.[$s].type // "idle"')" == "idle" ]]; then
+    local wait_code
+    wait_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 35 -X POST "$BRIDGE/api/session/$session_id/wait")"
+    if [[ "$wait_code" == "204" ]]; then
       return 0
+    fi
+    if [[ "$wait_code" != "503" ]]; then
+      echo "e2e: session wait returned $wait_code ($session_id)" >&2
+      return 1
     fi
     sleep 1
   done
@@ -260,12 +266,28 @@ mock_request_matches_effort() {
       )' "$E2E_MOCK_REQUEST_LOG" >/dev/null
   fi
 }
+wait_mock_request_effort() {
+  local prompt_text="$1"
+  local thinking_type="$2"
+  local expected_effort="$3"
+  local deadline=$((SECONDS + 30))
+  while (( SECONDS < deadline )); do
+    if mock_request_matches_effort "$prompt_text" "$thinking_type" "$expected_effort"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "e2e: provider request oracle not observed for $prompt_text" >&2
+  tail -5 "$E2E_MOCK_REQUEST_LOG" >&2 2>/dev/null || true
+  return 1
+}
 for effort_session in "$EFFORT_MAX_SESSION" "$EFFORT_OFF_SESSION"; do
   curl -s -X POST "$BRIDGE/api/session/$effort_session/prompt" -H 'Content-Type: application/json' \
     -d '{"model":{"providerID":"deepseek","modelID":"mock-model"},"parts":[{"type":"text","text":"default effort warmup"}]}' \
     | jq -e --arg s "$effort_session" '.data.sessionID == $s and .data.delivery == "queue"' >/dev/null
   wait_default_high "$effort_session"
   wait_effort_idle "$effort_session"
+  wait_mock_request_effort "default effort warmup" enabled high
 done
 echo "  Default warmup resolves to provider high before explicit max/off prompts"
 
