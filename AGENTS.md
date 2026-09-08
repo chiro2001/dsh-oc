@@ -19,7 +19,7 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
                   └─ DSH Agent/Session/Tools/LLM/Approval/Questions
 ```
 
-仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.2.0-rc.2`（未发布
+仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.2.0-rc.3`（未发布
 registry，安装/更新走 GitHub 源 `#main` / `#develop`）。
 
 当前 prerelease 对应 dsh `>=0.1.2-rc.1`。PR #1/#2/#3 没有原样合入；RC 版本将其

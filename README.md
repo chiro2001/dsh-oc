@@ -19,7 +19,7 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 ```
 
 当前兼容基线：dsh `>=0.1.2-rc.1`、官方 opencode `1.18.18`。
-`main` 当前指向 GitHub prerelease [v0.2.0-rc.2](https://github.com/chiro2001/dsh-oc/releases/tag/v0.2.0-rc.2)，
+`main` 当前指向 GitHub prerelease [v0.2.0-rc.3](https://github.com/chiro2001/dsh-oc/releases/tag/v0.2.0-rc.3)，
 不是无标记的稳定版；npm registry 暂未发布，安装和更新走 GitHub 源。
 
 ## 安装并启动
@@ -38,7 +38,7 @@ dsh --profile oc
 需要固定当前 prerelease 时使用 tag；验证集成线时显式选择 `develop`：
 
 ```bash
-dsh plugin --profile oc add 'github:chiro2001/dsh-oc#v0.2.0-rc.2'
+dsh plugin --profile oc add 'github:chiro2001/dsh-oc#v0.2.0-rc.3'
 dsh plugin --profile oc add 'github:chiro2001/dsh-oc#develop'
 ```
 

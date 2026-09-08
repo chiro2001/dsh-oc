@@ -4,6 +4,8 @@
 面向 dsh `>=0.1.2-rc.1`。后续候选复用本清单，把文中的
 `<candidate-version>` 替换为实际版本。
 
+当前本地候选为 `v0.2.0-rc.3`，尚未推送、打 tag 或发布；rc.1/rc.2 发布记录保留为历史证据。
+
 发布决策依据见 `expert-advice/round-0002/decision.md`；npm 继续 NO-GO。包
 `@chiro2001/dsh-oc` 只走 GitHub 源安装，发布物以**完整 commit SHA** 为真相源，
 `lib/` 构建产物必须随提交且与源码零差异。

@@ -5,9 +5,8 @@
 # the same smoke again. Also probes in-place re-add behavior inside one
 # profile and records the resolved package version before/after.
 #
-# Caveat: until the package version is bumped to rc.2, pnpm may reuse the
-# same version for different refs, so the in-place probe only exercises the
-# command path; cache-safe immutable verification requires a version bump.
+# Cache-safe immutable verification requires the candidate package version to
+# differ from the previous published version; use a version bump for every RC.
 #
 # Usage:
 #   bash scripts/e2e-install-rollback.sh \

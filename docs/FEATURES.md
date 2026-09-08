@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`731310d`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`219a2d1`（2026-09-08）。
 
 ### 路由注册表
 
@@ -182,9 +182,9 @@
 | `tests/bridge-events.spec.ts` | 88 | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
-| `tests/bridge-router.spec.ts` | 144 | 12a3f46 test(bridge): make shell budget fixture portable |
+| `tests/bridge-router.spec.ts` | 144 | caff946 fix(bridge): keep reasoning effort in sync |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `tests/convert/message.spec.ts` | 25 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `tests/convert/message.spec.ts` | 25 | caff946 fix(bridge): keep reasoning effort in sync |
 | `tests/convert/model.spec.ts` | 7 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
@@ -207,29 +207,29 @@
 |---|---|
 | `src/bridge/convert/common.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/goal.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `src/bridge/convert/message.ts` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `src/bridge/convert/message.ts` | caff946 fix(bridge): keep reasoning effort in sync |
 | `src/bridge/convert/model.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/session.ts` | d6c834f fix(bridge): preserve subagent metadata and canonical order |
+| `src/bridge/convert/session.ts` | caff946 fix(bridge): keep reasoning effort in sync |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/tool.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/dsh-types.ts` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `src/bridge/errors.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `src/bridge/events-util.ts` | 6e48eda fix(bridge): preserve preset model and inject shell context |
-| `src/bridge/events.ts` | b05d5c9 fix(bridge): keep live message identity stable |
+| `src/bridge/events-util.ts` | caff946 fix(bridge): keep reasoning effort in sync |
+| `src/bridge/events.ts` | caff946 fix(bridge): keep reasoning effort in sync |
 | `src/bridge/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/git.ts` | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
 | `src/bridge/http.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `src/bridge/index.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/router-entry.ts` | 6928f8a feat(bridge): expose router entry and add minimal-server renderer attribution |
-| `src/bridge/router.ts` | 6e48eda fix(bridge): preserve preset model and inject shell context |
+| `src/bridge/router.ts` | caff946 fix(bridge): keep reasoning effort in sync |
 | `src/bridge/routes.ts` | 5f6aad0 feat(bridge): serve workspace files over /api/fs with wildcard routing |
 | `src/bridge/routes/boot.ts` | 0637c81 fix(bridge): advertise the configured default preset as the TUI's first agent |
 | `src/bridge/routes/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/routes/permission.ts` | fd1e4b5 feat(bridge): add SDK v2 permission reply alias route |
-| `src/bridge/routes/session-v1.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
-| `src/bridge/routes/session-v2.ts` | 6e48eda fix(bridge): preserve preset model and inject shell context |
+| `src/bridge/routes/session-v1.ts` | caff946 fix(bridge): keep reasoning effort in sync |
+| `src/bridge/routes/session-v2.ts` | caff946 fix(bridge): keep reasoning effort in sync |
 | `src/bridge/routes/vcs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/bridge/rpc.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/shell.ts` | 4f7d316 fix(build): stabilize shell context artifacts |
@@ -254,7 +254,7 @@
 | `scripts/e2e-api-attachment.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
 | `scripts/e2e-api-goal.sh` | 6fb45c3 test(e2e): align queue/goal/golden expectations with bridge behavior |
 | `scripts/e2e-api-permission.sh` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
-| `scripts/e2e-api.sh` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `scripts/e2e-api.sh` | 5195189 test(e2e): harden reasoning effort oracle |
 | `scripts/e2e-cli-bin.sh` | e1817df test(e2e): assert dsh-oc --version dual output in cli-bin suite |
 | `scripts/e2e-golden-trace.sh` | 81effdd feat(tui): add candidate opencode upgrade lane with golden trace diff |
 | `scripts/e2e-install-rollback.sh` | 46c4319 fix(release): validate ABI-compatible rollback |
