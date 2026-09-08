@@ -1435,10 +1435,19 @@ describe('bridge router: session routes', () => {
       },
     }
     const { server } = await boot(api, process.cwd())
-    const command = `printf shell-budget-ok; #${'x'.repeat(20 * 1024)}\n`
+    // A long argument to the no-op builtin exercises the command budget while
+    // remaining valid in both bash and zsh. Builtin printf then emits exactly
+    // 90,000 bytes to each stream without relying on pipe/SIGPIPE behaviour.
+    const command = [
+      `: "${'x'.repeat(20 * 1024)}"`,
+      'printf shell-budget-ok',
+      'printf \'%090000d\' 0',
+      'printf \'%090000d\' 0 >&2',
+    ].join('; ')
+    expect(Buffer.byteLength(command, 'utf8')).toBeGreaterThan(16 * 1024)
     const result = await request(server, 'POST', '/session/s1/shell', {
       agent: 'build',
-      command: `${command}; yes O | head -c 90000; yes E | head -c 90000 >&2`,
+      command,
     })
     expect(result.status).toBe(200)
     expect(injected).toHaveLength(1)
