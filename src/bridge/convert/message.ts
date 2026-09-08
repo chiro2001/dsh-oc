@@ -51,7 +51,7 @@ export interface MessageConvertOptions {
    * user message's model to restore the session model, so it must name a
    * model present in the advertised catalog.
    */
-  defaultModel?: { providerID: string; modelID: string }
+  defaultModel?: { providerID: string; modelID: string; variant?: string }
   onSkip?: (eventType: string, reason: string) => void
   /** Resolve a dsh delegation's child id from the parent session catalog. */
   subagentForCall?: (call: ToolCallInfo) => SubagentToolMetadata | undefined
@@ -129,13 +129,21 @@ function usageTokens(usage?: TokenUsage) {
 }
 
 function userMessageInfo(id: string, time: number, opts: MessageConvertOptions): UserMessage {
+  const selected = opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  // The v1 SDK type predates OpenCode's variant field on UserMessage, but the
+  // 1.18.18 TUI reads this extra field when restoring the active model.
+  const model = {
+    providerID: selected.providerID,
+    modelID: selected.modelID,
+    ...(selected.variant === undefined ? {} : { variant: selected.variant }),
+  }
   return {
     id,
     sessionID: opts.sessionId,
     role: 'user',
     time: { created: time },
     agent: DEFAULT_AGENT,
-    model: opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' },
+    model: model as UserMessage['model'],
   }
 }
 
@@ -955,14 +963,23 @@ export function convertMessagesV2(
           // See convertMessagesV1: plugin/system rows stay off the surface.
           break
         }
-        const message: SessionMessageUser = {
+        const model = opts.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+        const message = {
           id: String(data.id),
           time: { created: event.time },
           text: compact
             ? ''
             : textFromBlocks(data.content as readonly { type: string; text?: unknown }[]),
           type: 'user',
-        }
+          // SessionMessageUser's generated v2 type omits the model metadata,
+          // but the OpenCode TUI accepts it and uses it to keep the selected
+          // provider/variant when hydrating the transcript.
+          model: {
+            id: model.modelID,
+            providerID: model.providerID,
+            ...(model.variant === undefined ? {} : { variant: model.variant }),
+          },
+        } as SessionMessageUser & { model: ModelRef }
         pushMessage(message, event.seq)
         lastUserMessageTime = event.time
         break

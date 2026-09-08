@@ -27,6 +27,11 @@ e2e_new_run "api-main" "danger-full-access" "success" "1"
 E2E_RUN="$E2E_RUN_DIR"
 E2E_SESSION="dsh-oc-api"
 E2E_ACTIVE_SESSION="$E2E_SESSION"
+# This suite needs both provider-owned `max` and `off` efforts. The generic
+# mock-host defaults to thinking disabled for faster API coverage; enabling
+# thinking exposes the provider's default high effort without selecting either
+# target value in the fixture.
+sed -i '/^  thinking: disabled$/c\  thinking: enabled' "$E2E_DSH_HOME/settings.yaml"
 # Keep the orphan check scoped to this invocation. A previous manually
 # interrupted run may leave a dsh process alive; it is external state and must
 # be reported, never killed by this test. Only a new process matching the
@@ -201,6 +206,69 @@ echo "  v1 session: $SESSION_V1"
 SESSION_V2="$(curl -s -X POST "$BRIDGE/api/session" -H 'Content-Type: application/json' -d '{}' | jq -er .data.id)"
 echo "  v2 session: $SESSION_V2"
 
+# Create both effort probes before any explicit selection can update the
+# persisted default. A first official Default prompt materializes the
+# provider's high default; the target max/off prompt below then has a
+# deterministic before-value that is neither target effort.
+EFFORT_MAX_SESSION="$(curl -s -X POST "$BRIDGE/api/session" -H 'Content-Type: application/json' -d '{}' | jq -er '.data.id')"
+EFFORT_OFF_SESSION="$(curl -s -X POST "$BRIDGE/api/session" -H 'Content-Type: application/json' -d '{}' | jq -er '.data.id')"
+wait_default_high() {
+  local session_id="$1"
+  local deadline=$((SECONDS + 30))
+  while (( SECONDS < deadline )); do
+    if curl -s "$BRIDGE/api/session/$session_id" | jq -e \
+      '.data.model.id == "mock-model" and .data.model.providerID == "deepseek" and .data.model.variant == "high"' >/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "e2e: provider Default did not resolve to high before target effort prompt ($session_id)" >&2
+  curl -s "$BRIDGE/api/session/$session_id" >&2 || true
+  return 1
+}
+wait_effort_idle() {
+  local session_id="$1"
+  local deadline=$((SECONDS + 30))
+  while (( SECONDS < deadline )); do
+    if [[ "$(curl -s "$BRIDGE/session/status" | jq -r --arg s "$session_id" '.[$s].type // "idle"')" == "idle" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "e2e: effort warmup did not become idle ($session_id)" >&2
+  curl -s "$BRIDGE/session/status" >&2 || true
+  return 1
+}
+mock_request_matches_effort() {
+  local prompt_text="$1"
+  local thinking_type="$2"
+  local expected_effort="$3"
+  [[ -s "$E2E_MOCK_REQUEST_LOG" ]] || return 1
+  if [[ "$expected_effort" == "<absent>" ]]; then
+    jq -e --arg p "$prompt_text" --arg t "$thinking_type" '
+      any(.[];
+        any(.body.messages[]?; .role == "user" and .content == $p)
+        and .body.thinking.type == $t
+        and ((.body | has("reasoning_effort")) | not)
+      )' "$E2E_MOCK_REQUEST_LOG" >/dev/null
+  else
+    jq -e --arg p "$prompt_text" --arg t "$thinking_type" --arg e "$expected_effort" '
+      any(.[];
+        any(.body.messages[]?; .role == "user" and .content == $p)
+        and .body.thinking.type == $t
+        and .body.reasoning_effort == $e
+      )' "$E2E_MOCK_REQUEST_LOG" >/dev/null
+  fi
+}
+for effort_session in "$EFFORT_MAX_SESSION" "$EFFORT_OFF_SESSION"; do
+  curl -s -X POST "$BRIDGE/api/session/$effort_session/prompt" -H 'Content-Type: application/json' \
+    -d '{"model":{"providerID":"deepseek","modelID":"mock-model"},"parts":[{"type":"text","text":"default effort warmup"}]}' \
+    | jq -e --arg s "$effort_session" '.data.sessionID == $s and .data.delivery == "queue"' >/dev/null
+  wait_default_high "$effort_session"
+  wait_effort_idle "$effort_session"
+done
+echo "  Default warmup resolves to provider high before explicit max/off prompts"
+
 MODEL_SWITCH_CODE="$(curl -s -o "$E2E_RUN/model-switch.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$SESSION_V2/model" \
   -H 'Content-Type: application/json' -d '{"model":{"providerID":"deepseek","id":"mock-model","variant":"off"}}')"
 [[ "$MODEL_SWITCH_CODE" == "204" ]]
@@ -208,6 +276,59 @@ echo "  POST /api/session/$SESSION_V2/model -> 204"
 curl -s "$BRIDGE/api/session/$SESSION_V2" | jq -e --arg s "$SESSION_V2" \
   '.data.id == $s and .data.model.id == "mock-model" and .data.model.providerID == "deepseek" and .data.model.variant == "off"' >/dev/null
 echo "  session model selection reflected with variant off"
+
+wait_effort_ref() {
+  local session_id="$1"
+  local variant="$2"
+  local prompt_text="$3"
+  local thinking_type="$4"
+  local expected_effort="$5"
+  local deadline=$((SECONDS + 30))
+  while (( SECONDS < deadline )); do
+    local session_body history_body
+    session_body="$(curl -s "$BRIDGE/api/session/$session_id")"
+    history_body="$(curl -s "$BRIDGE/api/session/$session_id/message")"
+    if jq -e --arg v "$variant" '.data.model.variant == $v' <<<"$session_body" >/dev/null \
+      && jq -e --arg v "$variant" '[.data[] | select(.type == "user") | .model.variant] | any(. == $v)' <<<"$history_body" >/dev/null \
+      && grep -qa '"sessionID":"'"$session_id"'.*"variant":"'"$variant"'"' "$SSE_FILE" \
+      && mock_request_matches_effort "$prompt_text" "$thinking_type" "$expected_effort"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "e2e: effort $variant was not present in session/history/live refs for $session_id" >&2
+  jq . <<<"$session_body" >&2 || true
+  jq . <<<"$history_body" >&2 || true
+  tail -20 "$SSE_FILE" >&2 || true
+  return 1
+}
+
+# Use independent sessions so pending model-selection projections cannot cross
+# contaminate one another. The prompt body matches OpenCode 1.18.18 exactly:
+# variant is top-level and the nested model carries only provider/model.
+EFFORT_MAX_PROMPT_TEXT="effort max deterministic probe"
+EFFORT_MAX_PROMPT_CODE="$(curl -s -o "$E2E_RUN/effort-max-prompt.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$EFFORT_MAX_SESSION/prompt" -H 'Content-Type: application/json' \
+  -d '{"variant":"max","model":{"providerID":"deepseek","modelID":"mock-model"},"parts":[{"type":"text","text":"effort max deterministic probe"}]}' \
+  )"
+if [[ "$EFFORT_MAX_PROMPT_CODE" != "200" ]] || ! jq -e --arg s "$EFFORT_MAX_SESSION" '.data.sessionID == $s and .data.delivery == "queue"' "$E2E_RUN/effort-max-prompt.json" >/dev/null; then
+  echo "e2e: top-level max prompt failed (http=$EFFORT_MAX_PROMPT_CODE)" >&2
+  cat "$E2E_RUN/effort-max-prompt.json" >&2
+  exit 1
+fi
+wait_effort_ref "$EFFORT_MAX_SESSION" max "$EFFORT_MAX_PROMPT_TEXT" enabled max
+echo "  official top-level max prompt synchronized session/history/live refs and mock request body"
+
+EFFORT_OFF_PROMPT_TEXT="effort off deterministic probe"
+EFFORT_OFF_PROMPT_CODE="$(curl -s -o "$E2E_RUN/effort-off-prompt.json" -w '%{http_code}' -X POST "$BRIDGE/api/session/$EFFORT_OFF_SESSION/prompt" -H 'Content-Type: application/json' \
+  -d '{"variant":"off","model":{"providerID":"deepseek","modelID":"mock-model"},"parts":[{"type":"text","text":"effort off deterministic probe"}]}' \
+  )"
+if [[ "$EFFORT_OFF_PROMPT_CODE" != "200" ]] || ! jq -e --arg s "$EFFORT_OFF_SESSION" '.data.sessionID == $s and .data.delivery == "queue"' "$E2E_RUN/effort-off-prompt.json" >/dev/null; then
+  echo "e2e: top-level off prompt failed (http=$EFFORT_OFF_PROMPT_CODE)" >&2
+  cat "$E2E_RUN/effort-off-prompt.json" >&2
+  exit 1
+fi
+wait_effort_ref "$EFFORT_OFF_SESSION" off "$EFFORT_OFF_PROMPT_TEXT" disabled '<absent>'
+echo "  official top-level off prompt synchronized session/history/live refs and mock request body"
 
 PRESET_LIST_CODE="$(curl -s -o "$E2E_RUN/preset-list.json" -w '%{http_code}' -X POST "$BRIDGE/session/$SESSION_V2/command" \
   -H 'Content-Type: application/json' -d '{"command":"preset","arguments":""}')"

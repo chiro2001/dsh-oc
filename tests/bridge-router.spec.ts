@@ -3575,6 +3575,173 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     })
   })
 
+  it('resets max to the backend default when Default omits the variant', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    let currentModel = 'mock-model'
+    let currentVariant: string | undefined = 'off'
+    const api = fakeApi({
+      sessionController: {
+        ...fakeApi().sessionController,
+        models: async () => okRpc({
+          current: {
+            provider: 'deepseek-official',
+            model: currentModel,
+            ...(currentVariant === undefined ? {} : { reasoningEffort: currentVariant }),
+          },
+          routable: true,
+          groups: [],
+          failures: [],
+        }),
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request })
+          const selected = request as { provider: string; model: string; reasoningEffort?: string }
+          currentModel = selected.model
+          currentVariant = selected.reasoningEffort
+          return okRpc({ selected: {
+            provider: selected.provider,
+            model: selected.model,
+            ...(selected.reasoningEffort === undefined ? {} : { reasoningEffort: selected.reasoningEffort }),
+          } })
+        },
+      },
+    })
+    const { server } = await boot(api)
+    await request(server, 'POST', '/api/session/s1/model', {
+      model: { providerID: 'deepseek', id: 'mock-model', variant: 'max' },
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.payload).toMatchObject({ reasoningEffort: 'max' })
+    // Official OpenCode prompt shape: nested model identity, top-level
+    // variant omitted means the user selected Default. It must re-select the
+    // backend default instead of preserving max from the previous prompt.
+    const prompted = await request(server, 'POST', '/api/session/s1/prompt', {
+      model: { providerID: 'deepseek', id: 'mock-model' },
+      parts: [{ type: 'text', text: 'follow-up' }],
+    })
+    expect(prompted.status).toBe(200)
+    expect(calls).toHaveLength(2)
+    expect(calls[1]?.payload).not.toHaveProperty('reasoningEffort')
+    expect(currentVariant).toBeUndefined()
+    const session = await request(server, 'GET', '/api/session/s1')
+    expect(session.body).toMatchObject({
+      data: { model: { id: 'mock-model', providerID: 'deepseek' } },
+    })
+  })
+
+  it('passes explicit max on every official prompt round', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api = fakeApi({
+      sessionController: {
+        ...fakeApi().sessionController,
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request })
+          return okRpc({ selected: {
+            provider: 'deepseek-official',
+            model: 'mock-model',
+            reasoningEffort: 'max',
+          } })
+        },
+      },
+    })
+    const { server } = await boot(api)
+    const body = {
+      variant: 'max',
+      model: { providerID: 'deepseek', modelID: 'mock-model' },
+      parts: [{ type: 'text', text: 'max round' }],
+    }
+    expect((await request(server, 'POST', '/session/s1/message', body)).status).toBe(200)
+    expect((await request(server, 'POST', '/api/session/s1/prompt', body)).status).toBe(200)
+    expect(calls).toHaveLength(2)
+    expect(calls.every((call) => (call.payload as { reasoningEffort?: string }).reasoningEffort === 'max')).toBe(true)
+  })
+
+  it('echoes top-level max/off variants on optimistic user cards', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        selectModel: async (request) => okRpc({
+          selected: {
+            provider: 'deepseek-official',
+            model: 'mock-model',
+            ...(typeof request.reasoningEffort === 'string'
+              ? { reasoningEffort: request.reasoningEffort }
+              : {}),
+          },
+        }),
+      },
+    }
+    const { server, router } = await boot(api)
+    const cards: Array<{ model?: { providerID?: string; modelID?: string; variant?: string } }> = []
+    const originalBroadcast = router.ctx.hub.broadcast.bind(router.ctx.hub)
+    ;(router.ctx.hub as unknown as {
+      broadcast(events: Array<{ payload: { type?: string; properties?: { info?: { role?: string; model?: typeof cards[number]['model'] } } } }>): void
+    }).broadcast = (events) => {
+      for (const event of events) {
+        const info = event.payload.properties?.info
+        if (event.payload.type === 'message.updated' && info?.role === 'user' && info.model !== undefined) {
+          cards.push({ model: info.model })
+        }
+      }
+      originalBroadcast(events as never)
+    }
+
+    await request(server, 'POST', '/session/s1/message', {
+      variant: 'max',
+      model: { providerID: 'deepseek', id: 'mock-model' },
+      parts: [{ type: 'text', text: 'max card' }],
+    })
+    await request(server, 'POST', '/api/session/s1/prompt', {
+      variant: 'off',
+      model: { providerID: 'deepseek', modelID: 'mock-model' },
+      parts: [{ type: 'text', text: 'off card' }],
+    })
+    expect(cards).toHaveLength(2)
+    expect(cards.map((card) => card.model?.variant)).toEqual(['max', 'off'])
+    expect(cards.every((card) => card.model?.providerID === 'deepseek' && card.model?.modelID === 'mock-model')).toBe(true)
+  })
+
+  it('accepts the official top-level off variant and keeps it visible', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = []
+    const api = fakeApi({
+      sessionController: {
+        ...fakeApi().sessionController,
+        selectModel: async (request) => {
+          calls.push({ method: 'session.selectModel', payload: request })
+          return okRpc({ selected: {
+            provider: 'deepseek-official',
+            model: 'mock-model',
+            reasoningEffort: 'off',
+          } })
+        },
+      },
+    })
+    const { server } = await boot(api)
+    const prompted = await request(server, 'POST', '/session/s1/message', {
+      variant: 'off',
+      // OpenCode sends variant at the top level; top-level must win even if a
+      // stale nested model object still carries the previous max variant.
+      model: { providerID: 'deepseek', id: 'mock-model', variant: 'max' },
+      parts: [{ type: 'text', text: 'think with effort off' }],
+    })
+    expect(prompted.status).toBe(200)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.payload).toMatchObject({ reasoningEffort: 'off' })
+    const second = await request(server, 'POST', '/api/session/s1/prompt', {
+      variant: 'off',
+      model: { providerID: 'deepseek', modelID: 'mock-model' },
+      parts: [{ type: 'text', text: 'off again' }],
+    })
+    expect(second.status).toBe(200)
+    expect(calls).toHaveLength(2)
+    expect(calls[1]?.payload).toMatchObject({ reasoningEffort: 'off' })
+    const session = await request(server, 'GET', '/session/s1')
+    expect(session.body).toMatchObject({
+      model: { id: 'mock-model', providerID: 'deepseek', variant: 'off' },
+    })
+  })
+
   it('passes agentPreset into session.create and selects the create model', async () => {
     const base = fakeApi()
     const calls: Array<{ method: string; payload: unknown }> = []
@@ -3650,7 +3817,8 @@ describe('bridge router: model variants, agent presets and /preset', () => {
     }
     const { server } = await boot(api)
     const prompted = await request(server, 'POST', '/session/s1/message', {
-      model: { providerID: 'deepseek', modelID: 'mock-model', variant: 'off' },
+      variant: 'off',
+      model: { providerID: 'deepseek', id: 'mock-model' },
       parts: [{ type: 'text', text: 'hi' }],
     })
     expect(prompted.status).toBe(200)

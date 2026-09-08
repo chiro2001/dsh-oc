@@ -328,17 +328,17 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     const assistantID = `msg_${randomUUID()}`
     ctx.state.registerAssistantIdForUser(id, promptUserID, assistantID)
     await R.applyAgentFromBody(ctx, id, req.body)
+    if (!(await R.applyModelSelection(ctx, id, req.body))) {
+      await R.reconcileModelSelection(ctx, id)
+    }
     await R.broadcastPromptUserMessage(
       ctx,
       id,
       promptUserID,
       promptText(content),
       createdAt,
-      R.bodyModelRef(req.body),
+      R.promptModelRef(ctx, id, req.body),
     )
-    if (!(await R.applyModelSelection(ctx, id, req.body))) {
-      await R.reconcileModelSelection(ctx, id)
-    }
     await R.rpc(ctx, 'session.prompt', {
       sessionId: R.sid(id),
       requestId: promptUserID,

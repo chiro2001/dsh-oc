@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+- 修复官方 OpenCode 1.18.18 prompt 的顶层 `variant` 解析：`max`/`off` 在多轮
+  对话中持续传递，省略 variant 的 Default 会正确回到 dsh 后端默认；session、用户
+  卡片、live/queued SSE 与 v1/v2 history 的实际模型 effort 保持同步。
+- 增加 max/max、off/off、max→Default 的 bridge optimistic-card 回归，以及真实 host
+  API e2e 对 session/history/live model ref 的确定性校验。
+
 ## [0.2.0-rc.2] - 2026-09-08
 
 本版本面向 dsh `>=0.1.2-rc.1`，包含 Issue #4/#5 及发布前的稳定性收敛。

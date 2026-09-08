@@ -453,13 +453,13 @@ export async function sessionView(ctx: BridgeRouteContext, id: string): Promise<
   const history = await cachedSessionHistory(ctx, id)
   let model: SessionView['model']
   try {
-    const selection = await rpc<{ current: { model: string; provider: string; reasoningEffort?: string } }>(ctx, 'session.models', { sessionId: sid(id) })
+    const selection = await sessionModelSelectionRef(ctx, id)
     model = {
-      id: selection.current.model,
-      providerID: externalProviderId(selection.current.provider),
-      ...(selection.current.reasoningEffort === undefined
+      id: selection.modelID,
+      providerID: selection.providerID,
+      ...(selection.variant === undefined
         ? {}
-        : { variant: selection.current.reasoningEffort }),
+        : { variant: selection.variant }),
     }
   } catch (error) {
     ctx.log(`[bridge/session] model selection unavailable for ${id}: ${error instanceof Error ? error.message : String(error)}`)
@@ -824,6 +824,7 @@ export function toV1Session(view: SessionView, id: string, ctx: BridgeRouteConte
   return minimalSession(id, {
     cwd: view.cwd ?? ctx.cwd,
     createdAt: view.createdAt,
+    ...(view.model === undefined ? {} : { model: view.model }),
     ...(ctx.state.sessionAgentFor(id) === undefined
       ? {}
       : { agent: ctx.state.sessionAgentFor(id) }),
@@ -850,6 +851,7 @@ export function toV2Session(view: SessionView, id: string, ctx: BridgeRouteConte
   return minimalSessionV2(id, {
     cwd: view.cwd ?? ctx.cwd,
     createdAt: view.createdAt,
+    ...(view.model === undefined ? {} : { model: view.model }),
     ...(ctx.state.sessionAgentFor(id) === undefined
       ? {}
       : { agent: ctx.state.sessionAgentFor(id) }),
@@ -1168,17 +1170,34 @@ export async function sessionModelSelectionRef(
 export async function sessionModelRef(
   ctx: BridgeRouteContext,
   sessionId: string,
-): Promise<{ providerID: string; modelID: string }> {
-  const selection = await sessionModelSelectionRef(ctx, sessionId)
-  return { providerID: selection.providerID, modelID: selection.modelID }
+): Promise<SessionModelSelectionRef> {
+  return sessionModelSelectionRef(ctx, sessionId)
 }
 
-/** The model ref carried by a prompt body, if any (for prompt echo cards). */
-export function bodyModelRef(
+/**
+ * Resolve the model ref for an optimistic prompt card after model selection
+ * has been applied. The selectModel response is authoritative for a prompt
+ * whose variant was omitted (OpenCode's Default), while explicit max/off is
+ * copied directly from the official top-level field.
+ */
+export function promptModelRef(
+  ctx: BridgeRouteContext,
+  sessionId: string,
   body: unknown,
-): { providerID: string; modelID: string } | undefined {
+): { providerID: string; modelID: string; variant?: string } | undefined {
   const input = modelInputFromBody(body)
-  if (input === undefined) return undefined
+  const cached = ctx.state.sessionModelSelectionFor(sessionId)
+  if (input === undefined) return cached === undefined ? undefined : { ...cached }
+  if (input.variantSpecified) {
+    return {
+      providerID: input.providerID,
+      modelID: input.modelID,
+      variant: input.variant,
+    }
+  }
+  if (cached !== undefined
+    && cached.providerID === input.providerID
+    && cached.modelID === input.modelID) return { ...cached }
   return { providerID: input.providerID, modelID: input.modelID }
 }
 
@@ -1441,7 +1460,7 @@ export async function broadcastPromptUserMessage(
   userId: string,
   text: string,
   created: number,
-  model?: { providerID: string; modelID: string },
+  model?: { providerID: string; modelID: string; variant?: string },
 ): Promise<void> {
   const directory = ctx.state.sessionDirectories.get(sessionId) ?? ctx.cwd
   const project = projectIdFor(directory)
@@ -1643,6 +1662,8 @@ interface ModelInput {
   providerID: string
   modelID: string
   variant?: string
+  /** Whether the prompt/model body explicitly carried a variant string. */
+  variantSpecified: boolean
 }
 
 export function modelInputFromBody(body: unknown): ModelInput | undefined {
@@ -1656,11 +1677,17 @@ export function modelInputFromBody(body: unknown): ModelInput | undefined {
       ? input.id
       : undefined
   if (providerID === undefined || modelID === undefined) return undefined
-  const variant = typeof input.variant === 'string' ? input.variant : undefined
+  // OpenCode 1.18.18's prompt payload puts `variant` at the top level while
+  // the nested `model` only carries provider/model.  Accept the nested form
+  // used by the model endpoint as a fallback, but never let its absence mask
+  // an explicit top-level `off`/`max`.
+  const rawVariant = typeof record.variant === 'string' ? record.variant : input.variant
+  const variantSpecified = typeof rawVariant === 'string' && rawVariant !== 'default'
   return {
     providerID,
     modelID,
-    ...(variant === undefined || variant === 'default' ? {} : { variant }),
+    ...(typeof rawVariant === 'string' && rawVariant !== 'default' ? { variant: rawVariant } : {}),
+    variantSpecified,
   }
 }
 
@@ -1671,13 +1698,30 @@ export async function applyModelSelection(
 ): Promise<boolean> {
   const input = modelInputFromBody(body)
   if (input === undefined) return false
-  await rpc(ctx, 'session.selectModel', {
+
+  const selected = await rpc<{
+    selected?: { provider?: string; model?: string; reasoningEffort?: string }
+  }>(ctx, 'session.selectModel', {
     sessionId: sid(sessionId),
     provider: dshProviderId(input.providerID),
     model: input.modelID,
     ...(input.variant === undefined ? {} : { reasoningEffort: input.variant }),
   })
-  ctx.state.setSessionModelSelection(sessionId, input)
+  const resolved = selected.selected
+  const providerID = typeof resolved?.provider === 'string'
+    ? externalProviderId(resolved.provider)
+    : input.providerID
+  const modelID = typeof resolved?.model === 'string' ? resolved.model : input.modelID
+  const reasoningEffort = typeof resolved?.reasoningEffort === 'string'
+    ? resolved.reasoningEffort
+    : input.variantSpecified
+      ? input.variant
+      : undefined
+  ctx.state.setSessionModelSelection(sessionId, {
+    providerID,
+    modelID,
+    ...(reasoningEffort === undefined ? {} : { variant: reasoningEffort }),
+  })
   return true
 }
 

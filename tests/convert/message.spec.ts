@@ -58,6 +58,31 @@ describe('convert/message (v1)', () => {
     }
   })
 
+  it('retains the selected reasoning variant on user model refs only', () => {
+    const selected = { providerID: 'deepseek', modelID: 'mock-model', variant: 'off' }
+    const [user] = convertMessagesV1([makeUserEvent('hello')], {
+      ...opts,
+      defaultModel: selected,
+    })
+    expect(user?.info).toMatchObject({ model: selected })
+    const [assistant] = convertMessagesV1([
+      makeAssistantEvent([{ type: 'text', text: 'answer' }]),
+    ], {
+      ...opts,
+      defaultModel: selected,
+    })
+    expect(assistant?.info).not.toHaveProperty('variant')
+    const v2 = convertMessagesV2([
+      makeUserEvent('hello'),
+      makeAssistantEvent([{ type: 'text', text: 'answer' }]),
+    ], {
+      ...opts,
+      defaultModel: selected,
+    })
+    expect(v2[0]).toMatchObject({ model: { id: 'mock-model', providerID: 'deepseek', variant: 'off' } })
+    expect(v2[1]).not.toHaveProperty('model.variant')
+  })
+
   it('marks compaction checkpoint user messages with a compaction part', () => {
     const event = sessionEvent('user/message', {
       id: 'checkpoint-1' as never,

@@ -1848,10 +1848,7 @@ export class MuxEventTranslator {
       const selected = this.deps.state.sessionModelSelectionFor(sessionId)
       const model = selected === undefined
         ? (this.deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' })
-        : {
-            providerID: selected.providerID,
-            modelID: selected.modelID,
-          }
+        : selected
       const agent = this.deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
       events.push(
         makeEvent(directory, 'message.updated', {

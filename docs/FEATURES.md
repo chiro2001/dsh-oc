@@ -16,7 +16,7 @@
 | Provider / 模型目录展示（v1 + v2） | ✅ | `GET /provider`、`GET /api/model`、`src/bridge/convert/model.ts` | `tests/convert/model.spec.ts`、`scripts/e2e-api.sh` | `f30b156` |
 | 默认 build agent 携带可用模型 | ✅ | `GET /agent`、`GET /api/agent`、`src/bridge/router.ts` | `tests/bridge-router.spec.ts` | `f30b156` |
 | 模型选择器回写 dsh（`/api/session/:id/model`） | ✅ | `POST /api/session/:sessionID/model`、`POST /session/:id/message` body model | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
-| Reasoning effort / variant 展示与切换 | ✅ | `Model.variants`、`ModelV2Info.variants`、session model `variant` | `tests/convert/model.spec.ts`、TUI `ctrl+t` | 本提交 |
+| Reasoning effort / variant 展示与切换 | ✅ | `Model.variants`、`ModelV2Info.variants`、session model `variant` | `tests/convert/model.spec.ts`、`tests/bridge-router.spec.ts`、`scripts/e2e-api.sh`、TUI `ctrl+t` | 本提交 |
 | dsh agent preset 展示与切换（minimal 等） | ✅ | `GET /agent`、`GET /api/agent`、`POST /api/session/:sessionID/agent`、`POST /session/:id/command` `/preset` | `tests/bridge-router.spec.ts`；隔离 profile 无 minimal 时仅 build | 本提交 |
 | Tab/`/preset` 切换 agent 随 prompt 生效 | ✅ | prompt 体 `agent` 应用到会话；已产生回复的会话被 dsh 锁定（409）时，首次提交后显示一次锁定提示；最终切换卡片带完成时间及实际模型/variant，不会持续 QUEUED | `tests/bridge-router.spec.ts`、真实 TUI 与用户手动验证 | `v0.2.0-rc.2` |
 | 模型/Provider 错误映射 | ✅ | `src/bridge/errors.ts`、`src/bridge/rpc.ts` | `tests/bridge-router.spec.ts`（404/409/400/501） | `f30b156` |
@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`5fe3050`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`731310d`（2026-09-08）。
 
 ### 路由注册表
 
@@ -182,9 +182,9 @@
 | `tests/bridge-events.spec.ts` | 88 | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
-| `tests/bridge-router.spec.ts` | 140 | 12a3f46 test(bridge): make shell budget fixture portable |
+| `tests/bridge-router.spec.ts` | 144 | 12a3f46 test(bridge): make shell budget fixture portable |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `tests/convert/message.spec.ts` | 24 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `tests/convert/message.spec.ts` | 25 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `tests/convert/model.spec.ts` | 7 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |

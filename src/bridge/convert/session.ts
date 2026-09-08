@@ -142,6 +142,7 @@ export function minimalSession(
     directory,
     title: options.title ?? '',
     agent: options.agent ?? DEFAULT_AGENT,
+    ...(options.model === undefined ? {} : { model: options.model }),
     version: OPENCODE_VERSION,
     ...(options.parentID === undefined ? {} : { parentID: options.parentID }),
     ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
@@ -175,6 +176,7 @@ export function minimalSessionV2(
     time: { created, updated: Date.now() },
     title: options.title ?? '',
     location: { directory },
+    ...(options.model === undefined ? {} : { model: options.model }),
   }
 }
 

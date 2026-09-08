@@ -26,7 +26,7 @@ export interface BridgeGlobalEvent {
 export interface TranslateDeps {
   cwd: string
   state: InteractionState
-  defaultModel?: { providerID: string; modelID: string }
+  defaultModel?: { providerID: string; modelID: string; variant?: string }
   log(message: string): void
   /** Per-SSE-connection replay guard for approval/question/chunk frames. */
   replayGuard?: { approvals: Set<string>; questions: Set<string>; chunks?: Set<string> }
@@ -73,10 +73,13 @@ export function messageOptions(
   sessionId: string,
   deps: TranslateDeps,
 ): MessageConvertOptions {
+  const selected = deps.state.sessionModelSelectionFor(sessionId)
   return {
     sessionId,
     cwd: deps.cwd,
-    ...(deps.defaultModel === undefined ? {} : { defaultModel: deps.defaultModel }),
+    ...(selected === undefined
+      ? deps.defaultModel === undefined ? {} : { defaultModel: deps.defaultModel }
+      : { defaultModel: selected }),
     onSkip: (eventType, reason) => deps.log(`[bridge/events] skip ${eventType}: ${reason}`),
   }
 }
