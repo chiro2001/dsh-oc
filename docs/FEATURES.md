@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`24406bc`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`12a3f46`（2026-09-08）。
 
 ### 路由注册表
 
@@ -182,7 +182,7 @@
 | `tests/bridge-events.spec.ts` | 88 | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
-| `tests/bridge-router.spec.ts` | 140 | 4f7d316 fix(build): stabilize shell context artifacts |
+| `tests/bridge-router.spec.ts` | 140 | 12a3f46 test(bridge): make shell budget fixture portable |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 24 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `tests/convert/model.spec.ts` | 7 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
@@ -237,7 +237,7 @@
 | `src/bridge/state.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/stubs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/help.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
-| `src/index.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
+| `src/index.ts` | 4284a3c chore(release): prepare v0.2.0-rc.2 |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/brand.ts` | eba383f feat(tui): print DSH OC brand before --mini launches |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
