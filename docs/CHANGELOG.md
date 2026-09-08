@@ -6,11 +6,9 @@
 
 ## [Unreleased]
 
-后续改动进入新的功能分支，完成门禁和手动验证后再进入集成线。
-
 ## [0.2.0-rc.2] - 2026-09-08
 
-本候选面向 dsh `>=0.1.2-rc.1`，包含 Issue #4/#5 及发布前的稳定性收敛。
+本版本面向 dsh `>=0.1.2-rc.1`，包含 Issue #4/#5 及发布前的稳定性收敛。
 
 - 新增官方 OpenCode `!` shell mode：`POST /session/:id/shell` 通过 dsh Agent 的
   `runMaintenance` 保证 idle ownership，再以当前 OS 用户身份启动精确 shell
@@ -19,11 +17,12 @@
   完成后通过 `Agent.inject()` 将带 `plugin: dsh-oc` 标记的用户手动命令与
   stdout/stderr 注入下一次模型 prompt，但不会自动开启模型回合；模型注入有独立
   UTF-8 预算，并在注入失败时把可见警告写入 shell 卡；命令/输出可能包含敏感信息，
-  会发送给当前配置的模型；新增路由探针、真实 TUI + mock 模型 e2e 与协议说明；
-  已通过本地真实 TUI 与完整 e2e；发布后仍需在目标环境复核。
+  会发送给当前配置的模型；新增路由探针、真实 TUI + mock 模型 e2e 与协议说明，
+  并通过完整 e2e 与用户手动 TUI 验证。
 - 修复 `/preset` 切换后 synthetic command result 缺少完成时间，导致官方 TUI
   将 `preset switched to ...` 卡片一直显示为 `QUEUED`，直到下一轮对话才清除；
-  增加 bridge 单测与真实 TUI 回归断言。
+  切换卡片现在同时回显切换后的实际模型/variant；增加 bridge 单测、v1/v2 history
+  与真实 TUI 回归断言。
 
 ## [0.2.0-rc.1] - 2026-09-07
 
@@ -52,8 +51,8 @@
 ### 验证
 
 - typecheck、418 个单元测试、协议 probe fixture 全部通过、5000 会话性能测试、
-  发布工件审计和完整真实 TUI e2e 已通过；rc.1 发布时 probe 基线为 62/62，当前
-  未发布工作线新增 shell route 后为 63/63；高风险 flake scan 首跑 30/30，无 retry。
+  发布工件审计和完整真实 TUI e2e 已通过；rc.1 发布时 probe 基线为 62/62，rc.2
+  新增 shell route 后的发布基线为 63/63；高风险 flake scan 首跑 30/30，无 retry。
 - GitHub CI、full-SHA 冷装、真实 TUI smoke、同 ABI 回滚演练和真实 DeepSeek
   quick smoke 已通过。发布四元组与哈希见 GitHub prerelease 说明。
 

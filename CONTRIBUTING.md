@@ -69,7 +69,7 @@ e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
 ## 自测门槛（PR 前必须）
 
 1. `pnpm typecheck && pnpm test` 全绿。
-2. `pnpm run probe` 62/62 通过。
+2. `pnpm run probe` 63/63 通过。
 3. 协议/桥接改动：至少跑对应的 `scripts/e2e-api*.sh`。
 4. TUI 改动：跑相关 `scripts/e2e-tui-*.sh`（boot/turn/mini/brand/continue 等）；
    完整回归用 `bash scripts/check-all.sh --e2e`。

@@ -18,7 +18,7 @@
 | 模型选择器回写 dsh（`/api/session/:id/model`） | ✅ | `POST /api/session/:sessionID/model`、`POST /session/:id/message` body model | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
 | Reasoning effort / variant 展示与切换 | ✅ | `Model.variants`、`ModelV2Info.variants`、session model `variant` | `tests/convert/model.spec.ts`、TUI `ctrl+t` | 本提交 |
 | dsh agent preset 展示与切换（minimal 等） | ✅ | `GET /agent`、`GET /api/agent`、`POST /api/session/:sessionID/agent`、`POST /session/:id/command` `/preset` | `tests/bridge-router.spec.ts`；隔离 profile 无 minimal 时仅 build | 本提交 |
-| Tab/`/preset` 切换 agent 随 prompt 生效 | 🟡（待用户手测） | prompt 体 `agent` 应用到会话；已产生回复的会话被 dsh 锁定（409）时，首次提交后显示一次锁定提示；最终切换卡片带完成时间，不会持续 QUEUED | `tests/bridge-router.spec.ts`、真实 TUI 验证 | 本分支 |
+| Tab/`/preset` 切换 agent 随 prompt 生效 | ✅ | prompt 体 `agent` 应用到会话；已产生回复的会话被 dsh 锁定（409）时，首次提交后显示一次锁定提示；最终切换卡片带完成时间及实际模型/variant，不会持续 QUEUED | `tests/bridge-router.spec.ts`、真实 TUI 与用户手动验证 | `v0.2.0-rc.2` |
 | 模型/Provider 错误映射 | ✅ | `src/bridge/errors.ts`、`src/bridge/rpc.ts` | `tests/bridge-router.spec.ts`（404/409/400/501） | `f30b156` |
 
 ## 2. 会话
@@ -32,7 +32,7 @@
 | 会话列表分页（v2 `cursor` next/previous + order） | ✅ | `src/bridge/router.ts` `/api/session` offset 游标 | `tests/bridge-router.spec.ts` | 本提交 |
 | 新建 / 重命名 / 历史 / 消息 | ✅ | `POST /session`、`PATCH /session/:id`、`GET /session/:id/message` 等 | `tests/bridge-router.spec.ts`、`e2e-tui-turn.sh` | `f30b156` |
 | Prompt（v1 message、v1 alias、v2 prompt） | ✅ | `POST /session/:id/message`、`POST /session/:id/prompt`、`POST /api/session/:sessionID/prompt` | `e2e-api.sh`、`e2e-tui-turn.sh` | `f30b156` |
-| `!` Shell mode（用户命令） | 🟡（待用户手测） | 官方 TUI `!` → `POST /session/:id/shell`；经 Agent `runMaintenance` 独占 idle 后启动 OS shell，映射 user/assistant/tool 卡片，并经非唤醒 `Agent.inject()` 将用户手动命令/输出注入下一次模型 prompt | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-shell.sh`、手工 TUI | 本分支 |
+| `!` Shell mode（用户命令） | ✅ | 官方 TUI `!` → `POST /session/:id/shell`；经 Agent `runMaintenance` 独占 idle 后启动 OS shell，映射 user/assistant/tool 卡片，并经非唤醒 `Agent.inject()` 将用户手动命令/输出注入下一次模型 prompt | `tests/bridge-router.spec.ts`、`scripts/e2e-tui-shell.sh`、用户手动 TUI | `v0.2.0-rc.2` |
 | `--mini` promptAsync 提交 | ✅ | `POST /session/:id/prompt_async`（204，slash/模型/agent 处理） | `tests/bridge-router.spec.ts`、`e2e-tui-mini.sh` | 本提交 |
 | Abort / cancel | ✅ | `POST /session/:id/abort` | `e2e-api.sh` | `f30b156` |
 | Fork（`parentID`） | ✅ | `POST /session/:id/fork`、`POST /api/session/:id/fork`，messageID→atSeq | `tests/bridge-router.spec.ts`、`e2e-api.sh` | 本提交 |
@@ -54,8 +54,8 @@
 | 排队 prompt 可见（`session/queue` 初始化 + `agent/inbox/spliced` 增量 → QUEUED 消息） | ✅ | `src/bridge/events.ts` `queuedMessageEvents`、`src/bridge/state.ts` inbox 投影 | `tests/bridge-events.spec.ts`、`scripts/e2e-tui-queue.sh` | 本提交 |
 | v2 tool 生命周期（called/progress/success/failed） | ✅ | `src/bridge/events.ts` `endToolInput`/`completeToolInputImmediately` | `tests/bridge-events.spec.ts`、`scripts/e2e-api.sh` | 本提交 |
 | 高频 chunk 节流/批处理 | ✅ | `MuxEventTranslator` `toolFlushMs` + 合并 pending delta | `tests/bridge-events.spec.ts`（fake timer） | 本提交 |
-| `!` shell 实时输出 progress | 🟡 | shell path 只在子进程结束后发布保留 stdout/stderr；每路 1MiB 上限，超出继续 drain 并标记截断 | `docs/PROTOCOL.md`、`tests/bridge-router.spec.ts` | 本分支 |
-| 工具执行由 dsh 后端完成 | ✅ | 模型工具走 dsh tool 注册表；`!` shell 走用户授权的 OS 子进程并由 Agent maintenance 管理 | `e2e-api.sh`（bash 工具）、`tests/bridge-router.spec.ts` | 本分支 |
+| `!` shell 实时输出 progress | 🟡 | shell path 只在子进程结束后发布保留 stdout/stderr；每路 1MiB 上限，超出继续 drain 并标记截断 | `docs/PROTOCOL.md`、`tests/bridge-router.spec.ts` | `v0.2.0-rc.2` |
+| 工具执行由 dsh 后端完成 | ✅ | 模型工具走 dsh tool 注册表；`!` shell 走用户授权的 OS 子进程并由 Agent maintenance 管理 | `e2e-api.sh`（bash 工具）、`tests/bridge-router.spec.ts` | `v0.2.0-rc.2` |
 | read/write/edit 文件变化展示 | ✅ | tool result → ToolPart metadata/diff + `session.diff` + Modified Files | `tests/convert/tool.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | dsh 多种编辑模式映射（view/create/str_replace/insert/undo_edit） | ✅ | `src/bridge/convert/tool.ts` 映射为 read/edit 卡片并保留 mode | `tests/convert/tool.spec.ts`、`e2e-tui-tools.sh` | 本提交 |
 | 文本附件/文件 part | ✅ | `src/bridge/router.ts` `filePartToContent`：data URL 文本/图片、cwd 内本地文件；cwd 外与二进制 400 | `tests/bridge-router.spec.ts`、`scripts/e2e-api.sh` | 本提交 |
@@ -78,7 +78,7 @@
 | 主 agent（build）展示 | ✅ | `GET /agent`、`GET /api/agent`、`src/bridge/router.ts` | `tests/bridge-router.spec.ts` | `f30b156` |
 | Background subagents | ✅ | `GET /experimental/capabilities` 返回 `{ backgroundSubagents: true }`；`POST /experimental/session/{id}/background` no-op 成功（dsh 会话服务端常驻、`subagent` 默认后台） | `e2e-api.sh`、`tests/bridge-router.spec.ts` | 本提交 |
 | 子代理会话树 / parent-child 渲染 | ✅ | `Session.parentID`、child cwd/parent 继承、child 历史复用 | `tests/convert/session.spec.ts`、`e2e-api.sh` fork lineage | 本提交 |
-| 原生 OpenCode Task 子代理卡片 | ✅ | dsh `subagent*` → `tool: task`，child `sessionId` metadata 与 parent lineage 保留 | `tests/bridge-events.spec.ts`、`tests/bridge-router.spec.ts`、`scripts/e2e-tui-subagent.sh` | 本候选 |
+| 原生 OpenCode Task 子代理卡片 | ✅ | dsh `subagent*` → `tool: task`，child `sessionId` metadata 与 parent lineage 保留 | `tests/bridge-events.spec.ts`、`tests/bridge-router.spec.ts`、`scripts/e2e-tui-subagent.sh` | `v0.2.0-rc.1` |
 
 ## 6. 命令
 

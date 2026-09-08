@@ -3,9 +3,9 @@
 本文档列出手动验证 dsh-oc 的推荐路径与预期行为，供发布前或升级后快速
 回归；自动化覆盖见 [FEATURES.md](FEATURES.md) 与 `scripts/e2e-*.sh`。
 
-前置：稳定发布线使用 `dsh plugin --profile oc add chiro2001/dsh-oc`；当前
-`feat-issues-4-5` 未推送/未合入 `develop`，使用本地 `dsh plugin --profile oc add .`
-和 `pnpm build`。在干净终端执行 `dsh --profile oc`；profile 名称固定为 `oc`。
+前置：发布线使用 `dsh plugin --profile oc add chiro2001/dsh-oc`；测试本地工作树时
+使用 `dsh plugin --profile oc add .` 并执行 `pnpm build`。在干净终端执行
+`dsh --profile oc`；profile 名称固定为 `oc`。
 
 ## 1. 启动与品牌
 

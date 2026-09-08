@@ -19,9 +19,8 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
 ```
 
 当前兼容基线：dsh `>=0.1.2-rc.1`、官方 opencode `1.18.18`。
-`main` 当前指向 GitHub prerelease [v0.2.0-rc.1](https://github.com/chiro2001/dsh-oc/releases/tag/v0.2.0-rc.1)，
-不是无标记的稳定版；npm registry 暂未发布，安装和更新走 GitHub 源。`v0.2.0-rc.2`
-候选已在 `feat-issues-4-5` 完成门禁，待推送并合入 `develop`/`main` 后发布。
+`main` 当前指向 GitHub prerelease [v0.2.0-rc.2](https://github.com/chiro2001/dsh-oc/releases/tag/v0.2.0-rc.2)，
+不是无标记的稳定版；npm registry 暂未发布，安装和更新走 GitHub 源。
 
 ## 安装并启动
 
@@ -34,25 +33,20 @@ dsh --profile oc
 
 这里的 profile 名称是 `oc`，不是 `dsh-oc`。更新同一来源时重复执行上面的安装命令即可。
 
-### 手动测试当前功能分支
+### 固定版本与开发线
 
-当前 RC.2 候选位于 `feat-issues-4-5`，在正式发布前仍不应假定已进入 `develop`。
-未推送到 GitHub 时，直接使用本地 link：
+需要固定当前 prerelease 时使用 tag；验证集成线时显式选择 `develop`：
 
 ```bash
-dsh plugin --profile oc add .
-pnpm build
-dsh --profile oc
+dsh plugin --profile oc add 'github:chiro2001/dsh-oc#v0.2.0-rc.2'
+dsh plugin --profile oc add 'github:chiro2001/dsh-oc#develop'
 ```
-
-分支推送并合入 `develop` 后，才使用 `github:chiro2001/dsh-oc#develop` 验证远端
-集成结果。
 
 固定某个 tag 或完整 commit SHA 时使用相应 GitHub spec。npm 包名是
 `@chiro2001/dsh-oc`，但目前未发布到 npm registry。
 
-本地开发可以使用上一节的 link 方式；修改 TypeScript 后再次执行 `pnpm build` 即可让
-profile 使用新构建。
+本地开发可用 `dsh plugin --profile oc add .` 链接工作树；修改 TypeScript 后执行
+`pnpm build` 即可让 profile 使用新构建。
 
 安装后也可使用 `dsh-oc` 简写。将 profile 的 bin 目录加入 PATH：
 
@@ -115,8 +109,8 @@ shell cwd fallback。shell 卡片属于 bridge 的短期投影，不伪造 dsh a
 |---|---|
 | 会话列表/新建/续聊/fork/compact、SSE 流式消息 | ✅ |
 | 会话标题、历史恢复和目录过滤 | ✅ |
-| 模型目录、reasoning effort、agent preset 切换 | 🟡（#5 待用户手测） |
-| `!` shell mode（用户授权的 OS shell、固定 bash tool card） | 🟡（#4 待用户手测） |
+| 模型目录、reasoning effort、agent preset 切换 | ✅ |
+| `!` shell mode（用户授权的 OS shell、固定 bash tool card） | ✅ |
 | 工具卡片（bash/read/write/edit）、参数流、diff 与 Modified Files | ✅ |
 | 权限/提问流、子代理会话树与后台子代理 | ✅ |
 | Goal 创建/查看/暂停/恢复/完成 | ✅ |

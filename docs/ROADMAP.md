@@ -2,28 +2,26 @@
 
 > 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读
 > `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
-> `main` 已包含 `v0.2.0-rc.1`；RC.2 候选在 `feat-issues-4-5` 完成验证，`develop` 是
-> 手动验证和集成交付线，稳定后再回合
+> `main` 已包含 `v0.2.0-rc.2`；`develop` 是后续改动的集成交付线，稳定后再回合
 > `main`。
 
-## RC.2 候选线（feat-issues-4-5，待远端发布）
+## RC.2 已完成（0.2.0-rc.2，2026-09-08）
 
-Issue #4/#5 当前在 `feat-issues-4-5` 功能分支，尚未合入 `develop`。本地门禁和用户
-手动 TUI 验证已完成，下一步是远端 CI、full-SHA 演练和 RC.2 发布：
+Issue #4/#5 已完成自动化门禁和用户手动 TUI 验证，并随 `v0.2.0-rc.2` 发布：
 
 | Issue | 内容 | 当前状态 |
 |---|---|---|
-| #4 | 官方 TUI `!` shell mode，经 Agent idle maintenance 启动用户 OS shell | 已实现，门禁与手测通过，待远端发布 |
-| #5 | `/preset` 完成结果不再持续显示 `QUEUED` | 已修复，门禁与手测通过，待远端发布 |
+| #4 | 官方 TUI `!` shell mode，经 Agent idle maintenance 启动用户 OS shell | ✅ 已在 RC.2 完成 |
+| #5 | `/preset` 完成结果不再持续显示 `QUEUED`，并显示切换后的实际模型 | ✅ 已在 RC.2 完成 |
 
 `!` shell 不触发模型回合；用户显式 `!` 是授权边界，命令继承 OS 用户权限和
 session cwd，由 Agent idle maintenance 管理并只允许精确子进程/进程组取消；shell
 卡片是 bridge 短期投影。`/preset` 在空白会话可切换并供后续新会话继承，已有回复的会话仍受
 agent preset 锁定。用户操作和回归步骤见 [MANUAL-TEST.md](MANUAL-TEST.md)。
 
-## 已发布基线（0.2.0-rc.1，2026-09-07）
+## RC.1 历史基线（0.2.0-rc.1，2026-09-07）
 
-本候选面向 dsh `>=0.1.2-rc.1`，是一次 ABI breaking minor。PR #1/#2/#3
+该版本面向 dsh `>=0.1.2-rc.1`，是一次 ABI breaking minor。PR #1/#2/#3
 没有原样合入；其模型/preset、队列、approval/question、subagent/history
 语义与 dsh 0.1.2 host-services 迁移重新整合。
 
@@ -156,8 +154,8 @@ history 投影对比，不是 live SSE 对比，父链断言恒为空。接受�
   路径、记录 package version/tarball sha256/package-tree hash；
   `scripts/e2e-install-rollback.sh`（manual）从远端 full SHA 冷装候选并跑
   真实 TUI smoke（28s），再回滚到前版 spec 复跑（23s），并探测同 profile
-  内 re-add 行为。版本号未 bump 前 in-place 结果不可作为缓存安全证明；
-  待 rc.2 版本 bump 后重跑并打受保护 tag。
+  内 re-add 行为。版本号未 bump 前 in-place 结果不可作为缓存安全证明；RC.2
+  已完成版本 bump、发布演练和受保护 tag。
   发布执行清单见 `docs/RELEASE.md`。
 - vendor ABI 升级 lane（2026-08-17 已落地）：`scripts/upgrade-lane.sh`
   对候选 opencode 二进制跑黄金场景（版本检查经

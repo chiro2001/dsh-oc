@@ -19,10 +19,10 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
                   └─ DSH Agent/Session/Tools/LLM/Approval/Questions
 ```
 
-仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.2.0-rc.1`（未发布
+仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.2.0-rc.2`（未发布
 registry，安装/更新走 GitHub 源 `#main` / `#develop`）。
 
-当前候选对应 dsh `>=0.1.2-rc.1`。PR #1/#2/#3 没有原样合入；本候选将其
+当前 prerelease 对应 dsh `>=0.1.2-rc.1`。PR #1/#2/#3 没有原样合入；RC 版本将其
 有效语义与 dsh 0.1.2 host-services 迁移重新整合，详见 CHANGELOG。
 
 ## 代码结构
@@ -59,7 +59,7 @@ pnpm install
 pnpm build                 # tsdown → lib/
 pnpm typecheck             # tsc --noEmit
 pnpm test                  # vitest
-pnpm run probe             # opencode 1.18.18 协议路由探针（62/62）
+pnpm run probe             # opencode 1.18.18 协议路由探针（63/63）
 pnpm run e2e               # 全量 e2e（真实 opencode TUI，稳定套件约 15–20 分钟）
 pnpm run e2e:api           # API e2e 子集（快速回归）
 pnpm run perf              # 会话性能压测（--sessions N --scale ...）
@@ -173,7 +173,7 @@ dsh --profile oc --help                                            # 验证版�
 ## 自测门槛（提交/合并前必须全绿）
 
 1. `pnpm typecheck && pnpm test`
-2. `pnpm run probe`（62/62）
+2. `pnpm run probe`（63/63）
 3. 涉及协议/桥接/TUI 的改动：至少跑相关 `scripts/e2e-*.sh`；完整回归用
    `bash scripts/check-all.sh --e2e`
 4. 发布工件审计：`check-all` 内置 `verify-release-artifacts.sh`（HEAD 干净

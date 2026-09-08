@@ -4,15 +4,14 @@
 > 功能状态入口：先读 [FEATURES.md](FEATURES.md)，再回到本文件核对路由/协议细节。
 > 探针基准：`opencode-ai@1.18.18`（GitHub Release `v1.18.18`，commit `4643e65`）。
 
-## 0.2.0-rc.1 实现基线
+## 0.2.0-rc.2 实现基线
 
-本候选面向 dsh `>=0.1.2-rc.1`。下文早期表格中保留的 `apiProxy` 字样是历史
+当前 prerelease 面向 dsh `>=0.1.2-rc.1`。下文早期表格中保留的 `apiProxy` 字样是历史
 设计来源；当前实现已完成 PR #1/#2/#3 的语义重整合，不再依赖
 `@deepseek-ai/dsh-host-apiproxy`：
 
-> `feat-issues-4-5` 的 `Unreleased` 当前另含 Issue #4 的 `POST /session/:id/shell`。
-> 它在下一次版本发布前仍需完成用户手动 TUI 验证；本节的 shell 路由说明同步
-> 记录该候选前置能力。
+RC.2 包含 Issue #4 的 `POST /session/:id/shell`，其协议与限制记录在本文件对应
+路由说明中。
 
 - Session/list/history/prompt/cancel/model/fork/rename 直连
   `sessionController`；agent/preset、goal、skill 分别直连对应 host services。
