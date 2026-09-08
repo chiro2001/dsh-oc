@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`12a3f46`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`5fe3050`（2026-09-08）。
 
 ### 路由注册表
 
