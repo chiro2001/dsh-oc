@@ -28,10 +28,18 @@ use_standard_preset() {
 
 wait_tui_ready() {
   local deadline=$((SECONDS + 60))
+  local previous_frame=''
   while (( SECONDS < deadline )); do
+    local current_frame
     e2e_tui_capture "$E2E_RUN_DIR/tui-ready.txt"
     if grep -qa 'Ask anything' "$E2E_RUN_DIR/tui-ready.txt"; then
-      return 0
+      current_frame="$(cksum < "$E2E_RUN_DIR/tui-ready.txt" | awk '{print $1 ":" $2}')"
+      if [[ -n "$previous_frame" && "$current_frame" == "$previous_frame" ]]; then
+        return 0
+      fi
+      previous_frame="$current_frame"
+    else
+      previous_frame=''
     fi
     if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
       echo "e2e: dsh exited while waiting for TUI: $(cat "$E2E_RUN_DIR/dsh-exit.txt")" >&2
@@ -74,8 +82,13 @@ wait_always_confirmation() {
   local file="$1"
   local deadline=$((SECONDS + 15))
   while (( SECONDS < deadline )); do
+    local dialog_present confirmation_present
     e2e_tui_capture "$file"
-    if grep -qa 'This will allow\|Confirm' "$file"; then
+    dialog_present=0
+    confirmation_present=0
+    grep -qa 'Permission required' "$file" && dialog_present=1 || true
+    grep -qa 'This will allow\|Confirm' "$file" && confirmation_present=1 || true
+    if [[ "$confirmation_present" == "1" && "$dialog_present" == "0" ]]; then
       return 0
     fi
     if [[ -s "$E2E_RUN_DIR/dsh-exit.txt" ]]; then
@@ -86,7 +99,50 @@ wait_always_confirmation() {
     sleep 0.25
   done
   echo "e2e: Allow always confirmation did not appear" >&2
+  echo "  evidence: permission dialog remained visible or confirmation was absent" >&2
   tail -40 "$file" >&2 || true
+  e2e_tui_capture_diagnostic "${file%.txt}-failure"
+  return 1
+}
+
+wait_allow_always_selected() {
+  local bridge="$1"
+  local file="$2"
+  local styled="${file%.txt}.styled.txt"
+  local selected_full=$'\033[48;2;245;167;66m \033[38;2;10;10;10mAllow always'
+  local selected_mini=$'\033[48;2;56;189;248m \033[38;2;21;46;71mAllow always'
+  local deadline=$((SECONDS + 3))
+  while (( SECONDS < deadline )); do
+    local pending
+    pending="$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo 0)"
+    e2e_tui_capture "$file"
+    tmux capture-pane -e -p -t "$E2E_TUI_SESSION" > "$styled" 2>/dev/null || true
+    if [[ "$pending" != "0" ]] && grep -qa 'Permission required' "$file" \
+      && grep -qa 'Allow once' "$file" && grep -qa 'Allow always' "$file"; then
+      if grep -qaF "$selected_full" "$styled" || grep -qaF "$selected_mini" "$styled"; then
+        return 0
+      fi
+    fi
+    sleep 0.25
+  done
+  echo "e2e: Allow always choice was not visibly selected after Right input" >&2
+  echo "  evidence: pending=$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo unknown)" >&2
+  tail -40 "$file" >&2 || true
+  e2e_tui_capture_diagnostic "${file%.txt}-choice-failure"
+  return 1
+}
+
+select_allow_always() {
+  local bridge="$1"
+  local stem="$2"
+  local selection_attempt
+  for selection_attempt in 1 2 3; do
+    tmux send-keys -t "$E2E_TUI_SESSION" Right
+    if wait_allow_always_selected "$bridge" "${stem}-attempt-${selection_attempt}.txt"; then
+      return 0
+    fi
+  done
+  echo "e2e: could not select Allow always after bounded, observed Right inputs" >&2
   return 1
 }
 
@@ -180,7 +236,8 @@ echo "  dialog 1 shown (once)"
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-always-dialog.txt"
 echo "  dialog 2 shown (always)"
-tmux send-keys -t "$E2E_TUI_SESSION" Right
+select_allow_always "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-always-choice"
+sleep 0.5
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_always_confirmation "$E2E_RUN_DIR/perm-always-confirm.txt"
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
@@ -390,8 +447,8 @@ echo "  session $SID"
 wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'mini permission always' "$E2E_RUN_DIR/prompt-mini-always.txt"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-always-dialog.txt"
-tmux send-keys -t "$E2E_TUI_SESSION" Right
-sleep 1
+select_allow_always "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-always-choice"
+sleep 0.5
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_always_confirmation "$E2E_RUN_DIR/perm-mini-always-confirm.txt"
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
