@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`4f7d316`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`4141cf9`（2026-09-08）。
 
 ### 路由注册表
 
@@ -270,7 +270,7 @@
 | `scripts/e2e-tui-agent-tab.sh` | 2196ea7 fix(bridge): treat an already-effective agent preset as a no-op |
 | `scripts/e2e-tui-boot.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-brand.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
-| `scripts/e2e-tui-command.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-command.sh` | 4141cf9 test(e2e): wait for stable TUI command frames |
 | `scripts/e2e-tui-continue.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-dir-filter.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-dir.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
@@ -291,7 +291,7 @@
 | `scripts/e2e-tui-skill.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-stream.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-subagent.sh` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
-| `scripts/e2e-tui-timestamps.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-timestamps.sh` | 4141cf9 test(e2e): wait for stable TUI command frames |
 | `scripts/e2e-tui-tools.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-turn.sh` | b05d5c9 fix(bridge): keep live message identity stable |
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
