@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`dacd2a2`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`f5f016f`（2026-09-08）。
 
 ### 路由注册表
 
@@ -248,7 +248,7 @@
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
 | `scripts/audit-local-sessions.sh` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
 | `scripts/build-replay-corpus.mjs` | 6928f8a feat(bridge): expose router entry and add minimal-server renderer attribution |
-| `scripts/check-all.sh` | 468c05f feat(bridge): add shell mode and settle preset cards |
+| `scripts/check-all.sh` | f5f016f test(release): harden CI verification |
 | `scripts/cleanup-e2e-runs.sh` | ec31177 chore: add e2e run directory cleanup script |
 | `scripts/cleanup-merged-branches.sh` | 2f1ab51 chore(scripts): enumerate remote merged branches for cleanup |
 | `scripts/e2e-api-attachment.sh` | cfddd26 test(e2e): cover attachment acceptance and readable rejections |
@@ -282,7 +282,7 @@
 | `scripts/e2e-tui-offline.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-permission-ext.sh` | 59074e9 fix(e2e): align status and mini abort oracles |
 | `scripts/e2e-tui-permission-mini.sh` | 261e324 test(e2e): add minimal permission case and 10x flake scan |
-| `scripts/e2e-tui-permission.sh` | d94f52e fix(e2e): harden permission waits and monitor output |
+| `scripts/e2e-tui-permission.sh` | f5f016f test(release): harden CI verification |
 | `scripts/e2e-tui-preset-inherit.sh` | 6e48eda fix(bridge): preserve preset model and inject shell context |
 | `scripts/e2e-tui-print-logs.sh` | 7561559 test(e2e): assert --log-level value passthrough to opencode child |
 | `scripts/e2e-tui-queue-live.sh` | 24406bc test(e2e): synchronize live queue submission |
@@ -305,9 +305,10 @@
 | `scripts/probe-opencode.mjs` | 942b799 refactor(bridge): split route registrations into domain modules |
 | `scripts/replay-corpus-manifest.mjs` | 9a591f2 test(corpus): add real-session coverage scan and close corpus gaps |
 | `scripts/replay-session-audit.sh` | 54c9c31 test(bridge): add reusable real-session replay audit script |
+| `scripts/scan-release-artifact-paths.sh` | f5f016f test(release): harden CI verification |
 | `scripts/update-feature-matrix.mjs` | 8d95367 fix(docs): keep feature matrix generation idempotent |
 | `scripts/update-local-install.sh` | f34db28 chore(tools): add local install updater and harden pack content audit |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/upgrade-lane.sh` | 81effdd feat(tui): add candidate opencode upgrade lane with golden trace diff |
-| `scripts/verify-release-artifacts.sh` | f34db28 chore(tools): add local install updater and harden pack content audit |
+| `scripts/verify-release-artifacts.sh` | f5f016f test(release): harden CI verification |
 <!-- FEATURES:AUTO:END -->

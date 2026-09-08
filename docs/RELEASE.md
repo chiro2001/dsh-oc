@@ -76,6 +76,8 @@
   的 enabled/max 与 disabled/无 reasoning_effort 语义。
 - 本地 typecheck、435 个单元测试、63/63 probe、perf smoke、artifact audit 和
   39 个 e2e（含真实 TUI、recovery、golden trace）首跑全绿、无 retry。
+- 远端 CI 反馈的 permission TUI 主题相关选择同步与无 `rg` 时 artifact scanner
+  行为已修复，并分别有确定性回归覆盖。
 - full SHA、tarball SHA256、package tree hash 与最终发布状态以 GitHub notes 为准。
 
 ## v0.2.0-rc.2 发布记录（2026-09-08）

@@ -20,6 +20,8 @@
   `thinking.disabled` 且不携带 `reasoning_effort`。
 - 本地完整门禁覆盖 435 个单元测试、63/63 协议探针、perf smoke、工件审计与 39 个
   e2e（含真实 TUI、recovery、golden trace），全部首跑通过且无 retry。
+- 远端 CI 反馈并修复两项门禁问题：permission TUI 选择状态改为主题无关的 ANSI
+  前景签名同步；artifact path scanner 在无 `rg` 环境下改为 fail-closed 并提供回归覆盖。
 
 ## [0.2.0-rc.2] - 2026-09-08
 
