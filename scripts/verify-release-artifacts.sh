@@ -66,13 +66,25 @@ for required in \
 done
 echo "  packed tarball contains required files and no src/"
 
-if rg -n --no-messages '/home/|/Users/|C:\\\\|/private/var/' "$TMP/unpack" \
-  | rg -v 'docs/(demo|CHANGELOG|MANUAL-TEST|ROADMAP|FEATURES|PROTOCOL|PLAN|perf)' > "$TMP/paths.txt"; then
-  echo "FAIL: packed artifacts contain machine absolute paths" >&2
-  sed -n '1,40p' "$TMP/paths.txt" >&2
-  exit 1
-fi
-echo "  packed tarball free of machine absolute paths"
+set +e
+bash "$REPO_ROOT/scripts/scan-release-artifact-paths.sh" \
+  "$TMP/unpack" "$TMP/paths.txt"
+PATH_SCAN_RC=$?
+set -e
+case "$PATH_SCAN_RC" in
+  0)
+    echo "  packed tarball free of machine absolute paths"
+    ;;
+  1)
+    echo "FAIL: packed artifacts contain machine absolute paths" >&2
+    sed -n '1,40p' "$TMP/paths.txt" >&2
+    exit 1
+    ;;
+  *)
+    echo "FAIL: machine-path scanner failed (rc=$PATH_SCAN_RC)" >&2
+    exit 2
+    ;;
+esac
 
 TARBALL_HASH="$(sha256sum "$TARBALL" | awk '{print $1}')"
 TREE_HASH="$(cd "$TMP/unpack" && find . -type f | sort | xargs sha256sum | sha256sum | awk '{print $1}')"

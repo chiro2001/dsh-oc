@@ -26,6 +26,30 @@ use_standard_preset() {
   printf '\nagent-presets:\n  default: standard\n' >> "$E2E_DSH_HOME/settings.yaml"
 }
 
+e2e_tui_capture_ansi() {
+  tmux capture-pane -p -e -t "$E2E_TUI_SESSION" > "$1" || true
+}
+
+option_fg_sig() {
+  local file="$1"
+  local label="$2"
+  # Extract the foreground ANSI sequence immediately before one option label;
+  # this is theme-independent across truecolor and degraded terminals.
+  awk -v label="$label" '
+    index($0, label) {
+      prefix = substr($0, 1, index($0, label))
+      fg = ""
+      while (match(prefix, /\033\[[0-9;]*m/)) {
+        code = substr(prefix, RSTART, RLENGTH)
+        if (code !~ /48;/) fg = code
+        prefix = substr(prefix, RSTART + RLENGTH)
+      }
+      print fg
+      exit
+    }
+  ' "$file"
+}
+
 wait_tui_ready() {
   local deadline=$((SECONDS + 60))
   local previous_frame=''
@@ -60,7 +84,7 @@ wait_permission_dialog() {
   while (( SECONDS < deadline )); do
     local pending
     pending="$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo 0)"
-    e2e_tui_capture "$file"
+    e2e_tui_capture_ansi "$file"
     if [[ "$pending" != "0" ]] && grep -qa 'Permission required' "$file" && grep -qa 'Allow once' "$file"; then
       return 0
     fi
@@ -105,44 +129,66 @@ wait_always_confirmation() {
   return 1
 }
 
-wait_allow_always_selected() {
+select_allow_always() {
   local bridge="$1"
-  local file="$2"
-  local styled="${file%.txt}.styled.txt"
-  local selected_full=$'\033[48;2;245;167;66m \033[38;2;10;10;10mAllow always'
-  local selected_mini=$'\033[48;2;56;189;248m \033[38;2;21;46;71mAllow always'
-  local deadline=$((SECONDS + 3))
-  while (( SECONDS < deadline )); do
-    local pending
+  local baseline="$2"
+  local current="$3"
+  local base_once base_always
+  local previous_signature=''
+  local baseline_stable=0
+  local baseline_deadline=$((SECONDS + 5))
+  while (( SECONDS < baseline_deadline )); do
+    local pending baseline_once baseline_always current_signature
     pending="$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo 0)"
-    e2e_tui_capture "$file"
-    tmux capture-pane -e -p -t "$E2E_TUI_SESSION" > "$styled" 2>/dev/null || true
-    if [[ "$pending" != "0" ]] && grep -qa 'Permission required' "$file" \
-      && grep -qa 'Allow once' "$file" && grep -qa 'Allow always' "$file"; then
-      if grep -qaF "$selected_full" "$styled" || grep -qaF "$selected_mini" "$styled"; then
-        return 0
+    e2e_tui_capture_ansi "$baseline"
+    baseline_once="$(option_fg_sig "$baseline" 'Allow once')"
+    baseline_always="$(option_fg_sig "$baseline" 'Allow always')"
+    if [[ "$pending" != "0" && -n "$baseline_once" && -n "$baseline_always" \
+      && "$baseline_once" != "$baseline_always" ]]; then
+      current_signature="$baseline_once|$baseline_always"
+      if [[ -n "$previous_signature" && "$current_signature" == "$previous_signature" ]]; then
+        baseline_stable=1
+        break
       fi
+      previous_signature="$current_signature"
+    else
+      previous_signature=''
     fi
     sleep 0.25
   done
-  echo "e2e: Allow always choice was not visibly selected after Right input" >&2
-  echo "  evidence: pending=$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo unknown)" >&2
-  tail -40 "$file" >&2 || true
-  e2e_tui_capture_diagnostic "${file%.txt}-choice-failure"
-  return 1
-}
-
-select_allow_always() {
-  local bridge="$1"
-  local stem="$2"
-  local selection_attempt
-  for selection_attempt in 1 2 3; do
-    tmux send-keys -t "$E2E_TUI_SESSION" Right
-    if wait_allow_always_selected "$bridge" "${stem}-attempt-${selection_attempt}.txt"; then
+  if [[ "$baseline_stable" != "1" ]]; then
+    echo "e2e: permission baseline highlights did not stabilize before Right input" >&2
+    echo "  evidence: pending=$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo unknown)" >&2
+    tail -40 "$baseline" >&2 || true
+    e2e_tui_capture_diagnostic "${baseline%.txt}-baseline-failure"
+    return 1
+  fi
+  base_once="$(option_fg_sig "$baseline" 'Allow once')"
+  base_always="$(option_fg_sig "$baseline" 'Allow always')"
+  if [[ -z "$base_once" || -z "$base_always" || "$base_once" == "$base_always" ]]; then
+    echo "e2e: cannot distinguish Allow once/always baseline highlights" >&2
+    e2e_tui_capture_diagnostic "${baseline%.txt}-choice-baseline-failure"
+    return 1
+  fi
+  tmux send-keys -t "$E2E_TUI_SESSION" Right
+  local deadline=$((SECONDS + 5))
+  while (( SECONDS < deadline )); do
+    local pending current_once current_always
+    pending="$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo 0)"
+    e2e_tui_capture_ansi "$current"
+    current_once="$(option_fg_sig "$current" 'Allow once')"
+    current_always="$(option_fg_sig "$current" 'Allow always')"
+    if [[ "$pending" != "0" && "$current_once" == "$base_always" && "$current_always" == "$base_once" ]]; then
       return 0
     fi
+    sleep 0.25
   done
-  echo "e2e: could not select Allow always after bounded, observed Right inputs" >&2
+  echo "e2e: Right did not swap Allow once/always foreground signatures" >&2
+  echo "  evidence: pending=$(curl -s "$bridge/permission" | jq 'length' 2>/dev/null || echo unknown)" >&2
+  tail -40 "$current" >&2 || true
+  echo "  baseline signatures: once=$base_once always=$base_always" >&2
+  echo "  current signatures: once=$current_once always=$current_always" >&2
+  e2e_tui_capture_diagnostic "${current%.txt}-choice-failure"
   return 1
 }
 
@@ -236,7 +282,7 @@ echo "  dialog 1 shown (once)"
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-always-dialog.txt"
 echo "  dialog 2 shown (always)"
-select_allow_always "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-always-choice"
+select_allow_always "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-always-dialog.txt" "$E2E_RUN_DIR/perm-always-choice.txt"
 sleep 0.5
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_always_confirmation "$E2E_RUN_DIR/perm-always-confirm.txt"
@@ -447,7 +493,7 @@ echo "  session $SID"
 wait_prompt_started "$E2E_BRIDGE_URL" "$SID" 'mini permission always' "$E2E_RUN_DIR/prompt-mini-always.txt"
 
 wait_permission_dialog "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-always-dialog.txt"
-select_allow_always "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-always-choice"
+select_allow_always "$E2E_BRIDGE_URL" "$E2E_RUN_DIR/perm-mini-always-dialog.txt" "$E2E_RUN_DIR/perm-mini-always-choice.txt"
 sleep 0.5
 tmux send-keys -t "$E2E_TUI_SESSION" Enter
 wait_always_confirmation "$E2E_RUN_DIR/perm-mini-always-confirm.txt"
