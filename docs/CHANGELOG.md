@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+- 修复发布后本地安装 resolver：只解析 dsh-oc codeload SHA，区分 dsh-dcp 等其他包；
+  无 `rg` 时使用隔离验证过的 grep fallback，扫描失败或 SHA 缺失/歧义时 fail-closed。
+
 ## [0.2.0-rc.3] - 2026-09-08
 
 本候选面向 dsh `>=0.1.2-rc.1`；发布/远端不可变标识以最终 GitHub notes 为准。

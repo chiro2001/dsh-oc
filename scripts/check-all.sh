@@ -40,6 +40,7 @@ node scripts/perf.mjs --sessions 200 --quiet >/dev/null
 echo "== release artifact audit =="
 bash scripts/verify-release-artifacts.sh
 bash tests/verify-release-artifacts.sh
+bash tests/update-local-install.sh
 
 if [[ -n "$SCALE" ]]; then
   echo "== perf scale (${SCALE} sessions) =="
