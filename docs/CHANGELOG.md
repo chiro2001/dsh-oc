@@ -6,11 +6,20 @@
 
 ## [Unreleased]
 
+## [0.2.0-rc.3] - 2026-09-08
+
+本候选面向 dsh `>=0.1.2-rc.1`；发布/远端不可变标识以最终 GitHub notes 为准。
+
 - 修复官方 OpenCode 1.18.18 prompt 的顶层 `variant` 解析：`max`/`off` 在多轮
   对话中持续传递，省略 variant 的 Default 会正确回到 dsh 后端默认；session、用户
   卡片、live/queued SSE 与 v1/v2 history 的实际模型 effort 保持同步。
 - 增加 max/max、off/off、max→Default 的 bridge optimistic-card 回归，以及真实 host
   API e2e 对 session/history/live model ref 的确定性校验。
+- 用户手动 TUI 的 max/off 多轮验证通过；本地确定性 host oracle 进一步断言 provider
+  request body：max 为 `thinking.enabled + reasoning_effort=max`，off 为
+  `thinking.disabled` 且不携带 `reasoning_effort`。
+- 本地完整门禁覆盖 435 个单元测试、63/63 协议探针、perf smoke、工件审计与 39 个
+  e2e（含真实 TUI、recovery、golden trace），全部首跑通过且无 retry。
 
 ## [0.2.0-rc.2] - 2026-09-08
 

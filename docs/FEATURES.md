@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`219a2d1`（2026-09-08）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`dacd2a2`（2026-09-08）。
 
 ### 路由注册表
 
@@ -237,7 +237,7 @@
 | `src/bridge/state.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/stubs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/help.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
-| `src/index.ts` | 4284a3c chore(release): prepare v0.2.0-rc.2 |
+| `src/index.ts` | dacd2a2 chore(release): prepare v0.2.0-rc.3 |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/brand.ts` | eba383f feat(tui): print DSH OC brand before --mini launches |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
@@ -257,7 +257,7 @@
 | `scripts/e2e-api.sh` | 5195189 test(e2e): harden reasoning effort oracle |
 | `scripts/e2e-cli-bin.sh` | e1817df test(e2e): assert dsh-oc --version dual output in cli-bin suite |
 | `scripts/e2e-golden-trace.sh` | 81effdd feat(tui): add candidate opencode upgrade lane with golden trace diff |
-| `scripts/e2e-install-rollback.sh` | 46c4319 fix(release): validate ABI-compatible rollback |
+| `scripts/e2e-install-rollback.sh` | dacd2a2 chore(release): prepare v0.2.0-rc.3 |
 | `scripts/e2e-minimal-server-repro.sh` | a603d6a test(e2e): add raw SSE replay mode and full-trace real repro |
 | `scripts/e2e-queued-order-repro.sh` | b72e076 test(e2e): make queued-order QUEUED badge deterministic in CI |
 | `scripts/e2e-real-llm.sh` | 609ccd6 test(real): strengthen real-llm queue FIFO and TUI delivery assertions |

@@ -2,8 +2,15 @@
 
 > 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读
 > `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
-> `main` 已包含 `v0.2.0-rc.2`；`develop` 是后续改动的集成交付线，稳定后再回合
+> `main` 已包含 `v0.2.0-rc.3`；`develop` 是后续改动的集成交付线，稳定后再回合
 > `main`。
+
+## RC.3 已完成（0.2.0-rc.3，2026-09-08）
+
+reasoning effort 修复已完成候选收敛：官方 TUI 顶层 `variant` 的 max/off 多轮选择、
+Default 回退、session/history/live/queued model ref 同步均有回归；用户手动 TUI
+max/off 与本地 provider request body oracle 均通过。完整本地门禁覆盖 435 个单测、
+63/63 probe、perf、artifact audit 与 39 个 e2e，首跑全绿且无 retry。
 
 ## RC.2 已完成（0.2.0-rc.2，2026-09-08）
 

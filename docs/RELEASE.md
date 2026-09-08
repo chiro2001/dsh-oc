@@ -4,7 +4,7 @@
 面向 dsh `>=0.1.2-rc.1`。后续候选复用本清单，把文中的
 `<candidate-version>` 替换为实际版本。
 
-当前本地候选为 `v0.2.0-rc.3`，尚未推送、打 tag 或发布；rc.1/rc.2 发布记录保留为历史证据。
+本次候选版本为 `v0.2.0-rc.3`；rc.1/rc.2 发布记录保留为历史证据。
 
 发布决策依据见 `expert-advice/round-0002/decision.md`；npm 继续 NO-GO。包
 `@chiro2001/dsh-oc` 只走 GitHub 源安装，发布物以**完整 commit SHA** 为真相源，
@@ -66,6 +66,17 @@
   冷装、真实 TUI smoke、同 ABI 回滚和真实 DeepSeek quick smoke 已通过。
 - 发布四元组：opencode `1.18.18`、dsh-oc commit、tarball SHA256、package
   tree hash，详见 GitHub prerelease notes。
+
+## v0.2.0-rc.3 候选记录（2026-09-08）
+
+- 修复官方 OpenCode prompt 顶层 `variant` 的 reasoning effort 同步：显式 max/off
+  持续作用于后续轮次，Default 回到 dsh 后端默认，并同步 session、history、live
+  与 queued user model ref。
+- 用户手动 TUI max/off 多轮验证通过；本地 host oracle 校验 provider request body
+  的 enabled/max 与 disabled/无 reasoning_effort 语义。
+- 本地 typecheck、435 个单元测试、63/63 probe、perf smoke、artifact audit 和
+  39 个 e2e（含真实 TUI、recovery、golden trace）首跑全绿、无 retry。
+- full SHA、tarball SHA256、package tree hash 与最终发布状态以 GitHub notes 为准。
 
 ## v0.2.0-rc.2 发布记录（2026-09-08）
 
