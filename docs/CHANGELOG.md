@@ -27,6 +27,12 @@ session-controller 依赖与 assistant 流式事件模型，**不再兼容 dsh 0
   translator 的 live provisional assistant（id/created/文本块，`time.completed`
   未设置）合并进 v1/v2 history 响应，保持 TUI 与 queue-live oracle 的 in-flight
   契约（`scripts/e2e-tui-queue-live.sh`）。
+- 修复首个回合的 agent/model 标签：live provisional SSE 卡片、prompt 响应
+  placeholder 与流式中 v1/v2 history 不再硬编码 `build`/`deepseek-chat`，改为使用
+  会话已记录的 preset 与模型选择；prompt 未携带模型时回退到部署默认模型
+  （`placeholderSessionOptionsForPrompt`），shell 合成卡片同样优先会话模型。TUI 的
+  映射默认 agent `build` 由 `applyAgentFromBody` 解析为部署默认 preset，首回合即可
+  显示实际 preset。
 - 历史移植：`SessionHistoryRecord` 的 `chunks` 记录被内嵌
   `assistant/message.stream` / `assistant/attempt.stream` 取代；`expandRecord`
   把 packed run 还原为 `text-chunks`/`reasoning-chunks`/`tool-call-chunks` 行，

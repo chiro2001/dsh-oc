@@ -2241,9 +2241,16 @@ describe('bridge events: projection and control frames', () => {
   })
 
   it('exposes the live provisional assistant for mid-turn history reads', () => {
+    const state = new InteractionState()
+    state.setSessionModelSelection('s1', {
+      providerID: 'deepseek',
+      modelID: 'deepseek-v4-pro',
+      variant: 'high',
+    })
+    state.setSessionAgent('s1', 'standard')
     const instance = new MuxEventTranslator({
       cwd: '/work',
-      state: new InteractionState(),
+      state,
       log: () => {},
       toolFlushMs: 0,
     })
@@ -2259,14 +2266,23 @@ describe('bridge events: projection and control frames', () => {
     })
     // dsh 0.1.5 keeps these chunks out of the durable log; the history route
     // merges this snapshot instead so an in-flight assistant stays visible.
-    instance.translate(streamFrame({ turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'hel' } }, 1000, {
-      sessionId: 's1',
-      frameIndex: 0,
-    }))
+    const live = instance.translate(streamFrame(
+      { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'hel' } },
+      1000,
+      { sessionId: 's1', frameIndex: 0 },
+    ))
     instance.translate(streamFrame({ turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'lo' } }, 1010, {
       sessionId: 's1',
       frameIndex: 1,
     }))
+    // The live card names the session's model/preset, not the legacy defaults.
+    expect(live.find((event) => event.payload.type === 'message.updated')?.payload.properties.info)
+      .toMatchObject({
+        modelID: 'deepseek-v4-pro',
+        providerID: 'deepseek',
+        mode: 'standard',
+        agent: 'standard',
+      })
     const snapshot = instance.pendingAssistantSnapshot('s1')
     expect(snapshot).toBeDefined()
     expect(snapshot?.id).toBe('msg_pending:s1:1:1')

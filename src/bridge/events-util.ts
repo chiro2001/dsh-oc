@@ -156,17 +156,22 @@ export function provisionalAssistantMessage(
   created: number,
   parentID: string,
 ): Record<string, unknown> {
-  const model = deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  // The live provisional card must name the session's actual model as soon as
+  // the prompt route recorded it; the deployment default (or the legacy
+  // fallback) is only for sessions with no selection yet.
+  const selected = deps.state.sessionModelSelectionFor(sessionId)
+  const model = selected ?? deps.defaultModel ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
+  const agent = deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT
   return {
     id,
     sessionID: sessionId,
     role: 'assistant',
-    agent: deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
+    agent,
     time: { created },
     parentID,
     modelID: model.modelID,
     providerID: model.providerID,
-    mode: deps.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT,
+    mode: agent,
     path: { cwd: deps.cwd, root: deps.cwd },
     cost: 0,
     tokens: zeroTokens(),

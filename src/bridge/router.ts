@@ -985,21 +985,65 @@ export function parsePromptParts(raw: unknown, cwd: string): PromptContentPart[]
   return parts
 }
 
+/** Optional model/agent a provisional card should carry. */
+export interface PendingAssistantOptions {
+  id?: string
+  parentID?: string
+  /** External (opencode-facing) provider/model ref; defaults to legacy values. */
+  model?: { providerID: string; modelID: string; variant?: string }
+  /** dsh agent-preset id surfaced as the OpenCode `mode`. */
+  agent?: string
+}
+
+/** Session-scoped model/agent for provisional placeholder cards. */
+export function placeholderSessionOptions(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+): Pick<PendingAssistantOptions, 'model' | 'agent'> {
+  const model = ctx.state.sessionModelSelectionFor(sessionId)
+  const agent = ctx.state.sessionAgentFor(sessionId)
+  return {
+    ...(model === undefined ? {} : { model }),
+    ...(agent === undefined ? {} : { agent }),
+  }
+}
+
+/**
+ * Prompt-response variant of {@link placeholderSessionOptions}: a brand-new
+ * session's first prompt may carry no model (the TUI has not learned one yet),
+ * so fall back to the deployment default instead of the legacy `deepseek-chat`.
+ */
+export async function placeholderSessionOptionsForPrompt(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  requested?: SessionModelSelectionRef,
+): Promise<PendingAssistantOptions> {
+  const model = ctx.state.sessionModelSelectionFor(sessionId)
+    ?? requested
+    ?? await defaultModelRef(ctx)
+  const agent = ctx.state.sessionAgentFor(sessionId)
+  return {
+    model,
+    ...(agent === undefined ? {} : { agent }),
+  }
+}
+
 export function pendingAssistantPlaceholder(
   sessionID: string,
   cwd: string,
   text?: string,
-  options: { id?: string; parentID?: string } = {},
+  options: PendingAssistantOptions = {},
 ): V1MessageEntry {
+  const model = options.model ?? { providerID: 'deepseek', modelID: 'deepseek-chat' }
   const info: V1MessageEntry['info'] = {
     id: options.id ?? `pending:${randomUUID()}`,
     sessionID,
     role: 'assistant',
     time: { created: Date.now() },
     parentID: options.parentID ?? `pending:${randomUUID()}`,
-    modelID: 'deepseek-chat',
-    providerID: 'deepseek',
-    mode: 'build',
+    modelID: model.modelID,
+    providerID: model.providerID,
+    mode: options.agent ?? DEFAULT_AGENT_NAME,
     path: { cwd, root: cwd },
     cost: 0,
     tokens: {
@@ -1041,6 +1085,7 @@ export function mergePendingAssistantV1(
   const placeholder = pendingAssistantPlaceholder(sessionId, ctx.cwd, undefined, {
     id: snapshot.id,
     ...(snapshot.parentID === undefined ? {} : { parentID: snapshot.parentID }),
+    ...placeholderSessionOptions(ctx, sessionId),
   })
   placeholder.info.time = { created: snapshot.created }
   placeholder.parts = snapshot.parts.map((part) => ({
@@ -1066,12 +1111,20 @@ export function mergePendingAssistantV2(
   const snapshot = ctx.pendingAssistant?.(sessionId)
   if (snapshot === undefined) return
   if (messages.some((message) => message.id === snapshot.id)) return
+  const selected = ctx.state.sessionModelSelectionFor(sessionId)
+  const agent = ctx.state.sessionAgentFor(sessionId) ?? DEFAULT_AGENT_NAME
   messages.push({
     id: snapshot.id,
     time: { created: snapshot.created },
     type: 'assistant',
-    agent: DEFAULT_AGENT_NAME,
-    model: { providerID: 'deepseek', modelID: 'deepseek-chat' },
+    agent,
+    model: selected === undefined
+      ? { id: 'deepseek-chat', providerID: 'deepseek' }
+      : {
+          id: selected.modelID,
+          providerID: selected.providerID,
+          ...(selected.variant === undefined ? {} : { variant: selected.variant }),
+        },
     content: snapshot.parts.map((part) => part.type === 'text'
       ? { type: 'text', id: part.id, text: part.text }
       : {
@@ -1865,7 +1918,16 @@ export async function applyAgentFromBody(
   // already-effective preset as a no-op so the TUI keeps its label without
   // the lock noise.
   if (ctx.state.sessionAgentFor(sessionId) === agent) return
-  if (agent === DEFAULT_AGENT_NAME) return
+  if (agent === DEFAULT_AGENT_NAME) {
+    // The OpenCode default agent is not a dsh preset name. Record the
+    // deployment default preset so the first streamed card labels the actual
+    // preset instead of the OpenCode placeholder "build".
+    if (ctx.state.sessionAgentFor(sessionId) === undefined) {
+      const presetId = await defaultPresetId(ctx)
+      if (presetId !== undefined) ctx.state.setSessionAgent(sessionId, presetId)
+    }
+    return
+  }
   try {
     const selected = await switchAgentPreset(ctx, sessionId, agent)
     broadcastSessionAgent(ctx, sessionId, selected)

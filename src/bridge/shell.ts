@@ -465,9 +465,12 @@ export async function runShellCommand(
   if (ctx.state.isSessionCleared(sessionId)) throw notFound(`session "${sessionId}" not found`)
   const project = projectIdFor(directory)
   const agentName = requestedAgent ?? knownAgent ?? DEFAULT_AGENT
+  // Prefer the session's recorded model selection over the legacy default so
+  // the synthetic shell card does not show `deepseek-chat` on the first turn.
+  const sessionModel = ctx.state.sessionModelSelectionFor(sessionId)
   const model = {
-    providerID: externalProviderId(body.model?.providerID?.trim() || 'deepseek'),
-    modelID: body.model?.modelID?.trim() || 'deepseek-chat',
+    providerID: externalProviderId(body.model?.providerID?.trim() || sessionModel?.providerID || 'deepseek'),
+    modelID: body.model?.modelID?.trim() || sessionModel?.modelID || 'deepseek-chat',
   }
   ctx.state.markSessionPresent(sessionId)
 

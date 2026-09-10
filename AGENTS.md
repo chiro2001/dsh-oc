@@ -190,6 +190,12 @@ dsh --profile oc --help                                            # 验证版�
   - `dsh-tool-fs` 的 `write`/`edit` 是 0.1.5 的文件工具（`str_replace_editor` 只
     在 0.1.2 base 行、已 opt-in 化）；新文件 `write` 的 result meta 是空 diffs，
     bridge 从调用参数合成 diff，保证 opencode edit 卡片有 `metadata.diff`。
+  - **首回合标签**：所有 provisional 卡片（live SSE、prompt 响应 placeholder、流式
+    中 v1/v2 history 合并、shell 合成卡片）必须用
+    `state.sessionModelSelectionFor()` + `sessionAgentFor()` 取会话实际值，禁止回退
+    到 `build`/`deepseek-chat`；prompt 未携带模型时用
+    `placeholderSessionOptionsForPrompt` 回退部署默认模型。TUI 的映射默认 agent
+    `build` 由 `applyAgentFromBody` 解析成部署默认 preset，保证首回合显示真实 preset。
 
 ## 自测门槛（提交/合并前必须全绿）
 

@@ -310,7 +310,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (slash !== undefined) {
       const outcome = await R.runSlashCommand(ctx, id, slash)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text, R.placeholderSessionOptions(ctx, id)))
     }
     const { promptUserID, assistantID, createdAt } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, req.body)
@@ -336,6 +336,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
       id: assistantID,
       parentID: promptUserID,
+      ...await R.placeholderSessionOptionsForPrompt(ctx, id, R.promptModelRef(ctx, id, req.body)),
     }))
   })
 
@@ -349,7 +350,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (slash !== undefined) {
       const outcome = await R.runSlashCommand(ctx, id, slash)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, outcome.text, R.placeholderSessionOptions(ctx, id)))
     }
     const { promptUserID, assistantID, createdAt } = registerPromptIds(ctx, id, body)
     await R.applyAgentFromBody(ctx, id, req.body)
@@ -375,6 +376,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, {
       id: assistantID,
       parentID: promptUserID,
+      ...await R.placeholderSessionOptionsForPrompt(ctx, id, R.promptModelRef(ctx, id, req.body)),
     }))
   })
 
@@ -429,16 +431,16 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     if (name === 'preset') {
       const outcome = await R.runPresetCommand(ctx, id, argumentsRaw.trim())
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text)))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text), R.placeholderSessionOptions(ctx, id)))
     }
     if (name === 'goal') {
       const outcome = await R.runGoalCommand(ctx, id, argumentsRaw)
       if (outcome.kind === 'error') throw badRequest(outcome.text, { code: 'command-error' })
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text)))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text), R.placeholderSessionOptions(ctx, id)))
     }
     if (name === 'help') {
       const outcome = R.runHelpCommand(ctx, id, argumentsRaw)
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text)))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, R.slashOutcomeText(ctx, id, outcome.text), R.placeholderSessionOptions(ctx, id)))
     }
     const skills = await R.skillListForSession(ctx, id)
     if (skills.some((skill) => skill.name === name)) {
@@ -449,7 +451,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
         content: [{ type: 'text', text: promptText }],
       })
       ctx.state.invalidateSession(id)
-      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd))
+      return R.json(200, R.pendingAssistantPlaceholder(id, ctx.cwd, undefined, R.placeholderSessionOptions(ctx, id)))
     }
     throw badRequest(`unsupported command "${command}"`)
   })

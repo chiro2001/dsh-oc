@@ -625,6 +625,52 @@ describe('bridge router: session routes', () => {
     expect(await router.exitNoteNeeded()).toBe(true)
   })
 
+  it('labels the first prompt placeholder with the session model and preset', async () => {
+    const base = fakeApi()
+    const api: BridgeApi = {
+      ...base,
+      sessionController: {
+        ...base.sessionController,
+        selectModel: async () => ({
+          selected: { provider: 'deepseek-official', model: 'deepseek-v4-pro', reasoningEffort: 'high' },
+        }),
+      },
+    }
+    const { server } = await boot(api)
+    const result = await request(server, 'POST', '/session/s1/message', {
+      // The OpenCode TUI sends its mapped default agent plus the selected model.
+      agent: 'build',
+      model: { providerID: 'deepseek', modelID: 'deepseek-v4-pro', variant: 'high' },
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({
+      info: {
+        role: 'assistant',
+        modelID: 'deepseek-v4-pro',
+        providerID: 'deepseek',
+        mode: 'minimal',
+      },
+    })
+  })
+
+  it('falls back to the deployment model for a model-less first prompt placeholder', async () => {
+    const { server } = await boot(fakeApi())
+    const result = await request(server, 'POST', '/session/s1/message', {
+      agent: 'build',
+      parts: [{ type: 'text', text: 'hi' }],
+    })
+    expect(result.status).toBe(200)
+    expect(result.body).toMatchObject({
+      info: {
+        role: 'assistant',
+        modelID: 'mock-model',
+        providerID: 'deepseek',
+        mode: 'minimal',
+      },
+    })
+  })
+
   it('needs the exit note for a resumed session with a durable title', async () => {
     const base = fakeApi()
     const api: BridgeApi = {

@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`54e2d60`（2026-09-11）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`1207737`（2026-09-11）。
 
 ### 路由注册表
 
@@ -182,7 +182,7 @@
 | `tests/bridge-events.spec.ts` | 89 | aade0a7 fix(bridge): expose the live provisional assistant to history reads |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
-| `tests/bridge-router.spec.ts` | 144 | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
+| `tests/bridge-router.spec.ts` | 146 | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
 | `tests/convert/message.spec.ts` | 25 | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `tests/convert/model.spec.ts` | 7 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
