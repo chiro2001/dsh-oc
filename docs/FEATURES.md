@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`db87e31`（2026-09-09）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`952fb06`（2026-09-09）。
 
 ### 路由注册表
 
@@ -190,7 +190,7 @@
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/session.spec.ts` | 8 | d6c834f fix(bridge): preserve subagent metadata and canonical order |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `tests/convert/tool.spec.ts` | 17 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `tests/convert/tool.spec.ts` | 19 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `tests/perf.spec.ts` | 5 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `tests/protocol-probe.spec.ts` | 2 | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
 | `tests/replay-corpus.spec.ts` | 2 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
@@ -218,6 +218,7 @@
 | `src/bridge/errors.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `src/bridge/events-util.ts` | caff946 fix(bridge): keep reasoning effort in sync |
 | `src/bridge/events.ts` | caff946 fix(bridge): keep reasoning effort in sync |
+| `src/bridge/file-uploads.ts` | — |
 | `src/bridge/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/git.ts` | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
 | `src/bridge/http.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |

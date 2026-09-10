@@ -9,6 +9,7 @@
  */
 import type { AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
+import type { StreamChunk } from '@deepseek-ai/dsh-llm/types'
 import type {
   SessionSummary as HostSessionSummary,
 } from '@deepseek-ai/dsh-api-session-controller/types'
@@ -37,7 +38,11 @@ export interface BridgeSessionEvent {
 
 /**
  * The plugin-merged event names the bridge consumes beyond the core
- * `SessionEvent` union. Each is read structurally.
+ * `SessionEvent` union. Each is read structurally. `text-chunks` /
+ * `reasoning-chunks` / `tool-call-chunks` are no longer host session events in
+ * dsh 0.1.5 — the bridge synthesizes them from an embedded
+ * `assistant/message.stream` (see `expandRecord`) and keeps the translation
+ * cases for that history path.
  */
 export type PluginSessionEventType =
   | 'agent/inbox/spliced'
@@ -95,6 +100,24 @@ export interface BridgeControlBaseline {
  */
 export type BridgeFrame =
   | { type: 'session/event'; sessionId: string; event: BridgeEvent; view?: ToolEventView }
+  | {
+      /**
+       * dsh 0.1.5 live assistant stream: one process-local
+       * `agent/assistant-stream` chunk frame. The durable session log no longer
+       * carries per-delta events, so this is the streaming feed.
+       */
+      type: 'session/assistant-stream'
+      sessionId: string
+      turn: number
+      step: number
+      time: number
+      /** Attempt identity used to de-duplicate replayed frames. */
+      attemptId: string
+      revision: number
+      /** Dense zero-based position within the attempt. */
+      index: number
+      chunk: StreamChunk
+    }
   | { type: 'control/baseline'; value: BridgeControlBaseline }
   | {
       type: 'approval/requested'

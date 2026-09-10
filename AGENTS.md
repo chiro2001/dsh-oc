@@ -19,11 +19,12 @@ dsh (Node) ── dsh-oc bundle ── oc-bridge (HTTP/SSE) <── opencode TUI
                   └─ DSH Agent/Session/Tools/LLM/Approval/Questions
 ```
 
-仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.2.0-rc.3`（未发布
+仓库：`chiro2001/dsh-oc`；npm 包名 `@chiro2001/dsh-oc@0.2.0-rc.4`（未发布
 registry，安装/更新走 GitHub 源 `#main` / `#develop`）。
 
-当前 prerelease 对应 dsh `>=0.1.2-rc.1`。PR #1/#2/#3 没有原样合入；RC 版本将其
-有效语义与 dsh 0.1.2 host-services 迁移重新整合，详见 CHANGELOG。
+当前 prerelease 面向 dsh `>=0.1.5-rc.2`（0.2.0-rc.3 及以前面向
+`>=0.1.2-rc.1`，事件模型不兼容，不再支持）。PR #1/#2/#3 没有原样合入；RC 版本将其
+有效语义与 dsh host-services 迁移重新整合，详见 CHANGELOG。
 
 ## 代码结构
 
@@ -39,8 +40,9 @@ src/
     routes.ts        # 聚合器（注册顺序即匹配顺序，勿乱）
       vcs.ts         # 真实 git 信息/状态/diff 路由
       fs.ts          # 工作区文件读取/列表/查找路由
-    events.ts        # SSE 事件翻译（turn.*、message.*、session.*、工具流、权限）
+    events.ts        # SSE 事件翻译（assistant-stream、turn.*、message.*、session.*、工具流、权限）
     state.ts         # 桥内存状态（缓存、标题、preset、活动标记）
+    file-uploads.ts  # dsh 0.1.5 headless fileUploads provider（见下）
     convert/         # dsh 事件 → opencode 消息/会话/模型/权限转换
     http.ts sse.ts rpc.ts errors.ts stubs.ts git.ts fs.ts
   tui/               # opencode 子进程解析/下载/spawn、信号转发、退出处理
@@ -168,7 +170,26 @@ dsh --profile oc --help                                            # 验证版�
   必要清理只允许结束 monitor 自身 PID。需要把正常退出写到 stderr 时显式加
   `--report-exit`；阈值告警无论如何仍写 stderr。
 - **兼容边界**：dsh-dcp rc.6 仍读取已移除的 `session.events`，bridge 暂时
-  安装 `snapshotEvents()` getter shim；dcp 升级到兼容 dsh 0.1.2 后删除。
+  安装 `snapshotEvents()` getter shim；dcp 升级到兼容 dsh 0.1.5 后删除。
+- **dsh 0.1.5 host ABI**：
+  - `dsh-api-session-controller` 新增硬依赖 `fileUploads`；官方 provider
+    （`dsh-client-file-upload`）是浏览器传输插件、inject `connection`，oc-bridge 不挂。
+    `@chiro2001/dsh-oc/file-uploads`（`src/bridge/file-uploads.ts`）提供 headless
+    实现，必须在 `cordis.patch.yml` 中插在 `session-controller` 之前；`bindPrompt`
+    必须返回带 `Symbol.dispose` 的对象（0.1.5 用显式资源管理包裹它，普通对象会
+    报 `TypeError: Object not disposable`）。
+  - 实时流：`assistant/chunk` 会话事件已删除；改订阅进程内
+    `agent/assistant-stream`（`start` 带 turn/step，`chunk` 带 attemptId/revision/
+    index + 同一 `StreamChunk` 载荷），`index.ts` 维护 attempt→turn/step 映射并
+    feed `session/assistant-stream` 帧；对缺失 start 的迟到帧直接丢弃。
+  - 持久化历史：`SessionHistoryRecord` 不再有 `chunks`；`assistant/message` /
+    `assistant/attempt` 内嵌 `stream: AssistantStreamRecord[]`。`expandRecord` 把
+    packed run 还原成 `text-chunks`/`reasoning-chunks`/`tool-call-chunks` 行，
+    `assistantStreamTiming` 从 raw `block-start`/`block-end`/`finish` 还原部件时长
+    与 finish reason；`assistant/attempt` 在 live/history 都无 TUI surface。
+  - `dsh-tool-fs` 的 `write`/`edit` 是 0.1.5 的文件工具（`str_replace_editor` 只
+    在 0.1.2 base 行、已 opt-in 化）；新文件 `write` 的 result meta 是空 diffs，
+    bridge 从调用参数合成 diff，保证 opencode edit 卡片有 `metadata.diff`。
 
 ## 自测门槛（提交/合并前必须全绿）
 
@@ -213,7 +234,9 @@ e2e 脚本只允许在 `main` / `develop` 与 `chore-*` / `fix-*` / `docs-*` /
   TUI 的 Esc 打断依赖 `phase === "running"`，没有 `turn.wait` 就不会打断。
 - **reasoning 时长**：reasoning part 的 `end` 取该块最后一条 chunk 的时间；
   text 块开始时、以及 turn/end（中断无最终消息）时都会关闭仍打开的
-  reasoning part，避免 thinking 一直转圈。
+  reasoning part，避免 thinking 一直转圈。0.1.5 的 live 时间来自
+  `agent/assistant-stream` 帧的 `time`，冷读来自内嵌 stream 的
+  `block-start`/`block-end`（见 `assistantStreamTiming`）。
 - **agent preset 锁定**：dsh 在会话产生首条回复后锁定 agent preset
   （409 `agent-preset-locked`）。Tab/`/preset` 只能对空白会话生效；对已开始
   的会话，prompt 体携带 agent 时 bridge 会尝试切换，失败后在第一条消息后

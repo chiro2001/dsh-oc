@@ -80,7 +80,7 @@ describe('opencode-assets.json', () => {
 })
 
 describe('cordis.patch.yml', () => {
-  it('contains the disabled title-llm override and the eight bundle plugins in order', () => {
+  it('contains the disabled title-llm override and the nine bundle plugins in order', () => {
     const yaml = read('cordis.patch.yml')
     const ids = [...yaml.matchAll(/^\s*- id:\s*(\S+)/gm)].map(
       (match) => match[1],
@@ -92,16 +92,18 @@ describe('cordis.patch.yml', () => {
       'subagent-model-selection-settings',
       'workspace',
       'directory-picker',
+      'oc-file-uploads',
       'session-controller',
       'oc-bridge',
       'oc-tui',
     ])
   })
 
-  it('wires oc-tui to oc-bridge and oc-bridge to the dsh 0.1.2 host services', () => {
+  it('wires oc-tui to oc-bridge and oc-bridge to the dsh 0.1.5 host services', () => {
     const yaml = read('cordis.patch.yml')
     expect(yaml).toMatch(/id: oc-bridge[\s\S]*?inject: \[sessionController, agentPresets, goals, sessionSkillCatalog, agents, sessions, sessionProjections\]/)
     expect(yaml).toMatch(/id: oc-tui[\s\S]*?inject: \[ocBridge\]/)
+    expect(yaml).toMatch(/id: oc-file-uploads[\s\S]*?name: '@chiro2001\/dsh-oc\/file-uploads'/)
   })
 })
 
@@ -110,13 +112,14 @@ describe('package.json', () => {
     const pkg = JSON.parse(read('package.json'))
     expect(pkg.name).toBe('@chiro2001/dsh-oc')
     expect(pkg.dsh.bundle.patch).toBe('./cordis.patch.yml')
+    expect(pkg.exports['./file-uploads']).toBe('./lib/bridge/file-uploads.js')
   })
 })
 
 describe('e2e workflow', () => {
   it('uses the dsh host ABI required by this release and can pack an empty failure directory', () => {
     const workflow = read('.github/workflows/e2e.yml')
-    expect(workflow).toContain('@deepseek-ai/dsh@0.1.2-rc.1')
+    expect(workflow).toContain('@deepseek-ai/dsh@0.1.5-rc.2')
     expect(workflow).not.toContain('@deepseek-ai/dsh@0.1.0-rc.6')
     expect(workflow).toMatch(/Pack e2e runs for upload[\s\S]*mkdir -p \.e2e[\s\S]*tar -C \.e2e/)
   })

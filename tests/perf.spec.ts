@@ -97,7 +97,7 @@ describe('perf session generator', () => {
     })
 
     expect(log.header.id).toBe('session-perf-test-1')
-    expect(log.header.version).toBe(0)
+    expect(log.header.version).toBe(3)
     expect(log.header.cwd).toBe('/tmp/perf-work')
     expect(log.header.delegationDepth).toBe(0)
     expect(log.header.agentPreset).toBe('minimal')
@@ -115,7 +115,7 @@ describe('perf session generator', () => {
     expect(byType('todo/write')).toHaveLength(2)
 
     // The detached dsh Session API itself accepts the log back (restore path).
-    expect(() => Session.fromRestore(SessionId(log.id), log.events as never, log.header as never, 0 as never)).not.toThrow()
+    expect(() => Session.fromRestore(SessionId(log.id), log.events as never, log.header as never, 0 as never, {} as never)).not.toThrow()
   })
 
   it('serializes header-first JSONL and round-trips through zstd', async () => {

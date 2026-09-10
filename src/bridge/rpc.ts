@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { AssistantStreamRecord } from '@deepseek-ai/dsh-llm/assistant-stream'
 import type {
   SessionController,
   SessionListRequest,
@@ -23,7 +24,7 @@ import type {
   SessionHistoryRecord,
   ModelCatalog,
 } from '@deepseek-ai/dsh-api-session-controller'
-import type { HistoryEntry, SessionProjectionsBlock } from './dsh-types.js'
+import type { BridgeEvent, HistoryEntry, SessionProjectionsBlock } from './dsh-types.js'
 
 /** Shape the bridge history readers consume (pre-0.1.2 convention). */
 export interface BridgeHistory {
@@ -33,32 +34,93 @@ export interface BridgeHistory {
 }
 
 /**
- * Expand one 0.1.2 `SessionHistoryRecord` into the bridge's `{ event, view }`
- * entries. A plain event passes through; a packed chunk run is reshaped into
- * the `text-chunks`/`reasoning-chunks`/`tool-call-chunks` rows the translator
- * already understands (the `chunkrow/` wire prefix is stripped).
+ * Expand one dsh 0.1.5 durable history record into the bridge's `{ event }`
+ * rows.
+ *
+ * 0.1.5 removed both the packed `chunks` history record and the durable
+ * `assistant/chunk` session event: one settled step is a single
+ * `assistant/message` whose `data.stream` embeds the exact timed model stream
+ * as packed runs (`text-chunks` / `reasoning-chunks` / `tool-call-chunks`, plus
+ * raw block/usage/finish chunks). The translation layer already consumes those
+ * packed rows, so history re-materializes each run *before* the message event:
+ * the runs rebuild the partial streamed card, and the final `assistant/message`
+ * then splices it into the durable message.
  */
 export function expandRecord(record: SessionHistoryRecord): HistoryEntry[] {
-  if (record.type === 'event') {
-    return [{ event: record.event as HistoryEntry['event'] }]
+  const event = record.event as unknown as {
+    readonly type: string
+    readonly seq: number
+    readonly time: number
+    readonly data?: {
+      readonly turn?: number
+      readonly step?: number
+      readonly stream?: readonly AssistantStreamRecord[]
+    }
   }
-  const raw = record.event as { type: string; seq: number; time: number; data: unknown }
-  const kind = raw.type.startsWith('chunkrow/') ? raw.type.slice('chunkrow/'.length) : raw.type
-  const base = raw.data as { turn: number; step: number; index: number; dt?: number[] }
-  const elapsed = Array.isArray(base.dt)
-    ? base.dt.reduce((total, gap) => total + (typeof gap === 'number' ? gap : 0), 0)
-    : 0
-  return [{
-    event: {
-      type: kind,
-      seq: raw.seq,
-      // The wire row's `time` is the first member (time0). Preserve the
-      // final member time so reasoning/text parts close at the true end.
-      time: raw.time + elapsed,
-      time0: raw.time,
-      data: base,
-    } as HistoryEntry['event'],
-  }]
+  const rows: HistoryEntry[] = []
+  if (event.type === 'assistant/message' && Array.isArray(event.data?.stream)) {
+    const turn = Number(event.data?.turn ?? 0)
+    const step = Number(event.data?.step ?? 0)
+    for (const streamRecord of event.data.stream) {
+      const row = expandStreamRecord(streamRecord, event.seq, turn, step)
+      if (row !== undefined) rows.push({ event: row as HistoryEntry['event'] })
+    }
+  }
+  rows.push({ event: event as unknown as HistoryEntry['event'] })
+  return rows
+}
+
+/** Re-materialize one packed assistant stream run as a history row event. */
+function expandStreamRecord(
+  streamRecord: AssistantStreamRecord,
+  seq: number,
+  turn: number,
+  step: number,
+): BridgeEvent | undefined {
+  if (streamRecord.type === 'text-chunks' || streamRecord.type === 'reasoning-chunks') {
+    return {
+      type: streamRecord.type,
+      seq,
+      // The row time is the last member's time, matching the deleted
+      // `chunkrow/*` packing; `time0` carries the first member.
+      time: streamRecord.time0 + sumGaps(streamRecord.dt),
+      time0: streamRecord.time0,
+      data: {
+        turn,
+        step,
+        index: streamRecord.index,
+        texts: [...streamRecord.texts],
+      },
+    } as BridgeEvent
+  }
+  if (streamRecord.type === 'tool-call-chunks') {
+    return {
+      type: 'tool-call-chunks',
+      seq,
+      time: streamRecord.time0 + sumGaps(streamRecord.dt),
+      time0: streamRecord.time0,
+      data: {
+        turn,
+        step,
+        index: streamRecord.index,
+        id: String(streamRecord.id),
+        ...(streamRecord.name === undefined ? {} : { name: streamRecord.name }),
+        args: [...streamRecord.args],
+      },
+    } as BridgeEvent
+  }
+  // Raw records (block-start/block-end/usage/finish) carry no transcript text;
+  // the delta runs above already bound the visible blocks.
+  return undefined
+}
+
+function sumGaps(dt: readonly number[] | undefined): number {
+  if (!Array.isArray(dt)) return 0
+  let total = 0
+  for (const gap of dt) {
+    if (typeof gap === 'number') total += gap
+  }
+  return total
 }
 
 /**

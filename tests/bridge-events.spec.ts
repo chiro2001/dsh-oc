@@ -68,6 +68,37 @@ function chunkRow(
   } as unknown as SessionEvent
 }
 
+/**
+ * Build one dsh 0.1.5 live `agent/assistant-stream` chunk frame from the same
+ * `{ turn, step, chunk }` payload the deleted durable `assistant/chunk` event
+ * carried. `frameIndex` is the dense per-attempt position the host assigns
+ * (the old event `seq` in these fixtures); the attempt identity is stable so
+ * replaying the same frame exercises the translator's replay guard.
+ */
+function streamFrame(
+  data: { turn?: number; step?: number; chunk: Record<string, unknown> },
+  time: number,
+  options: { sessionId?: string; frameIndex?: number; attemptId?: string; revision?: number } = {},
+): BridgeFrame {
+  const {
+    sessionId = 's1',
+    frameIndex = 0,
+    attemptId = 'attempt-1',
+    revision = 1,
+  } = options
+  return frame({
+    type: 'session/assistant-stream',
+    sessionId,
+    turn: data.turn ?? 1,
+    step: data.step ?? 1,
+    time,
+    attemptId,
+    revision,
+    index: frameIndex,
+    chunk: data.chunk,
+  } as unknown as BridgeFrame)
+}
+
 function translator(
   state = new InteractionState(),
   logs: string[] = [],
@@ -1068,33 +1099,21 @@ describe('bridge events: session event mapping', () => {
   it('streams raw assistant/chunk text deltas incrementally', () => {
     const { translate } = translator()
     const events = translate([
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: { type: 'block-start', index: 0, blockType: 'text' },
-        }, 5, 1000),
-      }),
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+        }, 1000, { sessionId: 's1', frameIndex: 5 }),
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: { type: 'text-delta', index: 0, text: 'st' },
-        }, 6, 1100),
-      }),
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+        }, 1100, { sessionId: 's1', frameIndex: 6 }),
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: { type: 'text-delta', index: 0, text: 're' },
-        }, 7, 1200),
-      }),
+        }, 1200, { sessionId: 's1', frameIndex: 7 }),
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
@@ -1205,10 +1224,7 @@ describe('bridge events: session event mapping', () => {
     })
 
     const started = translate([
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -1218,12 +1234,8 @@ describe('bridge events: session event mapping', () => {
             name: 'bash',
             argumentsDelta: '{"command":"echo ',
           },
-        }, 2, 100),
-      }),
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+        }, 100, { sessionId: 's1', frameIndex: 2 }),
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -1232,8 +1244,7 @@ describe('bridge events: session event mapping', () => {
             id: 'c1' as never,
             argumentsDelta: 'hello"}',
           },
-        }, 3, 110),
-      }),
+        }, 110, { sessionId: 's1', frameIndex: 3 }),
     ])
     expect(started.map((event) => event.payload.type)).toEqual([
       'message.updated',
@@ -1314,10 +1325,7 @@ describe('bridge events: session event mapping', () => {
   it('coalesces bursts of deltas into one delta at tool/call and maps failures', () => {
     const { translate } = translator()
     const events = translate([
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -1327,12 +1335,8 @@ describe('bridge events: session event mapping', () => {
             name: 'bash',
             argumentsDelta: '{"command":"',
           },
-        }, 2, 100),
-      }),
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+        }, 100, { sessionId: 's1', frameIndex: 2 }),
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -1341,8 +1345,7 @@ describe('bridge events: session event mapping', () => {
             id: 'c2' as never,
             argumentsDelta: 'fail"}',
           },
-        }, 3, 105),
-      }),
+        }, 105, { sessionId: 's1', frameIndex: 3 }),
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
@@ -1422,10 +1425,7 @@ describe('bridge events: session event mapping', () => {
   it('keeps one message id across a streamed tool turn (no duplicate cards)', () => {
     const { translate } = translator()
     const events = translate([
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -1435,8 +1435,7 @@ describe('bridge events: session event mapping', () => {
             name: 'bash',
             argumentsDelta: '{"command":"echo hi"}',
           },
-        }, 2, 100),
-      }),
+        }, 100, { sessionId: 's1', frameIndex: 2 }),
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
@@ -2251,10 +2250,7 @@ describe('bridge events: projection and control frames', () => {
         sessionId: 's1' as never,
         event: makeUserEvent('hello', 'msg-user-2', 900),
       }),
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -2262,8 +2258,7 @@ describe('bridge events: projection and control frames', () => {
             index: 0,
             text: 'answ',
           },
-        }, 2, 1000),
-      }),
+        }, 1000, { sessionId: 's1', frameIndex: 2 }),
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
@@ -2338,10 +2333,7 @@ describe('bridge events: projection and control frames', () => {
         event: makeUserEvent('hello', 'msg-user-1', 900),
       }),
       // Step 1: a streamed tool-call opens the turn message.
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -2351,8 +2343,7 @@ describe('bridge events: projection and control frames', () => {
             name: 'bash',
             argumentsDelta: '{}',
           },
-        }, 3, 950),
-      }),
+        }, 950, { sessionId: 's1', frameIndex: 3 }),
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
@@ -2915,10 +2906,7 @@ describe('bridge events: projection and control frames', () => {
         sessionId: 's1' as never,
         event: makeUserEvent('hello', 'msg-user-1', 900),
       }),
-      frame({
-        type: 'session/event',
-        sessionId: 's1' as never,
-        event: sessionEvent('assistant/chunk', {
+      streamFrame({
           turn: 1,
           step: 1,
           chunk: {
@@ -2928,8 +2916,7 @@ describe('bridge events: projection and control frames', () => {
             name: 'bash',
             argumentsDelta: '{}',
           },
-        }, 3, 950),
-      }),
+        }, 950, { sessionId: 's1', frameIndex: 3 }),
       frame({
         type: 'session/event',
         sessionId: 's1' as never,
@@ -3054,7 +3041,7 @@ describe('bridge events: projection and control frames', () => {
     expect(state.questions.size).toBe(1)
   })
 
-  it('dedupes replayed text-chunks and assistant/chunk frames per SSE connection', () => {
+  it('dedupes replayed text-chunks and assistant-stream frames per SSE connection', () => {
     const state = new InteractionState()
     const guard = {
       approvals: new Set<string>(),
@@ -3077,15 +3064,11 @@ describe('bridge events: projection and control frames', () => {
     expect(firstPacked.map((event) => event.payload.type)).toContain('message.part.delta')
     expect(instance.translate(packed)).toEqual([])
 
-    const raw = frame({
-      type: 'session/event',
-      sessionId: 's1' as never,
-      event: sessionEvent('assistant/chunk', {
-        turn: 1,
-        step: 1,
-        chunk: { type: 'text-delta', index: 0, text: 'x' },
-      }, 11, 1200),
-    })
+    const raw = streamFrame({
+      turn: 1,
+      step: 1,
+      chunk: { type: 'text-delta', index: 0, text: 'x' },
+    }, 1200, { sessionId: 's1', frameIndex: 11 })
     const firstRaw = instance.translate(raw)
     expect(firstRaw.map((event) => event.payload.type)).toContain('message.part.delta')
     expect(instance.translate(raw)).toEqual([])

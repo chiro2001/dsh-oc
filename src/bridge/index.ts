@@ -6,6 +6,7 @@ import type { BridgeAgents, BridgeApi, BridgeCommands } from './rpc.js'
 import type { BridgeControlBaseline, BridgeEvent, BridgeFrame, BridgeHostFrame } from './dsh-types.js'
 import type {} from '@deepseek-ai/dsh-user-approval/types'
 import type {} from '@deepseek-ai/dsh-user-questions/types'
+import type {} from '@deepseek-ai/dsh-agent'
 import { makeEvent } from './events.js'
 import { projectIdFor } from './convert/common.js'
 
@@ -171,6 +172,45 @@ export class OcBridgeService extends Service implements OcBridgeValue {
         event: event as unknown as BridgeEvent,
       }).catch((error: unknown) => {
         log(`[bridge] session event feed failed: ${error instanceof Error ? error.message : String(error)}`)
+      })
+    }, { global: true }) as () => void)
+
+    // dsh 0.1.5 removed the durable `assistant/chunk` session event; live
+    // assistant deltas are now process-local `agent/assistant-stream` frames
+    // (start/chunk/end). Global scope so every agent's frames reach the bridge
+    // regardless of the producing scope, mirroring the session-controller's own
+    // subscription. `start` carries turn/step for the attempt (the `chunk`
+    // frame only carries attempt identity + chunk); `end` retires the entry.
+    // A chunk whose start frame predates this subscription is dropped: the
+    // attempt has no known turn/step, and the durable `assistant/message`
+    // still lands at settlement.
+    const liveAttempts = new Map<string, { turn: number; step: number }>()
+    this.eventDisposers.push(ctx.on('agent/assistant-stream', ({ agent, frame }) => {
+      if (this.stopped) return
+      const sessionId = String(agent.session.id)
+      const attemptKey = `${sessionId}:${String(frame.attemptId)}`
+      if (frame.type === 'start') {
+        liveAttempts.set(attemptKey, { turn: frame.turn, step: frame.step })
+        return
+      }
+      if (frame.type === 'end') {
+        liveAttempts.delete(attemptKey)
+        return
+      }
+      const attempt = liveAttempts.get(attemptKey)
+      if (attempt === undefined) return
+      void router.feed({
+        type: 'session/assistant-stream',
+        sessionId,
+        turn: attempt.turn,
+        step: attempt.step,
+        time: frame.time,
+        attemptId: String(frame.attemptId),
+        revision: frame.revision,
+        index: frame.index,
+        chunk: frame.chunk,
+      }).catch((error: unknown) => {
+        log(`[bridge] assistant stream feed failed: ${error instanceof Error ? error.message : String(error)}`)
       })
     }, { global: true }) as () => void)
 

@@ -254,6 +254,37 @@ describe('convert/tool', () => {
     expect(changes[0]).toMatchObject({ file: '/repo/new.ts', status: 'added', additions: 1, deletions: 0 })
   })
 
+  it('synthesizes a new-file diff when write reports no diffs', () => {
+    // dsh 0.1.5 `write` on a new file reports `{ diffs: [] }` and the official
+    // host call presentation is not part of the bridge's history view, so the
+    // opencode edit card must fall back to the call arguments.
+    const callInfo = callFor('write', {
+      file_path: '/repo/new.ts',
+      content: 'export const x = 1\n',
+    })
+    const part = completedToolPart(callInfo, resultFor('Created file', { diffs: [] }), opts)
+    expect(part.tool).toBe('edit')
+    if (part.state.status === 'completed') {
+      expect(part.state.metadata.diff).toContain('+export const x = 1')
+    }
+    const changes = fileChangesFromToolResult(callInfo, resultFor('Created file', { diffs: [] }))
+    expect(changes[0]).toMatchObject({ file: '/repo/new.ts', status: 'added', additions: 1, deletions: 0 })
+  })
+
+  it('synthesizes an edit diff when the result carries no presentation', () => {
+    const callInfo = callFor('edit', {
+      file_path: '/repo/a.ts',
+      old_string: 'const a = 1',
+      new_string: 'const a = 2',
+    })
+    const part = completedToolPart(callInfo, resultFor('Edited'), opts)
+    expect(part.tool).toBe('edit')
+    if (part.state.status === 'completed') {
+      expect(part.state.metadata.diff).toContain('-const a = 1')
+      expect(part.state.metadata.diff).toContain('+const a = 2')
+    }
+  })
+
   it('maps edit to edit with old/new strings and a real diff', () => {
     const callInfo = callFor('edit', {
       file_path: '/repo/a.ts',

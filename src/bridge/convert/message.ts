@@ -6,6 +6,7 @@ import type {
   ContentBlock,
   TokenUsage,
 } from '@deepseek-ai/dsh-llm/types'
+import type { AssistantStreamRecord } from '@deepseek-ai/dsh-llm/assistant-stream'
 import type {
   AssistantMessage,
   Message,
@@ -82,9 +83,56 @@ interface StreamChunkRowEvent {
   }
 }
 
+/** Block timing extracted from one durable `assistant/message` embedded stream. */
+interface AssistantStreamTiming {
+  starts: Array<[string, number]>
+  ends: Array<[string, number]>
+  finish: string | undefined
+}
+
+/**
+ * Read the exact block timing and finish reason back out of a dsh 0.1.5
+ * embedded Assistant stream. History rows only preserve the packed delta runs
+ * (`expandRecord`), so the raw `block-start` / `block-end` / `finish` chunks
+ * inside the settlement event are the authoritative source for part durations
+ * on a cold read.
+ */
+function assistantStreamTiming(
+  stream: readonly AssistantStreamRecord[] | undefined,
+  turn: number,
+  step: number,
+): AssistantStreamTiming {
+  const starts: Array<[string, number]> = []
+  const ends: Array<[string, number]> = []
+  if (!Array.isArray(stream)) return { starts, ends, finish: undefined }
+  let finish: string | undefined
+  for (const record of stream) {
+    if (record.type === 'chunk') {
+      const chunk = record.chunk
+      if (chunk.type === 'block-start') {
+        starts.push([`${turn}:${step}:${chunk.index}:${chunk.blockType}`, record.time])
+      } else if (chunk.type === 'block-end') {
+        ends.push([`${turn}:${step}:${chunk.index}:${chunk.block.type}`, record.time])
+      } else if (chunk.type === 'finish') {
+        finish = chunk.reason.kind
+      }
+      continue
+    }
+    const blockType = record.type === 'text-chunks'
+      ? 'text'
+      : record.type === 'reasoning-chunks' ? 'reasoning' : 'tool-call'
+    let elapsed = 0
+    for (const gap of record.dt) {
+      if (typeof gap === 'number') elapsed += gap
+    }
+    starts.push([`${turn}:${step}:${record.index}:${blockType}`, record.time0])
+    ends.push([`${turn}:${step}:${record.index}:${blockType}`, record.time0 + elapsed])
+  }
+  return { starts, ends, finish }
+}
+
 /** Dsh checkpoint rows written by compaction have a plugin `compact` source. */
-export function isCompactCheckpoint(event: SessionEvent<'user/message'>): boolean {
-  const source = event.data.source as { kind?: string; plugin?: string } | undefined
+export function isCompactCheckpoint(event: SessionEvent<'user/message'>): boolean {  const source = event.data.source as { kind?: string; plugin?: string } | undefined
   return source?.kind === 'plugin' && source.plugin === 'compact'
 }
 
@@ -503,36 +551,6 @@ export function convertMessagesV1(
         lastUserMessageTime = event.time
         break
       }
-      case 'assistant/chunk': {
-        const data = event.data
-        const chunk = data.chunk
-        if (chunk.type === 'block-start') {
-          blockStarts.set(`${data.turn}:${data.step}:${chunk.index}:${chunk.blockType}`, event.time)
-        } else if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
-          const blockType = chunk.type === 'text-delta' ? 'text' : 'reasoning'
-          const key = `${data.turn}:${data.step}:${chunk.index}:${blockType}`
-          if (!blockStarts.has(key)) blockStarts.set(key, event.time)
-          blockEnds.set(key, event.time)
-          const start = blockStarts.get(key) ?? event.time
-          accumulateStreamBlock(blocksByStep, data.turn, data.step, chunk.index, blockType, chunk.text, start)
-          const created = Math.max(
-            earliestBlockStart(blockStarts, data.turn, data.step) ?? turnStarts.get(data.turn) ?? event.time,
-            lastUserMessageTime === undefined ? Number.MIN_SAFE_INTEGER : lastUserMessageTime + 1,
-          )
-          upsertPartialV1(
-            entries,
-            pending,
-            blocksByStep,
-            pendingCallsByStep,
-            opts,
-            data.turn,
-            data.step,
-            created,
-            lastMessageId || `pending:${opts.sessionId}:user`,
-          )
-        }
-        break
-      }
       case 'text-chunks':
       case 'reasoning-chunks': {
         const chunk = event as unknown as StreamChunkRowEvent
@@ -574,6 +592,10 @@ export function convertMessagesV1(
         const data = event.data
         const id = String(data.message.id)
         const stepKey = `${data.turn}:${data.step}`
+        const timing = assistantStreamTiming(data.stream, data.turn, data.step)
+        for (const [key, time] of timing.starts) blockStarts.set(key, time)
+        for (const [key, time] of timing.ends) blockEnds.set(key, time)
+        if (timing.finish !== undefined) finishReasons.set(stepKey, timing.finish)
         const { parts, calls: messageCalls } = assistantPartsFromMessage(
           data.message,
           event.time,
@@ -984,32 +1006,6 @@ export function convertMessagesV2(
         lastUserMessageTime = event.time
         break
       }
-      case 'assistant/chunk': {
-        const data = event.data
-        const chunk = data.chunk
-        if (chunk.type === 'block-start') {
-          blockStarts.set(`${data.turn}:${data.step}:${chunk.index}:${chunk.blockType}`, event.time)
-        } else if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
-          const blockType = chunk.type === 'text-delta' ? 'text' : 'reasoning'
-          const key = `${data.turn}:${data.step}:${chunk.index}:${blockType}`
-          if (!blockStarts.has(key)) blockStarts.set(key, event.time)
-          const start = blockStarts.get(key) ?? event.time
-          accumulateStreamBlock(blocksByStep, data.turn, data.step, chunk.index, blockType, chunk.text, start)
-          lastAssistant = upsertPartialV2(
-            messages,
-            pending,
-            blocksByStep,
-            pendingCallsByStep,
-            opts,
-            data.turn,
-            data.step,
-            assistantCreatedAt(data.turn, data.step, event.time),
-            event.seq,
-            (message, seq) => pushMessage(message, seq),
-          )
-        }
-        break
-      }
       case 'text-chunks':
       case 'reasoning-chunks': {
         const chunk = event as unknown as StreamChunkRowEvent
@@ -1046,6 +1042,9 @@ export function convertMessagesV2(
       case 'assistant/message': {
         const data = event.data
         const stepKey = `${data.turn}:${data.step}`
+        const timing = assistantStreamTiming(data.stream, data.turn, data.step)
+        for (const [key, time] of timing.starts) blockStarts.set(key, time)
+        if (timing.finish !== undefined) finishReasons.set(stepKey, timing.finish)
         const state = toV2Assistant(
           event,
           opts,

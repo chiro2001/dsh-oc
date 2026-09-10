@@ -2,8 +2,20 @@
 
 > 本文档是当前用户确认的下一阶段工作清单。新 agent 接续时先读本文，再读
 > `docs/FEATURES.md`、`docs/PLAN.md`、`docs/PROTOCOL.md`。
-> `main` 已包含 `v0.2.0-rc.3`；`develop` 是后续改动的集成交付线，稳定后再回合
-> `main`。
+> `main` 已包含 `v0.2.0-rc.3`；`develop` 正在收敛 `v0.2.0-rc.4`（dsh 0.1.5
+> host ABI 适配），稳定后再回合 `main`。
+
+## RC.4 进行中（0.2.0-rc.4，2026-09-11）
+
+dsh 0.1.5 的 host ABI 破坏性适配，目标版本固定 `>=0.1.5-rc.2`，不再兼容 0.1.2：
+
+- profile 启动：headless `fileUploads` provider（`@chiro2001/dsh-oc/file-uploads`）
+  修复 `session-controller` pending；`bindPrompt` 返回 disposable 绑定。
+- 实时流：`agent/assistant-stream` 订阅替换已删除的 `assistant/chunk` 会话事件。
+- 历史：内嵌 `assistant/message.stream` 还原 packed run + 部件时长/finish reason。
+- 文件工具：`write`/`edit` 的 diff 合成；e2e tools 场景改用 `write`。
+- 门禁目标：typecheck、435 单测、probe 63/63、perf smoke、artifact audit、
+  API/TUI/recovery/golden 稳定套件全绿。
 
 ## RC.3 已完成（0.2.0-rc.3，2026-09-08）
 

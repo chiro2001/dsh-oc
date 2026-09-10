@@ -4,20 +4,21 @@
 > 功能状态入口：先读 [FEATURES.md](FEATURES.md)，再回到本文件核对路由/协议细节。
 > 探针基准：`opencode-ai@1.18.18`（GitHub Release `v1.18.18`，commit `4643e65`）。
 
-## 0.2.0-rc.3 实现基线
+## 0.2.0-rc.4 实现基线
 
-当前 prerelease 面向 dsh `>=0.1.2-rc.1`。下文早期表格中保留的 `apiProxy` 字样是历史
+当前 prerelease 面向 dsh `>=0.1.5-rc.2`。下文早期表格中保留的 `apiProxy` 字样是历史
 设计来源；当前实现已完成 PR #1/#2/#3 的语义重整合，不再依赖
 `@deepseek-ai/dsh-host-apiproxy`：
 
-RC.2 包含 Issue #4 的 `POST /session/:id/shell`；RC.3 延续该协议，并补齐官方 TUI
-prompt 顶层 `variant` 的 reasoning effort 同步，其协议与限制记录在本文件对应
-路由说明中。
+RC.2 包含 Issue #4 的 `POST /session/:id/shell`；RC.3 补齐官方 TUI prompt 顶层
+`variant` 的 reasoning effort 同步；RC.4 适配 dsh 0.1.5 的 host ABI 与 assistant
+流式模型（见 §11）。
 
 - Session/list/history/prompt/cancel/model/fork/rename 直连
   `sessionController`；agent/preset、goal、skill 分别直连对应 host services。
-- SSE 由 `session/event`、`sessionController.control`、approval/question
-  answerer 事件翻译组成；不再消费旧 `apiProxy.events.mux()` envelope。
+- SSE 由 `session/event`、`agent/assistant-stream`、
+  `sessionController.control`、approval/question answerer 事件翻译组成；不再消费旧
+  `apiProxy.events.mux()` envelope。
 - `/session/status` 使用 dsh `api-session/status` 的内存 authoritative map，
   冷启动最多一次 `session.list` seed，避免 TUI 等待轮询触发全库 I/O。
 - SSE 客户端支持有界 `Last-Event-ID` ring 回放；游标淘汰时只回放当前
@@ -502,3 +503,55 @@ node scripts/probe-opencode.mjs --version 1.18.18 --bin /path/to/opencode \
 2. `node scripts/update-opencode-assets.mjs` 重新生成 asset manifest；
 3. `pnpm install`（SDK 版本）后运行 `pnpm run probe`；
 4. 按探针结果补齐路由或 stub，并更新本文件的兼容矩阵。
+
+---
+
+## 11. dsh 0.1.5 迁移要点（0.2.0-rc.4）
+
+dsh 0.1.5 对 dsh-oc 使用到的 host ABI 有两处破坏性变更；opencode 侧协议与
+1.18.18 探针矩阵不变。
+
+### 11.1 session-controller 的 fileUploads
+
+`dsh-api-session-controller` 的 `static inject` 新增 `fileUploads`。官方 provider
+`@deepseek-ai/dsh-client-file-upload` 是浏览器传输插件（inject `connection`），
+oc-bridge 不挂载 Web transport，因此 bundle patch 在 `session-controller` 之前
+插入 headless 行：
+
+```yaml
+- id: oc-file-uploads
+  name: '@chiro2001/dsh-oc/file-uploads'
+```
+
+服务实现（`src/bridge/file-uploads.ts`）：
+- `registerAgentResolver` / `retirePrompt` 为 no-op；
+- `bindPrompt` 对无 receipt 的 prompt 返回 `{ commit(), [Symbol.dispose]() }`
+  —— 0.1.5 用显式资源管理（`using`）包裹该返回值，缺 `Symbol.dispose` 会让
+  prompt 以 `session/agent-busy` 失败；
+- `resolve` / `uploadStream` 对真实文件回执 fail loudly（bridge 无上传路由，
+  opencode 附件在 convert 层映射为 prompt content，不经过 dsh 上传）。
+
+### 11.2 assistant 流式与历史
+
+| 维度 | dsh 0.1.2 | dsh 0.1.5（当前） |
+|---|---|---|
+| 实时增量 | 持久化 `assistant/chunk` 会话事件 | 进程内 `agent/assistant-stream` 帧（`start`→`chunk`→`end`；`chunk.chunk` 仍是同一 `StreamChunk` 联合） |
+| 尝试结算 | 无 | `assistant/attempt`（无 surface，忽略） |
+| 历史记录 | `SessionHistoryRecord = SessionEventEntry \| SessionChunkRun`（`chunkrow/*`） | 只有 `SessionEventEntry`；`assistant/message.stream` / `assistant/attempt.stream` 内嵌 packed run + raw chunk |
+| 部件时长 | block-start 事件时间 | live 帧 `time`；冷读 `assistantStreamTiming` 读 raw `block-start`/`block-end` |
+| finish reason | live `finish` chunk | 同上 |
+| 去重键 | `sessionId:seq` | live `${sessionId}:${attemptId}:${revision}:${index}`；历史行仍按 seq |
+
+`src/bridge/rpc.ts#expandRecord` 把内嵌 run 还原成 0.1.2 时代翻译层本来就消费的
+`text-chunks`/`reasoning-chunks`/`tool-call-chunks` 行，并追加结算事件本身；
+`src/bridge/convert/message.ts` 用 `assistantStreamTiming` 合并 raw 部件边界。
+因此 history v1/v2、SSE ring 回放与 golden trace 的 opencode 语义保持稳定。
+
+### 11.3 文件工具
+
+dsh 0.1.5 的 `str_replace_editor` 不再由 dsh-base 挂着（0.1.2 base 行、0.1.5 需
+显式 opt-in）；默认 preset（`minimal`）只含持久 shell，host 层仍提供
+`dsh-tool-fs` 的 `read`/`write`/`edit`。bridge 的工具名映射已覆盖
+`write`/`edit`，并在新文件 `write` 的 result meta 为空 diffs 时从调用参数合成
+`metadata.diff`，e2e 的 untracked write 场景改用 `write`（`str_replace_editor`
+映射与单测保留给显式 opt-in 的部署）。

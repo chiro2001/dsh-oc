@@ -1,6 +1,7 @@
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionFollowFrame } from '@deepseek-ai/dsh-api-session-controller'
 import type { Agent } from '@deepseek-ai/dsh-agent/types'
+import type { AssistantStreamRecord } from '@deepseek-ai/dsh-llm/assistant-stream'
 import type { BridgeApi } from '../src/bridge/rpc.js'
 import { RpcCallError } from '../src/bridge/rpc.js'
 
@@ -109,6 +110,7 @@ export function makeAssistantEvent(
   id = 'msg-assistant-1',
   time = 1200,
   usage?: { inputTokens: number; outputTokens: number },
+  stream?: AssistantStreamRecord[],
 ): SessionEvent<'assistant/message'> {
   return sessionEvent('assistant/message', {
     turn: 1,
@@ -120,5 +122,6 @@ export function makeAssistantEvent(
       source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-chat' },
     },
     ...(usage === undefined ? {} : { usage }),
+    ...(stream === undefined ? {} : { stream }),
   }, 3, time) as SessionEvent<'assistant/message'>
 }

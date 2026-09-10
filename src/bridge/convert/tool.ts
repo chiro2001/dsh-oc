@@ -372,6 +372,27 @@ export function fileChangesFromToolResult(call: ToolCallInfo, result: ToolResult
   if (diffs.length === 0 && call.name === 'str_replace_editor') {
     diffs.push(...insertDiffFromArgs(args))
   }
+  // dsh-tool-fs `write`/`edit` carry authoritative result-meta diffs when the
+  // tool has them; a new-file `write` reports `{ diffs: [] }` and a replayed
+  // record may carry no meta at all, so fall back to the call arguments. The
+  // opencode edit card requires `metadata.diff` for a completed file write.
+  if (diffs.length === 0 && (call.name === 'write' || call.name === 'fs-write')) {
+    const filePath = stringValue(args.file_path) ?? stringValue(args.filePath)
+    const content = stringValue(args.content)
+    if (filePath !== undefined && content !== undefined) {
+      diffs.push({ path: filePath, oldText: null, newText: content })
+    }
+  }
+  if (diffs.length === 0 && (call.name === 'edit' || call.name === 'fs-edit')) {
+    const filePath = stringValue(args.file_path) ?? stringValue(args.filePath)
+    if (filePath !== undefined) {
+      diffs.push({
+        path: filePath,
+        oldText: stringValue(args.old_string) ?? stringValue(args.oldString) ?? '',
+        newText: stringValue(args.new_string) ?? stringValue(args.newString) ?? '',
+      })
+    }
+  }
   if (diffs.length === 0 && call.name === 'bash') {
     return bashFileChangesFromArgs(args)
   }

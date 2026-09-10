@@ -2491,6 +2491,7 @@ export function createBridgeRouter(
 
   function frameSessionId(frame: BridgeFrame): string | undefined {
     if (frame.type === 'session/event' || frame.type === 'session/queue'
+      || frame.type === 'session/assistant-stream'
       || frame.type === 'session/jobs' || frame.type === 'session/projection'
       || frame.type === 'approval/requested' || frame.type === 'approval/resolved'
       || frame.type === 'question/requested' || frame.type === 'question/resolved') {

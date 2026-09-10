@@ -1,7 +1,8 @@
 import { Context, Service } from "@deepseek-ai/cordis";
 import http, { ServerResponse } from "node:http";
 import { ZodType, z } from "zod";
-//#region node_modules/.pnpm/@deepseek-ai+dsh-scope@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-invariants_4c5a87e40c36996e344cc918d9871e0d/node_modules/@deepseek-ai/dsh-scope/lib/types/index.d.ts
+import { JobId } from "@deepseek-ai/dsh-jobs/brand";
+//#region node_modules/.pnpm/@deepseek-ai+dsh-scope@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-invariants_2fd32c0cf9230cfb915ff7d11cf8e792/node_modules/@deepseek-ai/dsh-scope/lib/types/index.d.ts
 /** An opaque, identity-compared scope key. */
 type ScopeKey = object;
 declare const ScopedBrand: unique symbol;
@@ -14,7 +15,7 @@ type Scoped<T extends object> = object & {
   readonly [ScopedBrand]: T;
 };
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-brand@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-brand/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-brand@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-brand/lib/types/index.d.ts
 /**
  * Duplicate-install-safe nominal primitive helpers.
  *
@@ -38,7 +39,31 @@ type BrandedNumber<B extends string> = number & {
   readonly [BRAND]: B;
 };
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-brand_6c4d49aef0ccb7d32a3744194a43aa7a/node_modules/@deepseek-ai/dsh-attachment/lib/types/brand.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-brand_7841e9eae353fb11f43d12d9f6974d78/node_modules/@deepseek-ai/dsh-attachment/lib/types/error.d.ts
+declare const ATTACHMENT_ERROR_CODES: readonly ["TOO_MANY_IMAGES", "IMAGES_TOO_LARGE", "UNSUPPORTED_IMAGE_TYPE", "INVALID_IMAGE_BASE64", "INVALID_IMAGE", "IMAGE_TYPE_MISMATCH", "IMAGE_TOO_LARGE", "IMAGE_TOO_MANY_PIXELS", "IMAGE_DIMENSION_TOO_LARGE", "INVALID_FILE_BASE64", "INVALID_ATTACHMENT_REF", "ATTACHMENT_CORRUPT", "ATTACHMENT_WRITE_FAILED", "ATTACHMENT_NOT_FOUND", "ATTACHMENT_READ_FAILED", "ATTACHMENT_PROJECTION_UNSUPPORTED", "ATTACHMENT_FILES_UNSUPPORTED"];
+/** Stable attachment failure codes used for protocol error routing. */
+type AttachmentErrorCode = typeof ATTACHMENT_ERROR_CODES[number];
+/**
+ * Stable failures suitable for host RPC error mapping.
+ *
+ * Deliberately re-implements the `HarnessError` shape instead of extending it:
+ * the base lives in `@deepseek-ai/dsh-llm`, which itself depends on this
+ * package (`ImageBlock` references `ImageAttachmentRef`), so sharing the base
+ * would create a dependency cycle. Consumers route on `code`, never on the
+ * prototype chain, so the shapes stay interchangeable at the wire boundary.
+ */
+declare class AttachmentError extends Error {
+  /** Stable machine-routing failure code. */
+  readonly code: AttachmentErrorCode;
+  /**
+   * @param message - human-readable failure description without raw bytes or host paths.
+   * @param code - stable machine-routing code.
+   * @param options - optional chained cause.
+   */
+  constructor(message: string, code: AttachmentErrorCode, options?: ErrorOptions);
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-brand_7841e9eae353fb11f43d12d9f6974d78/node_modules/@deepseek-ai/dsh-attachment/lib/types/brand.d.ts
 /** Opaque content-addressed identifier for one immutable attachment object. */
 type AttachmentId = Branded<'AttachmentId'>;
 /**
@@ -56,7 +81,7 @@ type ImageVariantId = Branded<'ImageVariantId'>;
  */
 declare function ImageVariantId(value: string): ImageVariantId;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-brand_6c4d49aef0ccb7d32a3744194a43aa7a/node_modules/@deepseek-ai/dsh-attachment/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-brand_7841e9eae353fb11f43d12d9f6974d78/node_modules/@deepseek-ai/dsh-attachment/lib/types/types.d.ts
 /** Raster image formats accepted by the version-one attachment path. */
 type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 /** Durable, serializable reference to one immutable normalized image. */
@@ -82,6 +107,41 @@ interface ImageAttachmentRef {
     height: number;
   };
 }
+/**
+ * Durable, serializable reference to one verbatim stored file. Files are
+ * stored byte-for-byte with no normalization; `attachmentId` is the sha256
+ * digest of exactly those bytes.
+ */
+interface FileAttachmentRef {
+  /** Opaque content-addressed storage identifier; never a filesystem path or bearer URL. */
+  attachmentId: AttachmentId;
+  /** Sanitized display filename, also the stored object's leaf name. */
+  name: string;
+  /** Exact byte length. */
+  bytes: number;
+}
+/** Base64-encoded file upload accompanying one wire request. */
+interface EncodedFileAttachment {
+  /** Canonical base64 encoding of the file bytes. */
+  data: string;
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string;
+}
+/** Request to durably commit one file verbatim. */
+interface SaveFileAttachment {
+  data: Uint8Array;
+  /** Optional browser/provider display name; it is never interpreted as a path. */
+  name?: string;
+}
+/** Request to durably commit one file from bounded byte chunks. */
+interface SaveFileStreamAttachment {
+  /** Exact file bytes in order; providers must not retain the complete sequence in memory. */
+  data: AsyncIterable<Uint8Array>;
+  /** Optional cancellation for source reads and storage writes. */
+  signal?: AbortSignal;
+  /** Optional browser/provider display name; it is never interpreted as a path. */
+  name?: string;
+}
 /** Deployment-resolved limits used by upload admission and request buffering. */
 interface ImageAttachmentLimits {
   maxImageBytes: number;
@@ -92,6 +152,37 @@ interface ImageAttachmentLimits {
   maxImageDimension: number;
   mediaTypes: readonly ImageMediaType[];
 }
+/**
+ * Browser-submitted prompt content accepted by Host prompt endpoints; the
+ * accepting Host promotes image parts to durable references through
+ * `ctx.attachments.admitPromptContent()` before any message is created, so a wire caller can
+ * never cite an attachment it did not upload.
+ */
+type PromptContentPart$1 = {
+  readonly type: 'text';
+  readonly text: string;
+} | {
+  readonly type: 'image';
+  readonly mediaType: ImageMediaType;
+  readonly data: string;
+  readonly name?: string;
+};
+/** Host prompt content whose file receipts are resolved and whose image bytes await admission. */
+type AttachmentAdmissionPart = PromptContentPart$1 | {
+  readonly type: 'file';
+  readonly attachment: FileAttachmentRef;
+};
+/** Host-admitted prompt content with every attachment represented by its durable reference. */
+type AdmittedPromptContentPart = {
+  readonly type: 'text';
+  readonly text: string;
+} | {
+  readonly type: 'image';
+  readonly attachment: ImageAttachmentRef;
+} | {
+  readonly type: 'file';
+  readonly attachment: FileAttachmentRef;
+};
 /** Request to validate and durably commit one image. */
 interface SaveImageAttachment {
   data: Uint8Array;
@@ -132,7 +223,7 @@ interface RequestImageAttachment {
   hasAlpha: boolean;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-brand_6c4d49aef0ccb7d32a3744194a43aa7a/node_modules/@deepseek-ai/dsh-attachment/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-attachment@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-brand_7841e9eae353fb11f43d12d9f6974d78/node_modules/@deepseek-ai/dsh-attachment/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     attachments: AttachmentStore;
@@ -166,6 +257,27 @@ declare abstract class AttachmentStore extends Service {
    */
   saveImages(inputs: readonly SaveImageAttachment[]): Promise<readonly ImageAttachmentRef[]>;
   /**
+   * Admit one Host prompt and replace each uploaded image with its durable reference.
+   * Text and durable file references pass through unchanged. A prompt without image parts performs no storage operation.
+   * @param content - prompt parts in message order after file receipt resolution.
+   * @returns admitted prompt parts in the same order as `content`.
+   * @throws AttachmentError when the image batch is refused.
+   */
+  admitPromptContent(content: readonly AttachmentAdmissionPart[]): Promise<AdmittedPromptContentPart[]>;
+  /**
+   * Decode and durably commit one canonical base64 file upload.
+   * @param input - canonical base64 bytes and optional display name.
+   * @returns the durable content-addressed file reference.
+   * @throws AttachmentError when the encoding or storage operation is refused.
+   */
+  admitEncodedFile(input: EncodedFileAttachment): Promise<FileAttachmentRef>;
+  /**
+   * Identify a failure emitted by this attachment capability by its stable code.
+   * @param error - value caught from an attachment operation.
+   * @returns whether the value is an attachment failure.
+   */
+  isAttachmentError(error: unknown): error is AttachmentError;
+  /**
    * Validate and durably commit one image before its owning session event is appended.
    * The returned reference describes the persisted normalized image. When
    * normalization reduces the raster, its `originalDimensions` records the
@@ -190,6 +302,39 @@ declare abstract class AttachmentStore extends Service {
    */
   imageHostPath(ref: ImageAttachmentRef): string | undefined;
   /**
+   * Durably commit one file byte-for-byte before its owning session event is
+   * appended. Files carry no admission limits: any byte content and length is
+   * accepted, and the stored object is the exact submitted bytes. Backends
+   * without verbatim file storage keep this default rejection.
+   * @param input - exact bytes and optional display name.
+   * @returns the durable content-addressed file reference.
+   */
+  saveFile(input: SaveFileAttachment): Promise<FileAttachmentRef>;
+  /**
+   * Durably commit one file byte-for-byte from bounded chunks. Providers must
+   * apply backpressure and must not collect the complete file in memory.
+   * Backends without streamed verbatim storage keep this default rejection.
+   * @param input - ordered exact bytes, optional cancellation, and display name.
+   * @returns the durable content-addressed file reference.
+   */
+  saveFileStream(input: SaveFileStreamAttachment): Promise<FileAttachmentRef>;
+  /**
+   * Read and verify one verbatim stored file as bounded chunks. Providers must
+   * not collect the complete file in memory. Backends without verbatim file
+   * reads keep this default rejection.
+   * @param ref - durable reference from the session log.
+   * @param signal - optional cancellation for backend reads and verification work.
+   * @returns exact file bytes in order; integrity failures reject the iteration.
+   */
+  readFileStream(ref: FileAttachmentRef, signal?: AbortSignal): AsyncIterable<Uint8Array>;
+  /**
+   * Locate the verbatim stored file object in the harness host filesystem.
+   * @param ref - durable file reference.
+   * @returns an absolute host path, or undefined when this backend is not host-file-backed.
+   * @throws an AttachmentError when the durable reference is invalid.
+   */
+  fileHostPath(ref: FileAttachmentRef): string | undefined;
+  /**
    * Generate or read one deterministic model-request version from the stored normalized image.
    * @param ref - durable provider-independent normalized attachment reference.
    * @param policy - exact route pixel budget and encoded-byte target; a target no ladder quality meets yields the smallest ladder output.
@@ -199,7 +344,7 @@ declare abstract class AttachmentStore extends Service {
   readImageRequest(ref: ImageAttachmentRef, policy: ImageRequestPolicy, signal?: AbortSignal): Promise<RequestImageAttachment>;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-llm/lib/types/brand.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-llm/lib/types/brand.d.ts
 /** Stable identity carried by one message across inbox, log, and model-request boundaries. */
 type MessageId = Branded<'MessageId'>;
 /**
@@ -227,6 +372,14 @@ type ProviderRequestId = Branded<'ProviderRequestId'>;
  * @returns the same string, branded; no validation is performed.
  */
 declare function ProviderRequestId(id: string): ProviderRequestId;
+/** Identity of one model streaming attempt, unique within one Agent lifecycle. */
+type LlmAttemptId = Branded<'LlmAttemptId'>;
+/**
+ * Brand one loop-owned streaming attempt identifier.
+ * @param id - the opaque Agent-lifecycle-local identifier.
+ * @returns the same string with the attempt-id brand.
+ */
+declare function LlmAttemptId(id: string): LlmAttemptId;
 /** Adapter-owned identifier for one model's selectable reasoning effort. */
 type ReasoningEffortId = Branded<'ReasoningEffortId'>;
 /**
@@ -236,7 +389,7 @@ type ReasoningEffortId = Branded<'ReasoningEffortId'>;
  */
 declare function ReasoningEffortId(id: string): ReasoningEffortId;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-llm/lib/types/message.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-llm/lib/types/message.d.ts
 /** Provider/model identity and adapter-private replay data for an assistant message. */
 interface AssistantProvenance {
   /** Provider route that produced the message. */
@@ -331,6 +484,15 @@ interface AssistantMessage$1 extends Message$1 {
   readonly role: 'assistant';
   readonly source: ModelMessageSource;
 }
+/**
+ * A system-role specialization of the shared message representation: one
+ * rendered system prompt attributed to the plugin that assembled it. Empty
+ * `content` means "no system prompt" and projects to no wire message.
+ */
+interface SystemMessage extends Message$1 {
+  readonly role: 'system';
+  readonly source: MessageSourceMap['plugin'];
+}
 /** A tool-result specialization whose model-facing block retains call correlation. */
 interface ToolResultMessage extends Message$1 {
   readonly role: 'user';
@@ -338,7 +500,7 @@ interface ToolResultMessage extends Message$1 {
   readonly source: ToolMessageSource;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-llm/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-llm/lib/types/types.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
@@ -387,6 +549,18 @@ interface ImageBlock {
   /** Immutable bytes and intrinsic display metadata owned by the attachment service. */
   attachment: ImageAttachmentRef;
 }
+/**
+ * A durable verbatim file reference, valid in user content. Files never reach
+ * a provider natively: request assembly projects every occurrence to
+ * deterministic handle text (name, byte size, and the read-only saved path),
+ * so adapters and providers see text in its place while the durable log keeps
+ * the structured reference for presentation and authorization.
+ */
+interface FileBlock {
+  type: 'file';
+  /** Immutable verbatim bytes and display metadata owned by the attachment service. */
+  attachment: FileAttachmentRef;
+}
 /** A tool invocation requested by the model. */
 interface ToolCallBlock {
   type: 'tool-call';
@@ -411,6 +585,7 @@ interface ContentBlockMap {
   'text': TextBlock;
   'reasoning': ReasoningBlock;
   'image': ImageBlock;
+  'file': FileBlock;
   'tool-call': ToolCallBlock;
   'tool-result': ToolResultBlock;
 }
@@ -535,6 +710,8 @@ interface LlmConfigurableProvider {
    * from outside.
    */
   declared?: boolean;
+  /** Configuration diagnostic for repair; unaffected models may remain serviceable. */
+  error?: string;
 }
 /**
  * One interrogation of a provider endpoint that configuration has not stored
@@ -621,6 +798,13 @@ interface LlmModelReasoningInfo {
    */
   defaultEffort?: ReasoningEffortId;
 }
+/**
+ * How a model applies a system prompt that changes mid-conversation.
+ * `'in-history'`: the model reads the latest `system` message at any position
+ * of `messages` as the complete effective system prompt, so a changed prompt
+ * can follow the cached history instead of rewriting message 0.
+ */
+type SystemPromptUpdate = 'in-history';
 /** Exact-route model metadata resolved by its owning adapter. */
 interface LlmResolvedModelInfo extends LlmModelInfo {
   /** Provider-owned context capacity when known. */
@@ -629,6 +813,8 @@ interface LlmResolvedModelInfo extends LlmModelInfo {
   defaultMaxTokens?: number;
   /** Adapter-owned selectable reasoning levels when exposed. */
   reasoning?: LlmModelReasoningInfo;
+  /** Declared mid-conversation system prompt handling; absent means only a leading system message is read. */
+  systemPromptUpdate?: SystemPromptUpdate;
 }
 /**
  * Adapter-private lossless-JSON state for replaying a successful response,
@@ -710,12 +896,16 @@ interface GenerateOptions {
   /** Adapter-owned reasoning effort selected for this exact model. */
   reasoningEffort?: ReasoningEffortId;
   /**
-   * Ordered conversation messages, exactly as the provider sees them (after
-   * the `system` slot). A loop-built request assembles them as
-   * the derived history (dsh-agent-loop); a hand-built one-shot passes any list.
+   * Ordered conversation messages, exactly as the provider sees them. A
+   * loop-built request passes the derived history (dsh-agent-loop), whose
+   * leading system-role message carries the system prompt; a hand-built
+   * one-shot passes any list.
    */
   messages: Message$1[];
-  /** System prompt text (adapters map to the provider's system slot). */
+  /**
+   * System prompt text for one-shot callers; adapters map it to the provider's
+   * system slot ahead of `messages`. Loop-built requests leave it undefined.
+   */
   system?: string;
   /** Tool schemas (adapters map to the provider's `tools` field). */
   tools?: ToolSchema[];
@@ -741,7 +931,7 @@ interface GenerateOptions {
   purpose?: 'compaction' | 'session-title';
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/remote-error.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/remote-error.d.ts
 /**
  * One Remote call failure: a real Error carrying its stable code and typed
  * details. Owners throw it at the failure point; the Host Gateway encodes it
@@ -763,7 +953,7 @@ declare class RemoteError<Code extends RemoteErrorCode = RemoteErrorCode> extend
   constructor(code: Code, message: string, details: RemoteErrorDetailsMap[Code], options?: ErrorOptions);
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/types.d.ts
 declare const LOOKUP_HOST: unique symbol;
 declare const LOOKUP_WIRE: unique symbol;
 declare const CONTEXT_WIRE: unique symbol;
@@ -929,28 +1119,18 @@ interface TypertLookupDefinition {
   /** Canonical wire type symbol used by strict generation. */
   readonly wireTypeSymbol: string;
 }
-/** Bidirectional projection between one environment's Context and its wire identity. */
-interface TypertContextAdapter<Wire = unknown> {
-  /**
-   * Read the identity represented by a live Context.
-   * @param ctx - Context in this adapter's environment.
-   * @returns the wire identity, or `undefined` when the Context has another kind.
-   */
-  identity(ctx: Context): Wire | undefined;
-  /**
-   * Resolve a wire identity to a live Context in this adapter's environment.
-   * An asynchronous Client resolver may wait for its owner to create the Context.
-   * @param id - validated wire identity.
-   * @returns the Context, or `undefined` when it is unavailable.
-   */
-  resolve(id: Wire): Context | undefined | Promise<Context | undefined>;
-}
-/** Host Context adapter plus the wire declaration used by strict Remote methods. */
-interface TypertHostContextAdapter<Wire = unknown> extends TypertContextAdapter<Wire> {
+/** Host wire-to-Context resolver plus the declaration used by strict Remote methods. */
+interface TypertHostContextAdapter<Wire = unknown> {
   /** Wire field carrying the Context identity. */
   readonly wire: string;
   /** Canonical wire type symbol used by strict generation. */
   readonly wireTypeSymbol: string;
+  /**
+   * Resolve a validated wire identity to a live Host Context.
+   * @param id - validated wire identity.
+   * @returns the Context, or `undefined` when it is unavailable.
+   */
+  resolve(id: Wire): Context | undefined | Promise<Context | undefined>;
 }
 /** Composition-owned resolver replacing one Host Context adapter's default lookup policy. */
 type TypertHostContextResolver<Wire = unknown> = (id: Wire) => Context | undefined | Promise<Context | undefined>;
@@ -968,13 +1148,6 @@ interface TypertClientContextAdapter<Wire = unknown> {
    * @returns the Client Context, or `undefined` when unavailable.
    */
   resolve(id: Wire): Context | undefined;
-}
-/** Host Context identity selected from the registered adapter set. */
-interface TypertHostContextIdentity {
-  /** Merge-declared Context kind whose adapter recognized the Context. */
-  readonly kind: string;
-  /** Wire identity returned by that adapter. */
-  readonly identity: unknown;
 }
 /** Notification emitted after a Typert runtime registry changes. */
 interface TypertRegistryChange {
@@ -1068,7 +1241,7 @@ interface TypertContextRegistry {
   /**
    * Register a Host Context adapter.
    * @param key - merge-declared Context key.
-   * @param adapter - owning package's bidirectional Host projection.
+   * @param adapter - owning package's Host resolver and wire declaration.
    * @returns disposer withdrawing the exact adapter.
    */
   registerHost<K extends StringKeyOf<TypertContextMap>>(key: K, adapter: TypertHostContextAdapter<TypertContextWire<TypertContextMap[K]>>): TypertDisposer;
@@ -1087,13 +1260,6 @@ interface TypertContextRegistry {
    * @returns disposer withdrawing the exact adapter.
    */
   registerClient<K extends StringKeyOf<TypertContextMap>>(key: K, adapter: TypertClientContextAdapter<TypertContextWire<TypertContextMap[K]>>): TypertDisposer;
-  /**
-   * Identify a live Host Context through the sole registered adapter set.
-   * @param ctx - Context projected by a Host-to-Client scoped event.
-   * @returns its kind and wire identity, or `undefined` when no adapter recognizes it.
-   * @throws when more than one Context kind recognizes the same Context.
-   */
-  identifyHost(ctx: Context): TypertHostContextIdentity | undefined;
   /**
    * Look up a Host Context adapter.
    * @param key - descriptor Context key.
@@ -1126,7 +1292,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-typert-protocol@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/index.d.ts
 /** Options for an explicit Service-to-Gateway binding. */
 interface TypertGatewayBindingOptions {
   /** Wire namespace; defaults to the Cordis service key. */
@@ -1441,7 +1607,7 @@ declare class ValidationError extends TypeError {
 type Schema<S = any, T = S> = Schemastery<S, T>;
 declare const Schema: Schemastery.Static;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-llm/lib/types/retry-policy.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-llm/lib/types/retry-policy.d.ts
 /** Fully resolved backoff shared by both retry modes. */
 interface ResolvedRetryBackoff {
   readonly initialDelayMs: number;
@@ -1461,7 +1627,7 @@ interface ResolvedAlwaysRetryPolicy extends ResolvedRetryBackoff {
 /** Immutable provider policy captured when its adapter route is registered. */
 type ResolvedRetryPolicy = ResolvedNormalRetryPolicy | ResolvedAlwaysRetryPolicy;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-llm/lib/types/call-config.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-llm/lib/types/call-config.d.ts
 /**
  * Provider, model, reasoning effort, and sampling scalars of one conversation's
  * requests. Every field maps 1:1 onto the same-named `GenerateOptions` field;
@@ -1485,7 +1651,35 @@ interface LlmCallConfigAdapterDefaults {
   maxTokens?: true;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-llm/lib/types/assistant-stream.d.ts
+/** Lossless compact records embedded in durable Assistant attempt events. */
+type AssistantStreamRecord = {
+  readonly type: 'text-chunks';
+  readonly time0: number;
+  readonly index: number;
+  readonly dt: readonly number[];
+  readonly texts: readonly string[];
+} | {
+  readonly type: 'reasoning-chunks';
+  readonly time0: number;
+  readonly index: number;
+  readonly dt: readonly number[];
+  readonly texts: readonly string[];
+} | {
+  readonly type: 'tool-call-chunks';
+  readonly time0: number;
+  readonly index: number;
+  readonly dt: readonly number[];
+  readonly id: ToolCallId;
+  readonly name?: string;
+  readonly args: readonly string[];
+} | {
+  readonly type: 'chunk';
+  readonly time: number;
+  readonly chunk: StreamChunk;
+};
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-llm@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-llm/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     llm: LlmRuntime;
@@ -1516,6 +1710,8 @@ interface PreparedLlmCall {
   readonly context?: LlmModelContext;
   /** Exact model modalities captured with the adapter dispatch generation. */
   readonly inputModalities?: readonly ModelModality[];
+  /** Exact model system prompt update mode captured with the adapter dispatch generation. */
+  readonly systemPromptUpdate?: SystemPromptUpdate;
   /** Config fields materialized by the captured adapter rather than proposed by the caller. */
   readonly adapterDefaults: LlmCallConfigAdapterDefaults;
   /**
@@ -1743,6 +1939,13 @@ declare class LlmRuntime extends TypertRemoteService {
    * @returns the owning adapter's image pricing for the route, when declared.
    */
   imageRequestPricing(provider: string, model: string): LlmImageRequestPricing | undefined;
+  /**
+   * Resolve the exact text one durable file occurrence contributes to every
+   * provider request in the current execution environment.
+   * @param ref - durable verbatim file reference from model history.
+   * @returns the same deterministic handle text used at adapter dispatch.
+   */
+  fileRequestText(ref: FileAttachmentRef): string;
   /** Detach typed adapter-owned modality metadata. */
   private detachedModalities;
   /**
@@ -1792,6 +1995,11 @@ declare class LlmRuntime extends TypertRemoteService {
   /** Remove replay state whose historical route is owned by another adapter. */
   private forAdapter;
   /**
+   * Resolve the current execution-world read path of one durable file
+   * reference through the mounted attachment and filesystem providers.
+   */
+  private fileReadPath;
+  /**
    * Final adapter boundary. Adapter selection, dispatch, iterator construction,
    * and iteration failures become one terminal failure chunk. Middleware and
    * downstream consumer failures remain thrown plugin or consumer errors.
@@ -1812,14 +2020,14 @@ declare class LlmRuntime extends TypertRemoteService {
   private streamWithRegistration;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-util-values@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1/node_modules/@deepseek-ai/dsh-util-values/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-util-values@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2/node_modules/@deepseek-ai/dsh-util-values/lib/types/index.d.ts
 /** Duplicate-install-safe JSON and immutable-value helpers. @module @deepseek-ai/dsh-util-values */
 /** A value that round-trips through JSON without loss. */
 type JsonValue = null | boolean | number | string | JsonValue[] | {
   [key: string]: JsonValue;
 };
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-scope@0._5663fee33a080ce0d83159e01d0d0704/node_modules/@deepseek-ai/dsh-session/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-scope@0._54d1a918d77e481567353c23a9e2039f/node_modules/@deepseek-ai/dsh-session/lib/types/types.d.ts
 /** Identifies one session in the store (and its persistence artifacts). */
 type SessionId = Branded<'SessionId'>;
 /**
@@ -1849,15 +2057,37 @@ type SessionSeqCursor = SessionSeq | -1;
 /** One existing Session event position, or explicit absence. */
 type OptionalSessionSeq = SessionSeq | null;
 /**
+ * Current logical Session format version, stamped into every newly written
+ * {@link SessionHeader}. Current Session and persistence code accept only this
+ * value; header-only readers classify supported historical formats, while an
+ * event-body read composes the build-static adjacent chain and publishes only
+ * this final generation before constructing a Session.
+ *
+ * The version is a single monotonic integer with no major/minor split. Whether
+ * a bump is needed is decided by what the WRITER emits, never by what a newer
+ * reader can accept: bump exactly when an older runtime could no longer handle
+ * a new log with full semantic correctness ("parses without error" is not
+ * correctness — silently skipping content that shapes reconstruction is a
+ * wrong read). Only structural changes reach that bar: the header shape, the
+ * {@link SessionEvent} envelope, core event semantics, or the surface
+ * mechanism (the {@link SurfaceEventType} set and {@link SurfaceOp} variants).
+ * Adding an ordinary event type does not bump — the per-event
+ * {@link SessionEvent.ignorable} guard covers vocabulary growth instead. When
+ * in doubt, bump: a near-identity upgrade step is almost free, a missed bump
+ * makes older runtimes read new logs wrong silently. The released migration,
+ * immutable prior-generation, and current fast-path rules are recorded in
+ * `.agents/notes/implemented/architecture/2026-08-31-released-session-format-migrations.md`.
+ */
+declare const SESSION_FORMAT_VERSION = 3;
+/**
  * Immutable validated storage metadata, kept outside the conversation event log.
  */
 interface SessionHeader {
   /**
-   * On-disk format version, stamped from {@link SESSION_FORMAT_VERSION} when the
-   * session is created. A persistence backend rejects any other version on load
-   * (no migration — see the constant).
+   * Current logical format version, stamped from {@link SESSION_FORMAT_VERSION}.
+   * Historical physical headers are translated before entering this interface.
    */
-  readonly version: number;
+  readonly version: typeof SESSION_FORMAT_VERSION;
   /** The session's id (mirrors the {@link Session}'s id). */
   readonly id: SessionId;
   /** Non-negative safe-integer Unix epoch milliseconds when the session was created. */
@@ -1899,8 +2129,9 @@ interface CreateSessionOptions {
   /** Initial replay or fork history supplied at construction. */
   readonly seed?: readonly SessionEvent[];
   /**
-   * Exact fork-inherited prefix length when `meta.isSeeded` is true. A
-   * constructor seed may also contain child-owned setup events after this cut.
+   * Exact fork-inherited prefix length when `meta.isSeeded` is true. The
+   * constructor seed is exactly this inherited prefix; the constructor
+   * appends the child-owned tagged marker at the cut.
    */
   readonly inheritedEventCount?: SessionLogOffset;
   /**
@@ -1918,22 +2149,27 @@ interface CreateSessionOptions {
   };
 }
 /**
- * Fresh storage values transferred to {@link SessionStore.prepare} without a
- * second serialization copy. Callers retain no mutable aliases.
+ * Aliasing state of an adoptable Session seed. `shared-frozen` permits deeply
+ * frozen aliases plus independently owned unfrozen values in the same seed.
+ */
+type SessionSeedEventState = 'detached' | 'shared-frozen';
+/**
+ * Adoptable storage values transferred to {@link SessionStore.prepare}
+ * without another copy or freeze pass.
  */
 interface RestoredSessionOptions {
-  /** Fresh detached storage events to validate and freeze in place. */
+  /** Events that are independently owned or already deeply frozen. */
   readonly seed: SessionEvent[];
-  /** Fresh detached storage metadata to validate and freeze in place. */
+  /** Independently owned storage metadata to validate and freeze in place. */
   readonly meta: SessionHeader;
   /** Exact number of fork-inherited leading events decoded from storage. */
   readonly inheritedEventCount: SessionLogOffset;
-  /** Select the persistence ownership-transfer path. */
-  readonly seedSource: 'persistence';
+  /** Aliasing state carried from the operation that produced the seed. */
+  readonly eventState: SessionSeedEventState;
 }
 /** Inputs accepted while constructing an unpublished Session. */
 type PrepareSessionOptions = (CreateSessionOptions & {
-  readonly seedSource?: undefined;
+  readonly eventState?: undefined;
 }) | RestoredSessionOptions;
 /** Why an active agent driver was cancelled. */
 type AgentCancelCause = {
@@ -1979,8 +2215,10 @@ interface TurnEndReasonMap {
     kind: 'max-tokens';
   };
   /**
-   * A persistence backend closed a crash-orphaned turn on reload. The loop never
-   * emits this marker, and the events recorded before the crash remain intact.
+   * A crash-orphaned turn was closed after the fact: agent-loop resume appends
+   * this closer for a stored log whose last turn never ended, and session-query
+   * synthesizes it on cold reads. The loop never emits this marker live, and
+   * the events recorded before the crash remain intact.
    */
   interrupted: {
     kind: 'interrupted';
@@ -1989,8 +2227,9 @@ interface TurnEndReasonMap {
 /** The union over {@link TurnEndReasonMap} — why a turn ended; plugins extend it by merging variants into the map. */
 type TurnEndReason = TurnEndReasonMap[keyof TurnEndReasonMap];
 /**
- * Logged request state outside derived history: call config, system prompt, and
- * tools. The latest full `request/header` snapshot reconstructs it; canonical
+ * Logged request state outside derived history: call config and tools. The
+ * system prompt is derived history — surface node 0, a `system/message` event.
+ * The latest full `request/header` snapshot reconstructs the header; canonical
  * empty optional fields are absent.
  */
 interface EpochHeader {
@@ -1998,8 +2237,6 @@ interface EpochHeader {
   config: LlmCallConfig;
   /** Effective config fields materialized from the exact adapter rather than proposed by a caller. */
   adapterDefaults?: LlmCallConfigAdapterDefaults;
-  /** Rendered system prompt text; absent for a system-less request. */
-  system?: string;
   /** Assembled tool schemas; absent for a tool-less request. */
   tools?: ToolSchema[];
 }
@@ -2011,6 +2248,8 @@ interface RequestContext {
   model: string;
   /** Maximum combined request and response context in tokens, when advertised. */
   contextWindow?: number;
+  /** `'in-history'` when the route reads the latest `system` message at any position as the effective system prompt. */
+  systemPromptUpdate?: SystemPromptUpdate;
 }
 /**
  * Why a `request/header` snapshot was appended: `'initial'` — the log's first
@@ -2024,8 +2263,8 @@ type RequestHeaderReason = 'initial' | 'resume' | 'change' | 'series';
 /**
  * The merge-extensible, append-only source of truth for an agent interaction.
  * Message history is derived from this log. Every event is lossless JSON and
- * sequence numbers stay contiguous, including raw chunks, so persistence can
- * store the canonical log verbatim.
+ * sequence numbers stay contiguous. Assistant attempt events embed their exact
+ * compact raw streams so persistence stores one durable settlement per attempt.
  */
 interface SessionEventMap {
   /**
@@ -2067,11 +2306,22 @@ interface SessionEventMap {
    * project their `content` verbatim; `source` tells them apart.
    */
   'user/message': UserMessage$1;
-  /** Raw stream chunk — token-level replay fidelity. */
-  'assistant/chunk': {
+  /**
+   * The rendered system prompt on the model-visible surface. The loop appends
+   * the first one as surface node 0 before the step's first `user/message`.
+   * A prepared in-history route can append nonempty changes in a continuing
+   * series. An incapable route or new series normalizes text to the first system
+   * node. Normalization empties nonempty later nodes, then rewrites the head if
+   * needed, through logged per-node replacements. An empty rendering always
+   * clears all active system nodes, leaving no older instructions model-visible.
+   * Empty later nodes are dormant and project to no message; an empty head with
+   * no active later node records "no system prompt". Restored nonempty text follows
+   * the same route and series rule; empty nodes never restore older text.
+   */
+  'system/message': {
     turn: number;
     step: number;
-    chunk: StreamChunk;
+    message: SystemMessage;
   };
   /**
    * Assembled assistant message for one step (derived history uses this).
@@ -2087,8 +2337,20 @@ interface SessionEventMap {
     turn: number;
     step: number;
     message: AssistantMessage$1;
+    /** Exact timed model stream, compacted without joining delta boundaries. */
+    stream: AssistantStreamRecord[];
     usage?: TokenUsage;
     interrupted?: true;
+  };
+  /**
+   * One model attempt that committed no surface message. The embedded stream
+   * preserves a failed, retried, cancelled, or stream-error attempt that
+   * reached settlement without fabricating model-visible history.
+   */
+  'assistant/attempt': {
+    turn: number;
+    step: number;
+    stream: AssistantStreamRecord[];
   };
   /**
    * The model requested one tool invocation: `name` with the raw `arguments`
@@ -2117,6 +2379,7 @@ interface SessionEventMap {
     turn: number;
     step: number;
     message: ToolResultMessage;
+    /** Optional failure identity; allowed only when the tool-result block has `isError: true`. */
     error?: {
       name: string;
       code: string;
@@ -2134,20 +2397,22 @@ interface SessionEventMap {
     startsSeries?: true;
   };
   /**
-   * Route metadata for the next request, logged only when the route or capacity
-   * changes. It does not participate in request reconstruction or header equality.
+   * Route metadata for the next request, logged only when the route, capacity,
+   * or system prompt update mode changes. It does not participate in request
+   * reconstruction or header equality. Prompt admission uses the bound prepared
+   * call's capability, not this snapshot from an earlier request.
    */
   'request/context': RequestContext;
   /**
    * Marks the end of a constructor seed. Events before it have smaller seq
    * values and came from the seed (resume, fork, or replay); this lifecycle
    * produced none of them. This log-only event is the durable projection of
-   * {@link Session.firstLiveSeq}. Its payload is empty — position and `time`
-   * carry the meaning.
+   * {@link Session.firstLiveSeq}.
    *
-   * Locate the LAST one in stored history. A seed already ending in one is not
-   * re-marked, so reopening an untouched session does not grow its log per
-   * pickup and the event need not be at the current `firstLiveSeq`.
+   * A fresh fork child owns one `{ inherited: true }` marker at its exact
+   * inherited-prefix cut, even when that prefix ends in an ancestor marker.
+   * The last tagged marker is the current Session's cut; untagged markers keep
+   * ordinary restore and replay lifecycle boundaries.
    *
    * `Session`'s constructor is the only legitimate writer. The invariant
    * companion deliberately constrains nothing here, so a plugin appending one
@@ -2160,60 +2425,52 @@ interface SessionEventMap {
    * writers — a concurrently live session holds its own boundary elsewhere,
    * so tolerating concurrent writers needs a signal beyond the log.
    */
-  'session/end-seed': Record<string, never>;
+  'session/end-seed': {
+    inherited?: true;
+  };
 }
 /** The appendable event-type keys of {@link SessionEventMap}, plugin-merged extensions included. */
 type SessionEventType = keyof SessionEventMap;
 /**
  * The subset of {@link SessionEventType} values whose events produce LLM
  * messages and are eligible to appear on the ordered surface. Only these
- * event types may carry {@link SurfaceOp} and {@link SessionEvent.sourceEventSeqs}.
+ * event types may carry {@link SurfaceOp}; system, user, and tool events may also cite
+ * earlier sources through {@link SessionEvent.sourceEventSeqs}.
  */
-type SurfaceEventType = 'user/message' | 'assistant/message' | 'tool/result';
-/**
- * A {@link SessionEvent} that is **on** the ordered surface — its
- * `surfaceOp` is guaranteed present (mandatory), narrowed from a
- * surface-eligible {@link SessionEvent} by checking both `type` and
- * `surfaceOp` at runtime.
- *
- * Use the `isSurfaceEvent` type guard (in `surface.ts`) to narrow a
- * `SessionEvent` to this type.
- */
-type SurfaceEvent = SessionEvent<SurfaceEventType> & {
-  surfaceOp: SurfaceOp;
-};
+type SurfaceEventType = 'system/message' | 'user/message' | 'assistant/message' | 'tool/result';
+/** A message-producing event carrying its required surface operation. */
+type SurfaceEvent = SessionEvent<SurfaceEventType>;
 /**
  * How a session event entered the ordered surface. Only valid on
  * {@link SurfaceEventType} events.
  *
  * - `'append'`: added to the tail — normal path for user/assistant/tool
  *   messages.
- * - `{ op: 'replace', start, end }`: replaces surface nodes from `start`
- *   (inclusive) through `end` (inclusive) with this node. Both must exist as
- *   surface nodes in the current surface. `start === end` replaces a single
+ * - `{ op: 'replace', startSeq, endSeq }`: replaces surface nodes from `startSeq`
+ *   (inclusive) through `endSeq` (inclusive) with this node. Both must exist as
+ *   surface nodes in the current surface. `startSeq === endSeq` replaces a single
  *   node. The node's {@link SessionEvent.sourceEventSeqs} must include every
  *   shadowed surface node. Used by compaction; any surface-replacing producer
  *   may use it.
  */
 type SurfaceOp = 'append' | {
   op: 'replace';
-  start: SessionSeq;
-  end: SessionSeq;
+  startSeq: SessionSeq;
+  endSeq: SessionSeq;
 };
 /**
  * Surface placement and cited source-event seqs for {@link Session.append}. Required on
  * message-producing events and forbidden on log-only events.
  */
-interface SurfaceIntent {
+type SurfaceIntent<T extends SurfaceEventType = SurfaceEventType> = {
   surfaceOp: SurfaceOp;
-  /**
-   * Complete set of known source-event seqs. `assistant/message` may use a
-   * present empty array for a known empty provider stream; when the field is
-   * absent, the event does not record which earlier events produced the message.
-   * Other surface events require a non-empty set when this field is present.
-   */
+} & (T extends 'assistant/message' ? {
+  /** Assistant messages embed their provider stream instead of citing source events. */
+  sourceEventSeqs?: never;
+} : {
+  /** Complete non-empty set of known earlier source-event seqs. */
   sourceEventSeqs?: SessionSeq[];
-}
+});
 /**
  * One immutable entry in the session log.
  *
@@ -2221,9 +2478,9 @@ interface SurfaceIntent {
  * unions), so `switch (event.type)` narrows `event.data` without casts.
  *
  * The {@link sourceEventSeqs} and {@link surfaceOp} fields are conditional:
- * they only exist on {@link SurfaceEventType} variants (`user/message`,
+ * they only exist on {@link SurfaceEventType} variants (`system/message`, `user/message`,
  * `assistant/message`, `tool/result`).
- * Non-surface events (boundary markers, chunks, usage, errors) never carry
+ * Non-surface events (boundary markers, attempts, errors) never carry
  * surface metadata — the compiler enforces this at `Session.append()`
  * call sites.
  */
@@ -2245,19 +2502,10 @@ type SessionEvent<T extends SessionEventType = SessionEventType> = { [K in Sessi
    * inconvenience) rather than silently resuming a gutted session.
    */
   ignorable?: true;
-} & (K extends SurfaceEventType ? {
-  /**
-   * Seq numbers of earlier events that this event cites as sources
-   * (e.g. the `assistant/chunk` seqs that built an `assistant/message`,
-   * or the surface nodes shadowed by a compaction replace node). An
-   * `assistant/message` may carry a present empty array for a known empty
-   * provider stream; when the field is absent, the event does not record which
-   * earlier events produced the message.
-   */
-  sourceEventSeqs?: SessionSeq[];
-  /** How this event entered the surface; absent for non-surface events. */
-  surfaceOp?: SurfaceOp;
-} : object); }[T];
+} & (K extends SurfaceEventType ? SurfaceIntent<K> : {
+  surfaceOp?: never;
+  sourceEventSeqs?: never;
+}); }[T];
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** The named Session does not exist; produced by every layer that resolves a SessionId. */
@@ -2267,7 +2515,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-rc.1_96b8e80d94a439a6da2e936f7681f640/node_modules/@deepseek-ai/dsh-agent/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.5-rc.2_6df6622855b87cb7fde1fe609a6d039a/node_modules/@deepseek-ai/dsh-agent/lib/types/types.d.ts
 /** Public live-agent handle; the runtime face augments its live capabilities. */
 interface Agent {
   /** Session-backed Agent identity. */
@@ -2283,7 +2531,32 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 }
 /** One of the two ordered pending-message lists owned by an agent. */
-type InboxTarget$1 = 'next-turn' | 'next-step';
+type InboxTarget = 'next-turn' | 'next-step';
+/** Complete pending Inbox value reconstructed from durable splices. */
+interface InboxState {
+  readonly 'next-turn': readonly UserMessage$1[];
+  readonly 'next-step': readonly UserMessage$1[];
+}
+/**
+ * Wire-JSON pending Inbox value. Each message round-trips the session log
+ * losslessly, but the fold state's full `UserMessage` type cannot cross a
+ * typert Remote boundary (its source union carries an `unknown` replay
+ * field), so the typed projection table keeps this JSON-safe form.
+ */
+interface InboxWireState {
+  readonly 'next-turn': readonly JsonValue[];
+  readonly 'next-step': readonly JsonValue[];
+}
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** Pending agent input reconstructed from durable inbox splices. */
+    inbox: InboxState;
+  }
+  interface SessionProjectionMap {
+    /** Pending agent input reconstructed from durable inbox splices. */
+    inbox: InboxWireState;
+  }
+}
 /**
  * Turn and step boundaries folded from one agent session log.
  *
@@ -2310,11 +2583,11 @@ declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
      * One normalized mutation of an agent's durable pending-message lists.
-     * Live dispatch precedes projection mutation, so synchronous observers may
-     * read the pre-splice inbox to recover the removed messages.
+     * The session-projection registry applies the committed event before
+     * `Session.append()` returns; Inbox live notifications follow that commit.
      */
     'agent/inbox/spliced': {
-      target: InboxTarget$1;
+      target: InboxTarget;
       start: number;
       removedCount?: number;
       inserted: UserMessage$1[];
@@ -2323,7 +2596,7 @@ declare module '@deepseek-ai/dsh-session/types' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-user-questions@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-a_0e071f1eed590d852ab956613e7bc5a6/node_modules/@deepseek-ai/dsh-user-questions/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-user-questions@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-a_9b8f2b605fd43464c281ed361980b9b2/node_modules/@deepseek-ai/dsh-user-questions/lib/types/types.d.ts
 /** One selectable answer offered to the user. */
 interface AskUserQuestionOption {
   /** User-facing label. */
@@ -2401,55 +2674,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-scope@0._5663fee33a080ce0d83159e01d0d0704/node_modules/@deepseek-ai/dsh-session/lib/types/chunk-rows.d.ts
-/**
- * Fields shared by every packed run: placement, block correlation, and member
- * timestamps as gaps. Member `k` reconstructs as seq `seq0 + k` and time
- * `time0` plus the first `k` gaps; a gap may be negative when the wall clock
- * stepped backwards between events.
- */
-interface RunDataBase {
-  turn: number;
-  step: number;
-  /** The stream block index every member shares. */
-  index: number;
-  /** Epoch-ms gaps between consecutive members; length is one less than the member count. */
-  dt: number[];
-}
-/** Payload of a `text-chunks`/`reasoning-chunks` row: one entry per member, never joined — token boundaries are data. */
-interface TextRunData extends RunDataBase {
-  texts: string[];
-}
-/** Payload of a `tool-call-chunks` row: the run-constant call identity plus each member's raw arguments fragment. */
-interface ToolCallRunData extends RunDataBase {
-  id: ToolCallId;
-  /** Present iff every member carried it, with one uniform value (a mixed run never packs). */
-  name?: string;
-  args: string[];
-}
-/**
- * A packed run of consecutive delta chunk events, discriminated on `type`.
- * `seq0`/`time0` anchor the first member; text and reasoning rows share the
- * {@link TextRunData} payload, tool-call rows carry {@link ToolCallRunData}.
- */
-type ChunkRow = {
-  type: 'text-chunks';
-  seq0: SessionSeq;
-  time0: number;
-  data: TextRunData;
-} | {
-  type: 'reasoning-chunks';
-  seq0: SessionSeq;
-  time0: number;
-  data: TextRunData;
-} | {
-  type: 'tool-call-chunks';
-  seq0: SessionSeq;
-  time0: number;
-  data: ToolCallRunData;
-};
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-projection@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+d_60304b0c187e372f7325279b8c6d32b6/node_modules/@deepseek-ai/dsh-session-projection/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-projection@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+d_84cd66f454dbfc7490c4215f4e78e5dd/node_modules/@deepseek-ai/dsh-session-projection/lib/types/types.d.ts
 /**
  * Pure-type outlet of the session-projection Service Definition: the one projection type
  * table, importable from client aggregates without dragging the host-side
@@ -2473,20 +2698,7 @@ interface SessionProjectionMap {}
  */
 interface SessionProjectionStateMap {}
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-jobs@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-agent@0.1.2_0e0e938fc54f9424980275e07203387b/node_modules/@deepseek-ai/dsh-jobs/lib/types/brand.d.ts
-/**
- * Identifies a background job. The registry generates `<kind>-N`; predictable
- * ids rely on owner authorization rather than secrecy.
- */
-type JobId = Branded<'JobId'>;
-/**
- * Brand a string as a {@link JobId}.
- * @param id - the raw job-id string (the registry generates `<kind>-N`).
- * @returns the same string, branded; no validation is performed.
- */
-declare function JobId(id: string): JobId;
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-workspace@0.1.2-rc.1_317687c35b762f7afc4e638ee801ebd3/node_modules/@deepseek-ai/dsh-workspace/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-workspace@0.1.5-rc.2_2faf0849fbdc6ac5919de8226950d80c/node_modules/@deepseek-ai/dsh-workspace/lib/types/types.d.ts
 /**
  * Identifies one workspace record. A generated uuid, never the path: path
  * normalization rewrites paths, and a reference anchor must stay stable.
@@ -2501,7 +2713,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-rc.1_378496c507e2cd757c4255b1c9aa99d8/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.5-rc.2_f6abae79571f790534db48922cafdc73/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/types.d.ts
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     /** Host state persisted for cold Session list summaries. */
@@ -2550,7 +2762,11 @@ interface SessionProjectionBaseline {
 }
 /** Typed known projections plus JSON-safe values contributed outside this compilation face. */
 type SessionProjectionValues = Partial<SessionProjectionMap> & Readonly<Record<string, SessionProjectionValue>>;
-/** Browser-submitted prompt content; the Host promotes image bytes to durable references. */
+/**
+ * Browser-submitted prompt content; the Host promotes image bytes to durable
+ * references. File parts carry the opaque receipt returned by a preceding
+ * `uploadFile` call on the same Session.
+ */
 type PromptContentPart = {
   readonly type: 'text';
   readonly text: string;
@@ -2559,6 +2775,9 @@ type PromptContentPart = {
   readonly mediaType: ImageMediaType;
   readonly data: string;
   readonly name?: string;
+} | {
+  readonly type: 'file';
+  readonly receiptId: Branded<'file-upload-receipt-id'>;
 };
 /** Complete model selection for one Session. */
 interface ModelSelection {
@@ -2621,6 +2840,7 @@ interface ModelCatalog {
 /** One client-requested mutation of a still-pending queue item. */
 type QueueAction = {
   readonly kind: 'edit';
+  /** Non-empty text-only replacement content. */
   readonly content: readonly ContentBlock[];
 } | {
   readonly kind: 'remove';
@@ -2776,6 +2996,7 @@ interface SessionPromptRequest {
   readonly requestId: SessionRequestId;
   readonly sessionId: SessionId;
   readonly mode: 'queue' | 'steer';
+  /** At least one non-whitespace text part or attachment. */
   readonly content: readonly PromptContentPart[];
   readonly clientTimeZone?: string;
 }
@@ -2813,6 +3034,8 @@ interface SessionCancelValue {
 }
 /** Request to open one path prepared by a Session-aware caller on the Host desktop. */
 interface SessionOpenWorkspacePathRequest {
+  /** File-manager navigation when requested; omission uses the default application. */
+  readonly action?: 'reveal';
   /** Path after best-effort Session workspace resolution, in Host filesystem syntax. */
   readonly path: string;
 }
@@ -2847,50 +3070,36 @@ interface SessionEventEntry {
   readonly type: 'event';
   readonly event: SessionWireEvent;
 }
-/** v0-compatible Session metadata carried on the browser wire. */
+/** Current logical Session metadata carried on the browser wire. */
 interface SessionWireHeader {
   readonly version: number;
   readonly id: SessionId;
   readonly createdAt: number;
   readonly cwd?: string;
   readonly parentSession?: SessionId;
-  /** Exact inherited prefix length; absent for an unseeded Session. */
-  readonly seedLength?: number;
+  /** Whether the Session contains a fork-inherited prefix. */
+  readonly isSeeded: boolean;
   readonly origin?: 'subagent';
   readonly delegationDepth?: number;
   readonly agentPreset?: string;
 }
-/** Browser wire form of one Session surface operation. */
-type SessionWireSurfaceOp = 'append' | {
-  readonly op: 'replace';
-  readonly start: number;
-  readonly end: number;
-};
-/** Event-shaped wire representation of one packed chunk row. */
-type ChunkRowEvent = { [Kind in ChunkRow['type']]: {
-  readonly type: `chunkrow/${Kind}`;
-  readonly seq: number;
-  readonly time: number;
-  readonly data: Extract<ChunkRow, {
-    readonly type: Kind;
-  }>['data'];
-}; }[ChunkRow['type']];
-/** One lossless run of consecutive Assistant delta events in a history page. */
-interface SessionChunkRun {
-  readonly type: 'chunks';
-  readonly event: ChunkRowEvent;
-}
-/** One history-page record: a raw event or a packed Assistant delta run. */
-type SessionHistoryRecord = SessionEventEntry | SessionChunkRun;
-/** Session event wire form; durable readers own recognition of merge-extensible event names. */
+/** One history-page record with compact Assistant streams embedded inside events. */
+type SessionHistoryRecord = SessionEventEntry;
+/**
+ * Exact Session event envelope accepted by the Client journal adapter.
+ * Surface events require surfaceOp; only non-Assistant surface events may cite earlier sources.
+ * Durable readers own recognition of merge-extensible event names.
+ */
 interface SessionWireEvent {
   readonly type: string;
   readonly seq: number;
   readonly time: number;
   readonly data: JsonValue;
   readonly ignorable?: true;
-  readonly sourceEventSeqs?: number[];
-  readonly surfaceOp?: SessionWireSurfaceOp;
+  /** Earlier sources on current surface events; opaque JSON on unknown ignorable events. */
+  readonly sourceEventSeqs?: JsonValue;
+  /** Canonical placement on current surface events; opaque JSON on unknown ignorable events. */
+  readonly surfaceOp?: JsonValue;
 }
 /** One message-aligned backwards-history request. */
 interface SessionPageRequest {
@@ -2904,13 +3113,61 @@ interface SessionPageRequest {
 interface SessionFollowRequest {
   readonly address: SessionAddress;
   readonly maxMessages?: number;
+  /** Include process-local assistant presentation frames for the Web client. */
+  readonly assistantStream?: true;
 }
+/** One active assistant attempt in a reconnect opening snapshot. */
+interface SessionAssistantStreamAttempt {
+  readonly attemptId: LlmAttemptId;
+  /** Last durable Session seq observed when this attempt started. */
+  readonly startedAfterSeq: SessionSeqCursor;
+  readonly turn: number;
+  readonly step: number;
+  /** Dense position expected for the next live chunk frame. */
+  readonly nextIndex: number;
+  /** Compact detached stream accumulated at this opening revision. */
+  readonly stream: readonly JsonValue[];
+}
+/** Complete process-local assistant state at one follow opening. */
+interface SessionAssistantStreamBaseline {
+  readonly revision: number;
+  readonly activeAttempt?: SessionAssistantStreamAttempt;
+}
+/** Browser wire form of one process-local assistant frame. */
+type SessionAssistantStreamFrame = {
+  readonly type: 'start';
+  readonly attemptId: LlmAttemptId;
+  readonly revision: number;
+  readonly startedAfterSeq: SessionSeqCursor;
+  readonly turn: number;
+  readonly step: number;
+} | {
+  readonly type: 'chunk';
+  readonly attemptId: LlmAttemptId;
+  readonly revision: number;
+  readonly index: number;
+  readonly time: number;
+  readonly chunk: JsonValue;
+} | {
+  readonly type: 'end';
+  readonly attemptId: LlmAttemptId;
+  readonly revision: number;
+  /** Number of chunk frames represented by this terminal marker. */
+  readonly index: number;
+  readonly outcome: {
+    readonly kind: 'committed';
+    readonly eventType: 'assistant/message' | 'assistant/attempt';
+    readonly seq: number;
+  } | {
+    readonly kind: 'abandoned';
+  };
+};
 /** One contiguous backwards page of a Session log. */
 interface SessionPage {
   readonly records: readonly SessionHistoryRecord[];
   readonly hasMore: boolean;
 }
-/** Complete opening window followed by ordered events appended after its cursor. */
+/** Complete opening window followed by ordered durable events and opted-in assistant frames. */
 type SessionFollowFrame = {
   readonly type: 'snapshot';
   readonly header: SessionWireHeader;
@@ -2918,7 +3175,11 @@ type SessionFollowFrame = {
   readonly records: readonly SessionHistoryRecord[];
   readonly hasMore: boolean;
   readonly projections: SessionProjectionBaseline;
-} | SessionEventEntry;
+  readonly assistantStream?: SessionAssistantStreamBaseline;
+} | SessionEventEntry | {
+  readonly type: 'assistant-stream';
+  readonly frame: SessionAssistantStreamFrame;
+};
 /** One pending inbox occurrence in the authoritative queue snapshot. */
 interface SessionQueuedItem {
   readonly id: MessageId;
@@ -3009,7 +3270,7 @@ declare module '@deepseek-ai/cordis' {
 /** JSON-compatible projection value accepted by list consumers. */
 type SessionProjectionValue = JsonValue;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-tools@0.1.2-rc.1_d9694bf1517b6925e07e2a38e938bebc/node_modules/@deepseek-ai/dsh-tools/lib/types/presentation.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-tools@0.1.5-rc.2_7f9e302786cf21e030eafe960666842c/node_modules/@deepseek-ai/dsh-tools/lib/types/presentation.d.ts
 /**
  * Category of a tool call, used by a UI to pick an icon or treatment. The
  * provider-neutral vocabulary lets tools describe themselves without depending
@@ -3373,7 +3634,11 @@ interface WebFetchResultView {
 //#region src/bridge/dsh-types.d.ts
 /**
  * The plugin-merged event names the bridge consumes beyond the core
- * `SessionEvent` union. Each is read structurally.
+ * `SessionEvent` union. Each is read structurally. `text-chunks` /
+ * `reasoning-chunks` / `tool-call-chunks` are no longer host session events in
+ * dsh 0.1.5 — the bridge synthesizes them from an embedded
+ * `assistant/message.stream` (see `expandRecord`) and keeps the translation
+ * cases for that history path.
  */
 type PluginSessionEventType = 'agent/inbox/spliced' | 'compaction/start' | 'compaction/summary' | 'compaction/end' | 'tool-call-chunks' | 'text-chunks' | 'reasoning-chunks' | 'todo/write' | 'session/title-llm-request' | 'permission/preset' | 'sandbox/mode' | 'approval/policy' | 'command/run' | 'command/done' | 'approval/asked' | 'approval/decided' | 'agent-preset/selected' | 'subagent/descriptor' | 'model/selection' | 'goal/change';
 /** Core union ∪ plugin events, as the bridge's event feed actually delivers. */
@@ -3419,6 +3684,23 @@ type BridgeFrame = {
   sessionId: string;
   event: BridgeEvent;
   view?: ToolEventView;
+} | {
+  /**
+   * dsh 0.1.5 live assistant stream: one process-local
+   * `agent/assistant-stream` chunk frame. The durable session log no longer
+   * carries per-delta events, so this is the streaming feed.
+   */
+  type: 'session/assistant-stream';
+  sessionId: string;
+  turn: number;
+  step: number;
+  time: number;
+  /** Attempt identity used to de-duplicate replayed frames. */
+  attemptId: string;
+  revision: number;
+  /** Dense zero-based position within the attempt. */
+  index: number;
+  chunk: StreamChunk;
 } | {
   type: 'control/baseline';
   value: BridgeControlBaseline;
@@ -3830,7 +4112,7 @@ type Part = TextPart | {
   agent: string;
 } | ReasoningPart | FilePart | ToolPart | StepStartPart | StepFinishPart | SnapshotPart | PatchPart | AgentPart | RetryPart | CompactionPart;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-scope@0._5663fee33a080ce0d83159e01d0d0704/node_modules/@deepseek-ai/dsh-session/lib/types/surface.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-scope@0._54d1a918d77e481567353c23a9e2039f/node_modules/@deepseek-ai/dsh-session/lib/types/surface.d.ts
 /** Readonly live projection of the message-producing session events. */
 interface SessionSurface {
   /** Current surface event sequences in model-visible order. */
@@ -3839,36 +4121,7 @@ interface SessionSurface {
   readonly replaceGeneration: number;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-scope@0._5663fee33a080ce0d83159e01d0d0704/node_modules/@deepseek-ai/dsh-session/lib/types/preparation.d.ts
-/** Options for a preparation whose provider retains unpublished state. */
-interface SessionPreparationOptions {
-  /** Release provider-owned state when the Session was not published. */
-  readonly release?: () => void;
-}
-/**
- * One exact unpublished Session and the provider state that keeps it usable.
- * Disposal is synchronous and idempotent. Providers decide whether release
- * returns the Session to a cache or discards it; publication may consume that
- * state before disposal, making the callback a no-op.
- */
-declare class SessionPreparation implements Disposable {
-  private readonly options;
-  private released;
-  /** The exact Session to use for setup and publication. */
-  readonly session: Session;
-  private constructor();
-  /**
-   * Wrap an unpublished Session in one preparation lifetime.
-   * @param session - exact unpublished Session.
-   * @param options - optional provider release behavior.
-   * @returns a preparation disposed after publication or rollback.
-   */
-  static create(session: Session, options?: SessionPreparationOptions): SessionPreparation;
-  /** Release provider state once when this preparation leaves its caller. */
-  [Symbol.dispose](): void;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-scope@0._5663fee33a080ce0d83159e01d0d0704/node_modules/@deepseek-ai/dsh-session/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-scope@0._54d1a918d77e481567353c23a9e2039f/node_modules/@deepseek-ai/dsh-session/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     sessions: SessionStore;
@@ -3955,9 +4208,10 @@ declare class Session {
    * The first seq appended IN THIS PROCESS: the length of the constructor
    * seed (0 without one). Events with smaller seq values entered through
    * construction — replay, fork, or resume — and were never published on the
-   * `session/event` firehose (constructor seeds do not emit), so consumers
-   * that replay the log as a publication substitute (telemetry adoption)
-   * start here. Distinct from {@link inheritedEventCount}, the DURABLE
+   * `session/event` firehose (constructor seeds do not emit). This offset marks
+   * the constructor-input boundary for lifecycle ownership and persistence
+   * adoption; consumers that need complete canonical history still start at
+   * seq 0. Distinct from {@link inheritedEventCount}, the DURABLE
    * fork-lineage cut: a resumed session's constructor seed is its full stored
    * log, while the inherited count keeps the original fork value — this field is the
    * in-process construction fact.
@@ -3985,16 +4239,19 @@ declare class Session {
    */
   static create(id: SessionId, seed?: readonly SessionEvent[], header?: SessionHeader, inheritedEventCount?: SessionLogOffset): Session;
   /**
-   * Restore a detached session by taking ownership of fresh persistence values.
-   * The storage format, event envelopes, sequence continuity, surface transitions,
-   * and header fields are validated before the restored objects are frozen.
+   * Restore a detached session by adopting an independently owned or deeply frozen seed.
+   * Runtime-required event fields, event envelopes, sequence continuity, surface
+   * transitions, and header fields are validated without copying or freezing events.
+   * Embedded Assistant streams remain opaque until a stream consumer or storage
+   * verifier reads them.
    * @param id - restored session identity.
-   * @param seed - fresh detached events whose ownership is transferred.
-   * @param header - fresh detached metadata whose ownership is transferred.
+   * @param seed - independently owned or deeply frozen events.
+   * @param header - independently owned storage metadata.
    * @param inheritedEventCount - exact fork-inherited prefix length decoded from storage.
+   * @param eventState - aliasing state carried from the operation that produced the seed.
    * @returns a restored detached session.
    */
-  static fromRestore(id: SessionId, seed: readonly SessionEvent[], header: SessionHeader, inheritedEventCount: SessionLogOffset): Session;
+  static fromRestore(id: SessionId, seed: readonly SessionEvent[], header: SessionHeader, inheritedEventCount: SessionLogOffset, eventState: SessionSeedEventState): Session;
   private constructor();
   /** Cached immutable full snapshot of the private append-only log. */
   private eventsSnapshot;
@@ -4043,7 +4300,8 @@ declare class Session {
    *   declare how it joins the surface, the sole source of derived model
    *   history) and
    *   rejected by the compiler for non-surface types like `turn/start` or
-   *   `assistant/chunk`.
+   *   `assistant/attempt`. Assistant messages embed their exact provider
+   *   stream and cannot cite top-level source events.
    * @returns the logged event — its assigned `seq`/`time` plus the SNAPSHOT of
    *   `data` that entered the log, so reading `event.data` back sees the logged
    *   value, never the caller's still-mutable input.
@@ -4051,6 +4309,7 @@ declare class Session {
    *   (BigInt, function, symbol, undefined, negative zero, non-finite number,
    *   circular reference, sparse array, or an exotic object such as
    *   Map/Set/Date/class instance), or when the candidate violates the
+   *   request-header empty-field or tool-error consistency rules, or the
    *   canonical surface contract (marker shape and eligibility, unique
    *   earlier source-event references, positional replacement validity, and complete
    *   shadowed-node coverage). One iterative pass reads, validates, and
@@ -4061,7 +4320,7 @@ declare class Session {
    *   append reentered while this acceptance/publication boundary is open also
    *   rejects before the log changes.
    */
-  append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent] : []): SessionEvent<T>;
+  append<T extends SessionEventType>(type: T, data: SessionEventMap[T], ...opts: T extends SurfaceEventType ? [opts: SurfaceIntent<T>] : []): SessionEvent<T>;
   /** Cached fold of the request-header events — see {@link requestHeader}. */
   private headerFold;
   /** Log position (events consumed) the header fold has reached. */
@@ -4122,8 +4381,9 @@ type SessionForkSource = Session | SessionId;
 /**
  * In-memory session store (`ctx.sessions`).
  *
- * Persistence is intentionally not implemented here — persistence plugins
- * subscribe to `session/event` and flush on `session/flush` / dispose.
+ * Persistence is intentionally not implemented here — the agent lifecycle
+ * attaches a session-log writer to each published session's write handle;
+ * a session published outside that lifecycle persists nothing.
  */
 declare class SessionStore extends Service {
   private store;
@@ -4162,10 +4422,9 @@ declare class SessionStore extends Service {
    *
    * @param id - the session id; omitted, the store mints `session-<n>`.
    * @param options - seed events and/or creation metadata for the header. With
-   *   `seedSource: 'persistence'`, metadata and events must be fresh detached
-   *   graphs whose ownership transfers to this call: they are validated and
-   *   frozen in place through {@link Session.fromRestore}, so the caller must
-   *   retain no mutable aliases.
+   *   `eventState`, every seed event is either independently owned or any
+   *   shared value is deeply frozen; {@link Session.fromRestore} validates and
+   *   adopts those values without copying or freezing them.
    * @returns the constructed session, NOT yet in the store.
    * @throws if a session with `id` already exists, metadata is not a plain
    *   lossless-JSON record with valid scalar fields, or `meta.cwd` is a
@@ -4253,92 +4512,7 @@ declare class SessionStore extends Service {
   private _resolveForkSource;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-rc.1_96b8e80d94a439a6da2e936f7681f640/node_modules/@deepseek-ai/dsh-agent/lib/types/inbox.d.ts
-/** Live notifications committed by inbox mutations. */
-interface InboxNotifications {
-  /** Publish one inserted message. */
-  inserted(message: UserMessage$1): void;
-  /** Publish one discarded message. */
-  discarded(message: UserMessage$1): void;
-  /** Publish one claimed message inside its owning turn. */
-  claimed(message: UserMessage$1, turn: number): void;
-}
-/** A replay-once projection that incrementally consumes later inbox splices. */
-declare class Inbox {
-  private readonly session;
-  private readonly notifications;
-  private readonly state;
-  constructor(session: Session, notifications: InboxNotifications);
-  /** Prompts awaiting individual turns. */
-  get nextTurn(): readonly UserMessage$1[];
-  /** Input awaiting the next step boundary. */
-  get nextStep(): readonly UserMessage$1[];
-  /** Whether either pending-message list contains work. */
-  get hasPending(): boolean;
-  /** Durably cancel all pending input, clearing next-step before next-turn. */
-  clear(): void;
-  /**
-   * Remove and return the complete batch proposed for one step, publishing
-   * each claimed message. The durable splices are pure deletions.
-   * @param target - whether this boundary also consumes one queued turn.
-   * @param turn - turn that will own the claimed batch.
-   * @returns next-step input followed by the queued turn, when requested.
-   * @internal - The agent loop's step-boundary operation, not a plugin extension point.
-   */
-  claim(target: InboxTarget$1, turn: number): UserMessage$1[];
-  /**
-   * Append one message to a pending list and durably record the insertion.
-   * @param target - pending list to extend.
-   * @param message - message to append.
-   * @throws if the message identity is already pending.
-   */
-  append(target: InboxTarget$1, message: UserMessage$1): void;
-  /**
-   * Prepend one message to a pending list and durably record the insertion.
-   * @param target - pending list to extend.
-   * @param message - message to prepend.
-   * @throws if the message identity is already pending.
-   */
-  prepend(target: InboxTarget$1, message: UserMessage$1): void;
-  /**
-   * Replace one pending message in place, possibly changing its identity. A
-   * successful replacement publishes the old message as discarded and the new
-   * message as inserted.
-   * @param messageId - identity of the pending message to replace.
-   * @param newMessage - replacement message.
-   * @returns whether the message was still pending.
-   * @throws if the replacement duplicates another pending message identity.
-   */
-  replace(messageId: MessageId, newMessage: UserMessage$1): boolean;
-  /**
-   * Remove one pending message and durably record its cancellation.
-   * @param messageId - identity of the pending message to remove.
-   * @returns whether the message was still pending.
-   */
-  remove(messageId: MessageId): boolean;
-  /**
-   * Apply standard splice semantics and durably record the normalized result.
-   * The durable event commits before the live projection mutates, so synchronous
-   * `session/event` observers see the pre-splice lists and can reconstruct the
-   * removed messages from the normalized coordinates.
-   * @param target - pending list to mutate.
-   * @param start - splice position.
-   * @param deleteCount - maximum number of messages to remove.
-   * @param inserted - messages to insert at the resolved position.
-   * @returns messages removed by the splice.
-   */
-  splice(target: InboxTarget$1, start: number, deleteCount: number, inserted: UserMessage$1[]): UserMessage$1[];
-  /** Locate one pending identity across both owned lists. */
-  private locate;
-  /** Commit one normalized mutation and publish its live notifications. */
-  private mutate;
-  /** Apply one normalized durable splice to the projection. */
-  private apply;
-  /** Validate one normalized splice against the current projection. */
-  private validate;
-}
-//#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-rc.1_96b8e80d94a439a6da2e936f7681f640/node_modules/@deepseek-ai/dsh-agent/lib/types/runtime-types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.5-rc.2_6df6622855b87cb7fde1fe609a6d039a/node_modules/@deepseek-ai/dsh-agent/lib/types/runtime-types.d.ts
 declare module '@deepseek-ai/dsh-system-prompt' {
   interface AssembleContext {
     /** Agent for this assembly; absent on diagnostics. When present, `scope` must identify the same agent. */
@@ -4365,6 +4539,49 @@ interface CancelOptions {
    */
   keepInbox?: boolean | undefined;
 }
+/** Agent-owned access to pending work; concrete storage belongs to the driver. */
+interface Inbox {
+  /** Prompts awaiting individual turns. */
+  readonly nextTurn: readonly UserMessage$1[];
+  /** Input awaiting the next step boundary. */
+  readonly nextStep: readonly UserMessage$1[];
+  /** Durably cancel all pending input, clearing next-step before next-turn. */
+  clear(): void;
+  /**
+   * Append one message to a pending list.
+   * @param target - pending list to extend.
+   * @param message - message to append.
+   */
+  append(target: InboxTarget, message: UserMessage$1): void;
+  /**
+   * Prepend one message to a pending list.
+   * @param target - pending list to extend.
+   * @param message - message to prepend.
+   */
+  prepend(target: InboxTarget, message: UserMessage$1): void;
+  /**
+   * Replace one pending message in place.
+   * @param messageId - identity of the pending message to replace.
+   * @param newMessage - replacement message.
+   * @returns whether the message was still pending.
+   */
+  replace(messageId: MessageId, newMessage: UserMessage$1): boolean;
+  /**
+   * Remove one pending message.
+   * @param messageId - identity of the pending message to remove.
+   * @returns whether the message was still pending.
+   */
+  remove(messageId: MessageId): boolean;
+  /**
+   * Apply standard splice semantics and durably record the normalized result.
+   * @param target - pending list to mutate.
+   * @param start - splice position.
+   * @param deleteCount - maximum number of messages to remove.
+   * @param inserted - messages to insert at the resolved position.
+   * @returns messages removed by the splice.
+   */
+  splice(target: InboxTarget, start: number, deleteCount: number, inserted: UserMessage$1[]): UserMessage$1[];
+}
 /**
  * An agent's lifecycle state, emitted on every transition as `agent/status`:
  * `idle` means no driver is active; `running` begins when waking input starts
@@ -4388,13 +4605,45 @@ type RequestErrorAction = {
 } | undefined;
 /** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
 type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact';
+/** One process-local live assistant streaming publication. */
+type AssistantStreamFrame = {
+  readonly type: 'start';
+  readonly attemptId: LlmAttemptId;
+  /** Monotone within one attached Agent lifecycle; replacement restarts at 1. */
+  readonly revision: number;
+  readonly turn: number;
+  readonly step: number;
+} | {
+  readonly type: 'chunk';
+  readonly attemptId: LlmAttemptId;
+  readonly revision: number;
+  /** Dense zero-based position within the attempt. */
+  readonly index: number;
+  /** Safe-integer timestamp reused by the durable embedded stream. */
+  readonly time: number;
+  readonly chunk: StreamChunk;
+} | {
+  readonly type: 'end';
+  readonly attemptId: LlmAttemptId;
+  readonly revision: number;
+  /** Number of chunk frames emitted by this attempt. */
+  readonly index: number;
+  /** Durable settlement committed before this notification, or live abandonment without one. */
+  readonly outcome: {
+    readonly kind: 'committed';
+    readonly eventType: 'assistant/message' | 'assistant/attempt';
+    readonly seq: SessionSeq;
+  } | {
+    readonly kind: 'abandoned';
+  };
+};
 declare module './types.ts' {
   interface Agent {
     /** The provider route and model this agent's requests use. */
     readonly options: AgentOptions;
     /** The live session this agent drives; its log is the durable source of truth. */
     readonly session: Session;
-    /** The agent-owned projection of durable pending work. */
+    /** Agent-owned access to durable pending work. */
     readonly inbox: Inbox;
     /** The current lifecycle state, mirrored on every `agent/status` transition. */
     readonly status: AgentStatus;
@@ -4573,8 +4822,12 @@ declare module '@deepseek-ai/cordis' {
     /**
      * Replace the frozen call configuration. `await next()` yields the config
      * the machine would use (agent options on the first request, the logged
-     * header afterwards); return a replacement to switch. Model-visible
-     * content must use logged channels; this waterfall cannot mutate messages.
+     * header afterwards); return a replacement to switch. On step admission,
+     * this runs after assembly and `step/start`, before the system prompt and
+     * accepted user batch are committed. Cancellation here or during subsequent
+     * `prepareCall()` resolution commits neither. The prepared call capability
+     * governs prompt admission. Model-visible content must use logged channels;
+     * this waterfall cannot mutate messages.
      * @param payload.agent - the agent making the model call.
      * @param payload.turn - the open turn number.
      * @param payload.step - the step whose request this is.
@@ -4612,6 +4865,19 @@ declare module '@deepseek-ai/cordis' {
       retryPolicy: ResolvedRetryPolicy | undefined;
       signal: AbortSignal;
     }, next: () => Promise<RequestErrorAction>): Promise<RequestErrorAction>;
+    /**
+     * Process-local assistant-stream publication. Chunk frames are transient;
+     * the loop appends one final v2 `assistant/message` or `assistant/attempt`
+     * with the same stream before a committed end frame.
+     * @param payload.agent - the agent whose attempt produced the frame.
+     * @param payload.frame - one ordered start, chunk, or end publication.
+     * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
+     * @mode emit
+     */
+    'agent/assistant-stream'(this: Scoped<Agent>, payload: {
+      agent: Agent;
+      frame: AssistantStreamFrame;
+    }): void;
     /**
      * The turn is about to close: the model owes no response (no live tool
      * calls, no fresh steering). Awaited before the boundary commits — a
@@ -4653,7 +4919,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-rc.1_96b8e80d94a439a6da2e936f7681f640/node_modules/@deepseek-ai/dsh-agent/lib/types/projection.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.5-rc.2_6df6622855b87cb7fde1fe609a6d039a/node_modules/@deepseek-ai/dsh-agent/lib/types/projection.d.ts
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionStateMap {
     /** The agent session's open/last turn and step boundary facts (whole value). */
@@ -4661,7 +4927,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-system-prompt@0.0.1-rc.5_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-in_acce6430319409ddf0a0c7ad57e73f04/node_modules/@deepseek-ai/dsh-system-prompt/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-system-prompt@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-in_b3e6c82e88b9ea30d08be2f4a4f4bc82/node_modules/@deepseek-ai/dsh-system-prompt/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     systemPrompt: SystemPrompt;
@@ -4703,9 +4969,8 @@ interface PromptSection {
   /** Unique name — a duplicate registration throws (see {@link SystemPrompt.section}). */
   readonly name: string;
   /**
-   * Sections are concatenated in ascending order. Convention: `-100` is the
-   * harness identity, `0` the deployment persona, tool guidance uses 100–199;
-   * other negative orders also render before the persona.
+   * Sections are concatenated in ascending order. Equal orders use code-unit
+   * name order.
    */
   readonly order: number;
   /**
@@ -4762,15 +5027,64 @@ interface PromptAssembly {
   tools: ToolSchema[];
   variables: Record<string, string | undefined>;
 }
-/** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.persona} for its contract). */
+declare const SECTION_ORDERS: {
+  readonly HARNESS_IDENTITY: -1000;
+  readonly DEPLOYMENT_PERSONA_PREFIX: 0;
+  readonly PLAN_POLICY: 500;
+  readonly TEAM_POLICY: 600;
+  readonly PTC_ONLY: 800;
+  readonly FILE_REFERENCE: 900;
+  readonly TOOL_BASH: 1000;
+  readonly TOOL_PWSH: 1010;
+  readonly TOOL_READ: 1100;
+  readonly TOOL_WRITE: 1200;
+  readonly TOOL_EDIT: 1300;
+  readonly TOOL_GLOB: 1400;
+  readonly TOOL_GREP: 1500;
+  readonly TOOL_JOBS: 1600;
+  readonly TOOL_PTY: 1700;
+  readonly TOOL_WEB_SEARCH: 2000;
+  readonly TOOL_WEB_FETCH: 2100;
+  readonly TOOL_LSP: 2200;
+  readonly TOOL_SESSION_QUERY: 2300;
+  readonly TOOL_GOAL: 2400;
+  readonly TOOL_CORDIS: 2500;
+  readonly TOOL_WORKFLOW: 2600;
+  readonly TOOL_RALPH: 2700;
+  readonly TOOL_SUBAGENT: 2800;
+  readonly TOOL_REPORT: 2900;
+  readonly TOOLS_SDK: 5000;
+  readonly DELIVERABLE_FILE_REFERENCES: 9000;
+  readonly STRUCTURED_OUTPUT: 9900;
+  readonly HARNESS_SOURCE: 10000;
+  readonly WEB_SURFACE: 10100;
+  readonly DEPLOYMENT_PERSONA_SUFFIX: 10200;
+};
+/** Name of a centrally allocated prompt-section position. */
+type PromptSectionOrderName = keyof typeof SECTION_ORDERS;
+declare const CONTEXT_ORDERS: {
+  readonly SANDBOX_POLICY: 110;
+  readonly APPROVAL_POLICY: 115;
+  readonly SUBAGENT_DELEGATION: 120;
+};
+/** Name of a centrally allocated runtime-context position. */
+type PromptContextOrderName = keyof typeof CONTEXT_ORDERS;
+/** Plugin config: the deployment-authored fragment of the system prompt (see {@link Config.personaPrefix} for its contract). */
 interface Config$3 {
   /** Include the fixed DeepSeek Harness identity before the deployment persona (default true). */
   includeHarnessIdentity?: boolean;
+  /** Include dynamic runtime-context snapshots in model history (default true). */
+  includeRuntimeContext?: boolean;
   /**
-   * Deployment-wide order-0 persona template. A scoped section named
-   * `deployment:persona` shadows it; `{{variable}}` references are strict.
+   * Deployment-wide persona prefix template before first-party guidance. A scoped section named
+   * `deployment:persona-prefix` shadows it; `{{variable}}` references are strict.
    */
-  persona?: string;
+  personaPrefix?: string;
+  /**
+   * Persona suffix template after first-party guidance. A scoped `deployment:persona-suffix`
+   * section shadows it; `{{variable}}` references are strict. Defaults to empty.
+   */
+  personaSuffix?: string;
   /**
    * Model-facing tool names in order, with {@link TOOL_ORDER_REST} exactly once.
    * Invalid fields fail at load and unknown names fail at assembly; known names
@@ -4794,12 +5108,31 @@ declare class SystemPrompt extends Service {
    */
   section(section: PromptSection): () => void;
   /**
+   * Resolve the centrally owned placement of a repository prompt section.
+   * @param name - stable section placement name.
+   * @returns the section's numeric sort order.
+   */
+  getSectionOrder(name: PromptSectionOrderName): number;
+  /**
+   * Resolve the centrally owned placement of a repository runtime context.
+   * @param name - stable context placement name.
+   * @returns the context's numeric sort order.
+   */
+  getContextOrder(name: PromptContextOrderName): number;
+  /**
    * Register ordered dynamic context in the calling context's scope. Scoped
    * entries shadow global entries with the same name.
    * @param context - the context contribution to register.
    * @returns the exact Cordis effect disposer.
    */
   context(context: PromptContext): () => void;
+  /**
+   * Suppress every dynamic runtime-context contribution in the calling
+   * context's scope without changing the services that own or enforce those
+   * facts. Multiple suppressors remain independently disposable.
+   * @returns the exact Cordis effect disposer.
+   */
+  suppressRuntimeContext(): () => void;
   /**
    * Register a tool-schema provider in the calling context's scope. Global and
    * matching scoped providers both contribute; returning the reserved
@@ -4829,20 +5162,10 @@ declare class SystemPrompt extends Service {
   assemble(context?: AssembleContext): Promise<PromptAssembly>;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.2-rc.1_96b8e80d94a439a6da2e936f7681f640/node_modules/@deepseek-ai/dsh-agent/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-agent@0.1.5-rc.2_6df6622855b87cb7fde1fe609a6d039a/node_modules/@deepseek-ai/dsh-agent/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     agents: AgentRegistry;
-    /**
-     * The agent association installed as an own property on `Agent.ctx`, or
-     * `undefined` on a plain context. Contexts derived from `Agent.ctx` inherit
-     * the association; a deliberately nested scope may carry a nearer
-     * `dsh-scope` tag while retaining it, so this field is DX context rather
-     * than the scope resolver. {@link AgentRegistry} registers a root accessor
-     * defaulting to `undefined`, and core packages below the agent layer use
-     * `scopeOf()` for layer selection instead of reading this field.
-     */
-    agent?: Agent;
   }
 }
 /**
@@ -4859,9 +5182,10 @@ interface AgentSetupCommit {
 /**
  * Compose an unpublished Agent scope and optionally return its publication commit.
  * @param agentCtx - unpublished Agent scope.
+ * @param agent - unpublished Agent being composed.
  * @returns an optional synchronous commit invoked after setup awaits settle and immediately before publication.
  */
-type AgentSetup = (agentCtx: Context) => AgentSetupCommit | Promise<AgentSetupCommit | void> | void;
+type AgentSetup = (agentCtx: Context, agent: Agent) => AgentSetupCommit | Promise<AgentSetupCommit | void> | void;
 /**
  * Options for programmatically creating an agent through the registry factory
  * ({@link AgentRegistry.create}). The caller supplies the single live
@@ -4872,6 +5196,8 @@ type AgentSetup = (agentCtx: Context) => AgentSetupCommit | Promise<AgentSetupCo
 interface CreateAgentOptions {
   /** The live agent/session identity. */
   readonly sessionId: SessionId;
+  /** Live parent Agent for runtime ownership; omit for a root Agent. */
+  readonly parentAgent?: Agent;
   /**
    * Session creation metadata: validated absolute `cwd`, `parentSession`
    * fork lineage, the `isSeeded` fork marker, the coarse `origin`
@@ -4932,6 +5258,8 @@ interface CreateAgentOptions {
 interface ResumeAgentOptions {
   /** The persisted session id to load and use as the live agent/session identity. */
   readonly resumeSessionId: SessionId;
+  /** Live parent Agent for runtime ownership; omit for a root Agent. */
+  readonly parentAgent?: Agent;
   /** Per-agent options (model, …). */
   readonly agentOptions?: AgentOptions;
   /** Optional creation-only cancellation signal for persistence load/setup; detached before return. */
@@ -4987,18 +5315,19 @@ interface AgentFactory {
    * transaction and resulting lifecycle to that owner; it must not infer
    * ownership from the factory object's registration context.
    * @param ownerCtx - caller-bound context that owns the transaction and live handle.
-   * @param options - agent/session identity, configuration, and optional setup.
+   * @param options - agent/session identity, configuration, optional live parent, and setup.
    * @returns the owned handle after setup, both announcements, and loop start complete.
    */
   createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>;
   /**
-   * Prepare a persisted session and resume an agent on it. Async because it awaits
-   * both `ctx.sessionPersistence.prepare` and the optional unpublished setup
-   * transaction; must be called after that service exists (consumers inject
-   * `sessionPersistence`). Publication follows the same setup-commit and
-   * ordered boundary as {@link createAgent}.
+   * Resume an agent on a persisted session. Async because it opens the
+   * persisted session for write, reads and repairs the log, publishes it, and
+   * awaits the optional unpublished setup transaction; must be called after
+   * `ctx.sessionPersistence` exists (consumers inject `sessionPersistence`).
+   * Publication follows the same setup-commit and ordered boundary as
+   * {@link createAgent}.
    * @param ownerCtx - caller-bound context that owns load, setup, and the live handle.
-   * @param options - persisted identity, configuration, and optional setup.
+   * @param options - persisted identity, configuration, optional live parent, and setup.
    * @returns the owned handle after setup, both announcements, and loop start complete.
    */
   resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>;
@@ -5029,7 +5358,8 @@ declare class AgentRegistry extends Service {
    * Read the Agent that initiated the inherited asynchronous driver chain.
    * Use this optional form for logging, tracing, metrics, or host attribution
    * that also supports agentless calls. When a parent creates a child, setup
-   * reports the causal parent while `agentCtx.agent` identifies the child.
+   * reports the causal parent while the setup callback's Agent parameter
+   * identifies the child.
    * @returns the inherited Agent, or `undefined` outside an initiator boundary
    *   and inside an explicit clearing boundary.
    * @throws when this service instance has been disposed.
@@ -5091,7 +5421,7 @@ declare class AgentRegistry extends Service {
    * agent): this constructs the agent and its session. Rejects if no factory is
    * registered or creation/setup fails. The resolved {@link AgentHandle} lets
    * the owner tear down exactly this agent.
-   * @param options - shared identity, session seed/metadata, and agent options.
+   * @param options - shared identity, optional live parent, session seed/metadata, and agent options.
    * @returns the handle after setup, rollback-covered publication, and loop start complete.
    */
   create(options: CreateAgentOptions): Promise<AgentHandle>;
@@ -5099,7 +5429,7 @@ declare class AgentRegistry extends Service {
    * Load a persisted session and resume an agent on it through the registered
    * factory. Rejects if no factory is registered; the factory rejects if
    * session persistence is not configured or persistence/setup fails.
-   * @param options - persisted identity, configuration, and optional setup.
+   * @param options - persisted identity, optional live parent, configuration, and setup.
    * @returns the handle after setup, rollback-covered publication, and loop start complete.
    */
   resume(options: ResumeAgentOptions): Promise<AgentHandle>;
@@ -5110,7 +5440,8 @@ declare class AgentRegistry extends Service {
    * (`scopeTarget(agent, agent)`): the subject is the agent in hand, so the
    * emits are scope-filtered regardless of which context invoked `register`
    * (calling through `agent.ctx` scopes EFFECTS; dispatch scoping always
-   * requires passing the carrier). Returns the disposer.
+   * requires passing the carrier). The entry is a runtime root; factory-backed
+   * creation uses `options.parentAgent` for child ownership. Returns the disposer.
    * @param agent - the already-constructed agent to record in the store.
    * @returns the EXACT Cordis effect disposer (single-shot; a repeat call
    *   returns undefined without awaiting an in-flight teardown). Exact
@@ -5129,7 +5460,7 @@ declare class AgentRegistry extends Service {
    * returned detach closure into its pre-installed composite teardown before
    * calling {@link announce}. Ordinary callers use {@link register}.
    * @param agent - the prepared, unpublished agent.
-   * @param owner - live agent whose scoped context created this agent, or
+   * @param owner - explicitly supplied live runtime owner, or
    *   undefined for a top-level runtime root. This is runtime ownership, not
    *   the resumed session's durable parent lineage.
    * @returns an idempotent closure that removes this exact entry and emits
@@ -5191,7 +5522,109 @@ declare class AgentRegistry extends Service {
   private releaseInitiatorRun;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-persistence@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+_1cca8a93fb4e34b7ac1e0600bc459ff9/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/revision.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-persistence@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+_435c924909c3d31ac09fb45aac40f3fd/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/handle.d.ts
+/**
+ * Log access granted by an open. `write` is read-write: the session's single
+ * mutator, which also reads its own log. `read` only observes — it never
+ * takes ownership and works while another handle or process holds `write`.
+ */
+type SessionAccess = 'read' | 'write';
+/** Options for {@link SessionHandle.read}. */
+interface SessionHandleReadOptions {
+  /** Optional cancellation for backend read work. */
+  readonly signal?: AbortSignal;
+}
+/** One persistence event slice returned by {@link SessionHandle.read}. */
+interface SessionHandleReadResult {
+  /**
+   * Whether event values are exclusively owned or shared only after deep
+   * freezing. Slicing preserves the producer's state even when no events remain.
+   */
+  readonly eventState: SessionSeedEventState;
+  /** Event values in a caller-owned outer array. */
+  readonly events: readonly SessionEvent[];
+}
+/** Options for {@link SessionHandle.append}. */
+interface SessionHandleAppendOptions {
+  /** Optional cancellation observed before the write starts. */
+  readonly signal?: AbortSignal;
+}
+/** Options for {@link SessionHandle.flush}. */
+interface SessionHandleFlushOptions {
+  /** Optional cancellation observed before the barrier starts. */
+  readonly signal?: AbortSignal;
+}
+/**
+ * One open channel onto a stored session. A handle is single-owner state, not
+ * a shared service: `read` never backtracks below what this handle already
+ * observed, a `write` handle reads its own successful appends, and `close()`
+ * is the one teardown (idempotent, uncancellable; `Symbol.asyncDispose`
+ * delegates to it). Every operation on a closed handle rejects with
+ * `SessionHandleClosedError`.
+ *
+ * Freshness across handles: once an `append` or `flush` resolves on a write
+ * handle, every read STARTED afterwards on the same backend instance — on any
+ * handle, or through `stat`/`list` — observes at least that prefix.
+ * Reads concurrent with a mutation carry no ordering promise beyond the valid
+ * contiguous prefix.
+ */
+interface SessionHandle extends AsyncDisposable {
+  /** The stored session this handle addresses. */
+  readonly id: SessionId;
+  /** The immutable stored header, fixed at `create`/`open`. */
+  readonly header: SessionHeader;
+  /**
+   * Exact fork-inherited prefix length stored with the log; `0` when
+   * `header.isSeeded` is false. Storage metadata paired with the header for
+   * every body read, never part of the replayable event log.
+   */
+  readonly inheritedEventCount: SessionLogOffset;
+  /** Whether this handle may mutate the log. */
+  readonly access: SessionAccess;
+  /**
+   * Read a slice of the valid contiguous logical log. The slice is a legal log
+   * prefix segment: a torn physical tail is never returned, and repeated reads
+   * on this handle never observe an older state than a prior read.
+   * @param offset - first logical event seq to include; defaults to `0`.
+   * @param length - maximum number of events to return; defaults to the rest
+   *   of the log. An offset at or past the end returns an empty list.
+   * @param options - optional cancellation.
+   * @returns the caller-owned outer slice plus the ownership state of its event values.
+   */
+  read(offset?: number, length?: number, options?: SessionHandleReadOptions): Promise<SessionHandleReadResult>;
+  /**
+   * Append a contiguous batch continuing the current logical end. The first
+   * event's `seq` MUST equal the stored next-seq; committed events are never
+   * rewritten. Persistence is best-effort: on resolution the batch is
+   * accepted, ordered, and visible to reads on this backend instance, but
+   * only a resolved {@link flush} promises it survives a crash — a backend
+   * may buffer or batch physical writes behind append. Rejects with
+   * `SessionReadOnlyError` on a read handle and `SessionOwnershipLostError`
+   * when write ownership is gone.
+   * @param events - the contiguous batch, in seq order.
+   * @param options - optional cancellation observed before the write starts.
+   */
+  append(events: readonly SessionEvent[], options?: SessionHandleAppendOptions): Promise<void>;
+  /**
+   * The durability barrier — the one operation that promises storage: on
+   * resolution every acknowledged append is durable and the session is
+   * materialized for other processes; an empty created session becomes
+   * durably listable here. Callers that must survive a crash flush; a backend
+   * whose `append` already persists on resolution treats this as
+   * materialize-if-needed. Rejects with `SessionReadOnlyError` on a read
+   * handle.
+   * @param options - optional cancellation observed before the barrier starts.
+   */
+  flush(options?: SessionHandleFlushOptions): Promise<void>;
+  /**
+   * Release the handle: a read handle frees local resources; a write handle
+   * completes pending durability and releases write ownership. Idempotent,
+   * asynchronous, and deliberately not cancellable.
+   */
+  close(): Promise<void>;
+}
+//#endregion
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-persistence@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+_435c924909c3d31ac09fb45aac40f3fd/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/revision.d.ts
 /**
  * Backend-owned token that identifies both one storage source and one revision
  * of a persisted session log.
@@ -5204,55 +5637,62 @@ type SessionPersistenceRevision = Branded<'SessionPersistenceRevision'>;
  */
 declare function SessionPersistenceRevision(value: string): SessionPersistenceRevision;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-persistence@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+_1cca8a93fb4e34b7ac1e0600bc459ff9/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/index.d.ts
-/** Lightweight immutable source identity returned without loading a full log. */
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-persistence@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+_435c924909c3d31ac09fb45aac40f3fd/node_modules/@deepseek-ai/dsh-session-persistence/lib/types/index.d.ts
+/**
+ * Lightweight stored-session observation returned by {@link SessionPersistence.stat}
+ * and {@link SessionPersistence.list} without reading the full event log.
+ */
 interface SessionPersistenceSnapshot {
-  /** Detached metadata for one materialized session. */
-  header: SessionHeader;
-  /** Opaque source-qualified token that changes whenever this stored log changes. */
-  revision: SessionPersistenceRevision;
+  /** Detached metadata for one stored session. */
+  readonly header: SessionHeader;
+  /** Opaque change token; see {@link SessionPersistence.stat}. */
+  readonly revision: SessionPersistenceRevision;
+  /** Logical event count, when the backend can provide it cheaply from metadata; otherwise absent. */
+  readonly eventCount?: number;
+  /** Physical artifact byte size, when the backend can provide it cheaply (JSONL); otherwise absent. */
+  readonly sizeBytes?: number;
 }
-/** Logical Session header paired with its exact inherited cut for body-bearing storage operations. */
+/** Options for {@link SessionPersistence.create}. */
+interface SessionPersistenceCreateOptions {
+  /** Optional cancellation observed before backend work starts. */
+  readonly signal?: AbortSignal;
+  /**
+   * Exact fork-inherited prefix length. Required when `header.isSeeded` is
+   * true and must be omitted (or `0`) otherwise; the backend refuses a
+   * mismatch at create.
+   */
+  readonly inheritedEventCount?: SessionLogOffset;
+}
+/**
+ * Logical Session header paired with its exact inherited cut for body-bearing
+ * storage operations. `isSeeded` marks fork lineage on the header; the
+ * numeric cut travels beside it, never inside the replayable event log.
+ */
 interface SessionStorageMetadata {
   /** Validated immutable Session header. */
   readonly meta: SessionHeader;
   /** Number of leading events inherited from the Session's fork parent. */
   readonly inheritedEventCount: SessionLogOffset;
 }
-/** Immutable logical session prepared from persistence or a live owner. */
+/** Immutable logical session read: storage metadata plus the complete validated event log. */
 interface SessionInspection extends SessionStorageMetadata {
-  /** Validated contiguous logical event log. */
+  /** Contiguous validated events from seq 0. */
   readonly events: readonly SessionEvent[];
 }
-/** Detached logical suffix returned by one explicit stored-log offset read. */
-interface SessionEventSuffix extends SessionStorageMetadata {
-  /** First requested log offset; {@link events} contains only seqs at or after it. */
-  readonly fromSeq: SessionLogOffset;
-  /** Valid contiguous stored events at or after {@link fromSeq}; not a complete Session log when the offset is nonzero. */
-  readonly events: readonly SessionEvent[];
+/** Options for {@link SessionPersistence.open}. */
+interface SessionPersistenceOpenOptions {
+  /** Optional cancellation observed before backend work starts. */
+  readonly signal?: AbortSignal;
 }
-/** A borrowed exact Session source returned from a cold materialization or concurrent live owner. */
-type BorrowedSessionSource = Disposable & ({
-  /** A reusable unpublished Session is pinned until this observation is disposed. */
-  readonly source: 'prepared';
-  /** Immutable header and logical event prefix observed together. */
-  readonly inspection: SessionInspection;
-  /** Durable revision represented by the prepared source. */
-  readonly revision: SessionPersistenceRevision;
-  /** Exact unpublished Session retained for a later {@link prepare}. */
-  readonly preparedSession: Session;
-} | {
-  /** A live Session won source resolution while the persistence read was starting. */
-  readonly source: 'live';
-  /** Immutable live header and event prefix observed together. */
-  readonly inspection: SessionInspection;
-});
-/** A backend's own raw artifact text for one session, verbatim. */
-interface SessionRawArtifact extends SessionStorageMetadata {
-  /** The artifact's base filename on disk, without any physical encoding suffix. */
-  readonly filename: string;
-  /** The artifact's full text content, decoded from the backend's physical encoding. */
-  readonly content: string;
+/** Options for {@link SessionPersistence.stat}. */
+interface SessionPersistenceStatOptions {
+  /** Optional cancellation for backend metadata reads. */
+  readonly signal?: AbortSignal;
+}
+/** Options for {@link SessionPersistence.list}. */
+interface SessionPersistenceListOptions {
+  /** Optional cancellation for backend listing work. */
+  readonly signal?: AbortSignal;
 }
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -5260,171 +5700,85 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 /**
- * A backend-resolved, per-session local artifact location. The path is an
- * absolute target path and can name an artifact that has not materialized yet.
- * Consumers must treat it as a location hint, never as an authorization token.
- */
-interface SessionLocation {
-  /** Backend-specific artifact kind, for example `jsonl`. */
-  readonly kind: string;
-  /** Absolute path to this session's backend-owned artifact. */
-  readonly path: string;
-}
-/**
- * Durable append-only session storage. Implementations preserve contiguous,
- * losslessly JSON-serializable events; {@link append} resolves only after
- * durability, and {@link load} balances a complete interrupted tail without
- * rewriting committed events.
+ * Durable append-only session storage addressed through per-session handles.
+ *
+ * Storage semantics shared by every backend: events are contiguous from seq 0
+ * and never rewritten; a torn physical tail is never returned to a reader and
+ * is truncated by the write path before its first append; reads validate
+ * current-format records only and refuse unknown vocabulary fail-closed.
+ * `append` persists best-effort; `flush` — per handle or service-wide — is
+ * the durability barrier.
+ *
+ * Visibility: a created session is observable through `stat`/`list`/`open`
+ * in this process from the moment `create` resolves, even while a backend
+ * defers physical materialization (a pure optimization); other processes see
+ * the session only once it materializes, and a session that never
+ * materialized before a crash never existed. `SessionHandle.flush` forces
+ * materialization.
+ *
+ * Freshness: once an `append` or `flush` resolves, reads started afterwards
+ * on this backend instance observe at least that prefix.
  */
 declare abstract class SessionPersistence extends Service {
   constructor(ctx: Context);
   /**
-   * Resolve this backend's independent local artifact for a session without
-   * reading, creating, flushing, or otherwise materializing it. A backend
-   * that does not own one artifact per Session returns `undefined`.
-   * @param meta - the immutable session header whose artifact is requested.
-   * @returns the backend-specific absolute location, when one exists.
+   * Create a new stored session and take its write ownership.
+   * @param header - the immutable header (id, version, cwd, lineage) to store.
+   * @param options - optional cancellation.
+   * @returns a `write` handle owned by the caller; close it to release ownership.
+   * @throws {SessionAlreadyExistsError} when the id already exists.
    */
-  abstract locate(meta: SessionHeader): SessionLocation | undefined;
+  abstract create(header: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle>;
   /**
-   * Whether this backend exposes one verbatim raw artifact per session.
-   * A backend that declares `true` must override {@link readRaw}.
-   */
-  abstract readonly supportsRawArtifacts: boolean;
-  /**
-   * Read a session's backend-owned artifact text verbatim — the exact durable
-   * bytes the backend wrote (decoded from its physical encoding, e.g. a
-   * decompressed JSONL). The returned `content` is the raw text, not a
-   * reconstruction from parsed events, so it preserves backend-specific
-   * serialization (chunk packing, key order, line breaks). Callers first test
-   * {@link supportsRawArtifacts}; `undefined` then means only that the requested
-   * session has no materialized artifact.
-   * @param _id - the persisted session to read (unused by the default: no
-   * per-session artifact).
-   * @param signal - optional cancellation for backend read work.
-   * @returns the raw artifact plus its parsed header, or `undefined` when the
-   * session is absent.
-   * @throws when this backend does not expose per-session raw artifacts.
-   */
-  readRaw(_id: SessionId, signal?: AbortSignal): Promise<SessionRawArtifact | undefined>;
-  /**
-   * Register a new session's metadata. A backend MAY defer the physical write
-   * until the first {@link append} (lazy materialization), in which case a
-   * created-but-never-appended session is absent from {@link list}
-   * — abandoned sessions leave nothing behind.
-   * @param meta - the immutable header (id, version, cwd, lineage) to record.
-   * @param inheritedEventCount - exact fork-inherited prefix length. Required
-   * for a seeded header and omitted only for an unseeded header.
-   */
-  abstract create(meta: SessionHeader, inheritedEventCount?: SessionLogOffset): Promise<void>;
-  /**
-   * Ensure a live session has a durable header even when it has no events.
-   * Ordinary sessions remain lazily materialized; lifecycle frontends call
-   * this only when an empty session itself is a durable resumable resource.
-   * @param _session - exact live session whose registered header is materialized.
-   */
-  ensureMaterialized(_session: Session): Promise<void>;
-  /**
-   * Durably persist a batch of events. Honors the append-only and contiguous-
-   * seq contracts: the first event's `seq` MUST equal the stored next-seq
-   * (after `load` has durably closed any interrupted turn). Rejects non-JSON-
-   * serializable `event.data` with an error naming the offending event type.
-   * A seeded session's first materializing batch must reach its complete
-   * inherited prefix.
-   * @param id - the session the batch belongs to.
-   * @param events - the contiguous batch to persist, in seq order.
-   */
-  abstract append(id: SessionId, events: readonly SessionEvent[]): Promise<void>;
-  /**
-   * Prepare the exact unpublished Session used by resume. Implementations may
-   * reuse object graphs retained by an earlier {@link inspect} after confirming
-   * their durable revision is still current; disposal releases an unpublished
-   * reservation. Revision retries require the durable log to remain unchanged
-   * for one read/check round trip; continuous external writers may delay completion.
-   * @param id - persisted session to prepare.
-   * @param signal - optional cancellation for preparation work.
-   * @returns one owned unpublished Session preparation.
-   */
-  prepare(id: SessionId, signal?: AbortSignal): Promise<SessionPreparation>;
-  /**
-   * Load an immutable balanced logical view and commit any required cold
-   * recovery. A complete interrupted final turn is preserved and durably
-   * closed with missing tool errors plus any open step and turn boundaries;
-   * only a torn final record is discarded. Unknown versions and corruption in
-   * the committed prefix reject. Implementations MUST NOT crash-repair an
-   * identity still bound to a live Session: a balanced live log may return as a
-   * durable snapshot, while an open live turn rejects. Returned values may be
-   * shared with immutable live or prepared state and must not be mutated.
-   * Revision-based implementations may wait for one stable read/check round trip.
-   * @param id - the persisted session to reload.
-   * @returns the header and a log ending on a balanced `turn/end`.
-   */
-  abstract load(id: SessionId): Promise<SessionInspection>;
-  /**
-   * Inspect an immutable logical session without committing recovery or
-   * publishing it. A cold complete interrupted turn receives synthetic closers
-   * in memory and a torn physical tail remains untouched. An already-live
-   * Session instead yields its current immutable snapshot, which may contain an
-   * open turn and its `session/end-seed` boundary. Coordinator-backed
-   * implementations retain the exact cold unpublished Session for bounded
-   * reuse by a later {@link prepare}. A stale ready source is reloaded; a source
-   * already committing or reserved for resume remains exclusive, and inspection
-   * may borrow its immutable view. Callers borrow only the immutable header and
-   * log. Continuous external writers may delay revision convergence.
-   * @param id - the persisted session to inspect.
-   * @param signal - optional cancellation for queued and backend read work.
-   * @returns the validated header and current logical event log.
-   */
-  abstract inspect(id: SessionId, signal?: AbortSignal): Promise<SessionInspection>;
-  /**
-   * Borrow one exact inspection while retaining any reusable prepared source.
-   * A cold observation must pin the exact prepared Session that a later
-   * {@link prepare} reserves. Implementations must not degrade this operation
-   * to a detached {@link inspect} result.
-   * @param id - persisted session to observe.
-   * @param signal - optional cancellation for preparation work.
-   * @returns a disposable immutable observation.
-   */
-  abstract borrowSession(id: SessionId, signal?: AbortSignal): Promise<BorrowedSessionSource>;
-  /**
-   * Read the stored events from `fromSeq` onward — the read-from-seq
-   * primitive for read models that resume from a watermark (e.g. a persisted
-   * projection cache folding only the tail past its checkpoint). Unlike
-   * {@link inspect}, it is a detached physical suffix read: no preparation
-   * cache, torn-tail truncation, synthetic closers, or coordinator-state
-   * publication. Only events from the valid contiguous stored prefix are
-   * returned, so a torn fragment never reaches the caller. `fromSeq` at or
-   * beyond the stored prefix returns an empty event list (never an error).
-   * A backend whose medium can seek by seq may read only the suffix;
-   * sequential media such as JSONL still parse the whole artifact and skip
-   * forward. The primitive bounds what is returned and refolded, not every
-   * backend's physical read.
-   * @param id - the persisted session to read.
-   * @param fromSeq - first event offset to include.
-   * @param signal - optional cancellation for queued and backend read work.
-   * @returns storage metadata, the requested offset, and stored events with `seq >= fromSeq`.
-   */
-  abstract readFrom(id: SessionId, fromSeq: SessionLogOffset, signal?: AbortSignal): Promise<SessionEventSuffix>;
-  /**
-   * Lightweight listing from metadata, without a full-log parse.
-   * @param signal - optional cancellation for backend listing work.
-   * @returns one header per materialized session.
-   */
-  abstract list(signal?: AbortSignal): Promise<SessionHeader[]>;
-  /**
-   * List materialized sessions with cheap per-log change tokens.
+   * Open an existing stored session.
    *
-   * Repeated observations of an unchanged log return the same revision. A
-   * successful mutating {@link load} repair changes the next listed revision.
-   * Revisions also distinguish independently backed stores so backend-local
-   * counters cannot compare equal across different persistence sources.
-   * @param signal - optional cancellation for backend snapshot-listing work.
-   * @returns one header and opaque revision per materialized session without loading full logs.
+   * `read` never takes ownership and works while another handle (or process)
+   * holds write ownership. `write` atomically claims single-writer ownership;
+   * an existing active owner rejects.
+   * @param id - the stored session to open.
+   * @param access - `read` or `write`.
+   * @param options - optional cancellation.
+   * @returns the open handle.
+   * @throws {SessionPersistenceNotFoundError} when the session does not exist.
+   * @throws {SessionAlreadyOwnedError} for `write` when ownership is taken.
    */
-  abstract listSnapshots(signal?: AbortSignal): Promise<SessionPersistenceSnapshot[]>;
+  abstract open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle>;
+  /**
+   * Flush every active write handle owned by this service instance in one
+   * durability barrier: each handle's routed live events drain durably and
+   * its session materializes, exactly as that handle's own
+   * `SessionHandle.flush` would. Read handles buffer nothing and are
+   * untouched. A handle closed concurrently counts as flushed — close itself
+   * drains durably.
+   * @returns resolution once every write handle active at the call has flushed.
+   * @throws {AggregateError} naming each session whose flush failed; the
+   *   remaining handles still flush.
+   */
+  abstract flush(): Promise<void>;
+  /**
+   * Observe one stored session without reading its event log or taking
+   * ownership.
+   *
+   * The snapshot's `revision` is an opaque change token comparable only
+   * against revisions from the same service instance and session id: equal
+   * revisions may be treated as an unchanged log; unequal revisions promise
+   * nothing. Write-ownership churn does not change a revision. It exists for
+   * derived read-model caches keyed off `stat`/`list`; it plays no part in
+   * open, read, or resume.
+   * @param id - the stored session to observe.
+   * @param options - optional cancellation.
+   * @returns the snapshot, or `undefined` when the session does not exist.
+   */
+  abstract stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined>;
+  /**
+   * List every stored session visible to this process, in no promised order.
+   * @param options - optional cancellation.
+   * @returns one snapshot per stored session.
+   */
+  abstract list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]>;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-title@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-ag_36595831f35fdcfa14d51871bd0f972d/node_modules/@deepseek-ai/dsh-session-title/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-title@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-ag_8936cd7ae3cf91721c2fc38d26133392/node_modules/@deepseek-ai/dsh-session-title/lib/types/types.d.ts
 /** Identifies one session-title provider registration. */
 type SessionTitleProviderId$1 = Branded<'SessionTitleProviderId'>;
 /** Exact auxiliary model route that produced a title. */
@@ -5494,7 +5848,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   }
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-title@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-ag_36595831f35fdcfa14d51871bd0f972d/node_modules/@deepseek-ai/dsh-session-title/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-title@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-ag_8936cd7ae3cf91721c2fc38d26133392/node_modules/@deepseek-ai/dsh-session-title/lib/types/index.d.ts
 /** Identifies one session-title provider registration. */
 type SessionTitleProviderId = Branded<'SessionTitleProviderId'>;
 /**
@@ -5652,7 +6006,7 @@ declare class SessionTitleService extends Service {
   private ensureFallback;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-rc.1_50a2c90c7308affc34d4141d2123bc7d/node_modules/@deepseek-ai/dsh-session-query/lib/types/cursor.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.5-rc.2_2014ad72456bc3b90c04c603b2bf92c4/node_modules/@deepseek-ai/dsh-session-query/lib/types/cursor.d.ts
 /** Provider-owned opaque continuation token returned by session search. */
 type SessionSearchCursor = Branded<'SessionSearchCursor'>;
 /**
@@ -5662,7 +6016,7 @@ type SessionSearchCursor = Branded<'SessionSearchCursor'>;
  */
 declare function SessionSearchCursor(value: string): SessionSearchCursor;
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-rc.1_50a2c90c7308affc34d4141d2123bc7d/node_modules/@deepseek-ai/dsh-session-query/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.5-rc.2_2014ad72456bc3b90c04c603b2bf92c4/node_modules/@deepseek-ai/dsh-session-query/lib/types/types.d.ts
 /** Whether an event is current model context, replaced context, or raw-log-only. */
 type SessionEventSurface = 'current' | 'shadowed' | 'log-only';
 /** Lightweight identity and source availability for one logical session. */
@@ -5671,7 +6025,7 @@ interface SessionRecord {
   header: SessionHeader;
   /** Whether the id currently exists in `ctx.sessions`. */
   live: boolean;
-  /** Whether the active persistence backend currently materializes the id. */
+  /** Whether the active persistence backend currently lists the id, including a created-but-unmaterialized session it already observes. */
   persisted: boolean;
 }
 /** One atomic live-preferred observation of a session's current model surface. */
@@ -5691,7 +6045,7 @@ interface SessionLogSnapshot {
   session: SessionHeader;
   /** Exact number of fork-inherited events in the observed log. */
   inheritedEventCount: SessionLogOffset;
-  /** Cloned contiguous raw events after persistence repair and replay validation. */
+  /** Cloned contiguous raw events after in-memory interrupted-turn balancing and replay validation. */
   events: SessionEvent[];
 }
 /** Lightweight metadata for one event within a logical session. */
@@ -5918,16 +6272,22 @@ interface SessionSearchHit extends SessionRecord {
   bestMatch: SessionEventSearchHit;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-rc.1_50a2c90c7308affc34d4141d2123bc7d/node_modules/@deepseek-ai/dsh-session-query/lib/types/config.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.5-rc.2_2014ad72456bc3b90c04c603b2bf92c4/node_modules/@deepseek-ai/dsh-session-query/lib/types/config.d.ts
 /** Backend-independent configuration inherited by every session-query implementation. */
 interface Config$1 {
   /** Maximum accepted raw read context on either side. Defaults to 50. */
   readWindowMax?: number;
-  /** Maximum concurrent persisted-log inspections in one batch read. Defaults to 4. */
-  persistedInspectConcurrency?: number;
+  /** Maximum concurrent persisted-log reads in one batch read. Defaults to 4. */
+  persistedReadConcurrency?: number;
+  /**
+   * Maximum cold prepared-Session observations retained for reuse, keyed by
+   * durable revision. Entries pinned by active observation leases do not count
+   * against this bound until released. Defaults to 5.
+   */
+  preparedSessionCacheSize?: number;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-projection@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+d_60304b0c187e372f7325279b8c6d32b6/node_modules/@deepseek-ai/dsh-session-projection/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-projection@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+d_84cd66f454dbfc7490c4215f4e78e5dd/node_modules/@deepseek-ai/dsh-session-projection/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     sessionProjections: SessionProjectionRegistry;
@@ -6125,9 +6485,9 @@ declare class SessionProjectionRegistry extends Service {
    * yields an end below every watermark and the restore rejects for a full
    * re-read.
    * @param checkpoint - persisted rows for one session (possibly stale or empty).
-   * @returns the seq to hand the persistence `readFrom`, or `undefined`
-   *   when no unit is registered (no read needed — {@link restore} would
-   *   serve empty values regardless).
+   * @returns the offset for the stored-log suffix read (`SessionHandle.read`),
+   *   or `undefined` when no unit is registered (no read needed —
+   *   {@link restore} would serve empty values regardless).
    */
   restoreFloor(checkpoint: ProjectionCheckpoint): SessionLogOffset | undefined;
   /**
@@ -6146,8 +6506,8 @@ declare class SessionProjectionRegistry extends Service {
    * Cold read: fold every persisted unit over a stored log suffix, seeding
    * each from its checkpoint row when usable — the one read recipe (cached
    * state + forward tail replay + `view`) applied without a live `Session`.
-   * Call with the events returned by a persistence
-   * `readFrom(id, restoreFloor(checkpoint))` and that same floor as
+   * Call with the stored events at or past `restoreFloor(checkpoint)` (a
+   * `SessionHandle.read` slice) and that same floor as
    * `baseSeq`; the floor's one-below anchor makes the supplied end honest,
    * so a shrunk log is detected here. A row is usable iff its
    * `ver` matches the live unit's `stateVersion`, it does not predate `baseSeq`
@@ -6195,17 +6555,21 @@ declare class SessionProjectionRegistry extends Service {
   private viewCell;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-rc.1_50a2c90c7308affc34d4141d2123bc7d/node_modules/@deepseek-ai/dsh-session-query/lib/types/observation.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.5-rc.2_2014ad72456bc3b90c04c603b2bf92c4/node_modules/@deepseek-ai/dsh-session-query/lib/types/observation.d.ts
 /** One exact immutable Session cut retained for the caller's read lifetime. */
 interface SessionObservation extends Disposable {
   /** Whether the cut came from an attached Session or a retained preparation. */
   readonly source: 'live' | 'prepared';
   /** Immutable Session identity metadata. */
   readonly header: SessionHeader;
-  /** Immutable contiguous events at {@link cursor}. */
-  readonly events: readonly SessionEvent[];
-  /** Exact number of fork-inherited events in this Session lifecycle. */
+  /** Exact fork-inherited event count paired with {@link header}. */
   readonly inheritedEventCount: SessionLogOffset;
+  /**
+   * Immutable contiguous events at {@link cursor}. A live observation
+   * materializes this array on first read, so a consumer that reads only the
+   * header, cursor, or projections never copies the log.
+   */
+  readonly events: readonly SessionEvent[];
   /** Last observed event seq, or -1 for an empty log. */
   readonly cursor: SessionSeqCursor;
   /** Durable source revision for a cold prepared observation. */
@@ -6226,7 +6590,7 @@ interface SessionObservationOptions {
   readonly projectionMode?: 'all' | 'none';
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.2-rc.1_50a2c90c7308affc34d4141d2123bc7d/node_modules/@deepseek-ai/dsh-session-query/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-session-query@0.1.5-rc.2_2014ad72456bc3b90c04c603b2bf92c4/node_modules/@deepseek-ai/dsh-session-query/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     sessionQuery: SessionQueryEngine;
@@ -6359,7 +6723,7 @@ declare abstract class SessionQueryEngine extends Service {
   private _readWindow;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-rc.1_378496c507e2cd757c4255b1c9aa99d8/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/agent.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.5-rc.2_f6abae79571f790534db48922cafdc73/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/agent.d.ts
 /** Failures produced while resolving one ordinary Session identity to its live Agent. */
 type ApiSessionAgentError = RemoteError<'session/not-found' | 'session/agent-busy' | 'gateway/internal'>;
 /** Result of resolving one ordinary Session identity to its live Agent. */
@@ -6369,7 +6733,7 @@ type ApiSessionAgentResult = {
   readonly error: ApiSessionAgentError;
 };
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-file-reference@0.1.2-rc.1_@deepseek-ai+cordis@4.0.1_@deepseek-ai+dsh-a_c5df3c645d6820f98944b18ff9fb7968/node_modules/@deepseek-ai/dsh-file-reference/lib/types/types.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-file-reference@0.1.5-rc.2_@deepseek-ai+cordis@4.0.2_@deepseek-ai+dsh-a_a75a825149094c14f94307dc05d8221c/node_modules/@deepseek-ai/dsh-file-reference/lib/types/types.d.ts
 /**
  * Public file-reference discovery records. This module contains types only so
  * generated Remote clients can consume it without Host runtime code.
@@ -6383,7 +6747,7 @@ interface FileReferenceCandidate {
   kind: 'file' | 'directory';
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-rc.1_378496c507e2cd757c4255b1c9aa99d8/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/file-references.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.5-rc.2_f6abae79571f790534db48922cafdc73/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/file-references.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Host owner of the `fileReferences` Remote namespace. */
@@ -6405,7 +6769,7 @@ declare class SessionFileReferences extends TypertRemoteService {
   list(agent: Agent, query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]>;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-rc.1_378496c507e2cd757c4255b1c9aa99d8/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/skill-catalog.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.5-rc.2_f6abae79571f790534db48922cafdc73/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/skill-catalog.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Host owner of the Session-addressed `skills` Remote namespace. */
@@ -6429,7 +6793,7 @@ declare class SessionSkillCatalog extends TypertRemoteService {
   private scopeFor;
 }
 //#endregion
-//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.2-rc.1_378496c507e2cd757c4255b1c9aa99d8/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/index.d.ts
+//#region node_modules/.pnpm/@deepseek-ai+dsh-api-session-controller@0.1.5-rc.2_f6abae79571f790534db48922cafdc73/node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/index.d.ts
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Host Session business API and Remote namespace owner. */
@@ -6438,8 +6802,6 @@ declare module '@deepseek-ai/cordis' {
 }
 /** Session Controller deployment policy. */
 interface Config {
-  /** Maximum cold Session artifact size eligible for one full projection observation. */
-  readonly coldBlankProbeMaxBytes?: number;
   /** Override platform desktop-opener detection. */
   readonly nativeOpen?: boolean;
 }
@@ -6447,6 +6809,8 @@ interface Config {
 interface SessionControllerInternals {
   /** Native default-application handoff. */
   readonly openPath?: (path: string, signal: AbortSignal) => Promise<void>;
+  /** Native file-manager handoff. */
+  readonly revealPath?: (path: string, signal: AbortSignal) => Promise<void>;
   /** Native handoff availability probe. */
   readonly canOpenPath?: () => boolean;
 }
@@ -6460,11 +6824,13 @@ declare class SessionController extends TypertRemoteService {
   private readonly history;
   private readonly listState;
   private readonly openPath;
+  private readonly revealPath;
   private readonly canOpenPath;
   private readonly promotions;
   /**
    * @param ctx - Host context containing the Session capability assembly.
-   * @param config - cold-list observation policy.
+   * @param config - native-opener deployment policy.
+   * @param internals - host integrations replaceable by direct unit tests.
    */
   constructor(ctx: Context, config: Config, internals?: SessionControllerInternals);
   private promote;
@@ -6517,6 +6883,15 @@ declare class SessionController extends TypertRemoteService {
    * @returns true when the matching open operation is available.
    */
   canOpenWorkspacePath(): boolean;
+  /**
+   * Describe the serving desktop for authenticated file-action routes.
+   * @returns Host name, configured availability, and platform-specific file-manager behavior.
+   */
+  workspaceDesktop(): {
+    name: string;
+    available: boolean;
+    fileManager: 'finder' | 'explorer' | 'directory' | null;
+  };
   /**
    * Open one path prepared by a Session-aware caller on the Host desktop.
    * @param request - path after best-effort Session workspace resolution.
@@ -6573,7 +6948,8 @@ declare class SessionController extends TypertRemoteService {
    * Follow one Session log from its opening or resume cursor.
    * @param request - durable address and last committed sequence already held by the caller.
    * @param signal - cancellation owned by the Remote stream carrier.
-   * @returns a complete opening snapshot followed by gap-free event frames.
+   * @returns a complete opening snapshot followed by gap-free durable event
+   *   frames and optional cursorless assistant-stream frames.
    */
   follow(request: SessionFollowRequest, signal: AbortSignal): AsyncIterable<SessionFollowFrame>;
   /**

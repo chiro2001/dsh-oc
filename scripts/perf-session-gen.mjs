@@ -79,7 +79,49 @@ function makeId(prefix, rng = Math.random) {
   return `${prefix}-${hex()}-${hex().slice(0, 4)}-4${hex().slice(1, 4)}-${hex().slice(0, 4)}-${hex()}`
 }
 
-const SYSTEM_PROMPT = 'You are a helpful software engineer assistant.'
+/**
+ * dsh 0.1.5 replaced the durable `assistant/chunk` events with one settlement
+ * event embedding the exact timed stream. Keep a small well-formed stream so
+ * the perf corpus exercises the same history expansion as production logs.
+ */
+function assistantStream(turn, step, kind, payload) {
+  const time = 1000 + turn * 10 + step
+  if (kind === 'tool-call') {
+    return [
+      { type: 'chunk', time, chunk: { type: 'block-start', index: 0, blockType: 'tool-call' } },
+      {
+        type: 'tool-call-chunks',
+        time0: time,
+        index: 0,
+        dt: [],
+        id: payload.callId,
+        name: 'bash',
+        args: [payload.arguments],
+      },
+      {
+        type: 'chunk',
+        time,
+        chunk: {
+          type: 'block-end',
+          index: 0,
+          block: {
+            type: 'tool-call',
+            id: payload.callId,
+            name: 'bash',
+            arguments: payload.arguments,
+          },
+        },
+      },
+      { type: 'chunk', time, chunk: { type: 'finish', reason: { kind: 'tool-calls' } } },
+    ]
+  }
+  return [
+    { type: 'chunk', time, chunk: { type: 'block-start', index: 0, blockType: 'text' } },
+    { type: 'text-chunks', time0: time, index: 0, dt: [], texts: [payload.text] },
+    { type: 'chunk', time, chunk: { type: 'block-end', index: 0, block: { type: 'text', text: payload.text } } },
+    { type: 'chunk', time, chunk: { type: 'finish', reason: { kind: 'stop' } } },
+  ]
+}
 /** Match dsh-session-persistence-jsonl's checksummed frame encoding. */
 const ZSTD_CHECKSUM_OPTIONS = { params: { [constants.ZSTD_c_checksumFlag]: 1 } }
 const TOOL_SCHEMAS = [
@@ -106,7 +148,6 @@ function requestHeader(reason) {
         reasoningEffort: 'off',
       },
       adapterDefaults: { reasoningEffort: true, maxTokens: true },
-      system: SYSTEM_PROMPT,
       tools: TOOL_SCHEMAS,
     },
     reason,
@@ -196,6 +237,10 @@ export function makeSessionLog({
           source: { kind: 'model', provider: 'deepseek-official', model: 'mock-model' },
         },
         usage: { inputTokens: 160, outputTokens: 24 },
+        stream: assistantStream(turn, step, 'tool-call', {
+          callId: ToolCallId(callId),
+          arguments: argumentsJson,
+        }),
       }, { surfaceOp: 'append' })
       session.append('tool/call', {
         turn,
@@ -220,16 +265,18 @@ export function makeSessionLog({
         },
       }, { surfaceOp: 'append' })
     } else {
+      const replyText = `perf assistant reply ${turn}`
       session.append('assistant/message', {
         turn,
         step,
         message: {
           id: MessageId(makeId('msg-assistant', rng)),
           role: 'assistant',
-          content: [{ type: 'text', text: `perf assistant reply ${turn}` }],
+          content: [{ type: 'text', text: replyText }],
           source: { kind: 'model', provider: 'deepseek-official', model: 'mock-model' },
         },
         usage: { inputTokens: 160, outputTokens: 80 },
+        stream: assistantStream(turn, step, 'text', { text: replyText }),
       }, { surfaceOp: 'append' })
     }
     session.append('step/end', { turn, step })

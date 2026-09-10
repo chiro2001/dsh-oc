@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Real opencode TUI tool/diff e2e: mock LLM drives bash and
-# str_replace_editor file writes through the bridge, API diff endpoints expose
+# dsh-tool-fs writes through the bridge, API diff endpoints expose
 # the file changes, and the real TUI renders the "Modified Files" sidebar.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -69,10 +69,10 @@ stop_sse() {
   fi
 }
 
-echo "== str_replace_editor untracked file write =="
+echo "== dsh-tool-fs write creates an untracked file =="
 e2e_new_run "tools-edit" "danger-full-access" "tool_call_success,success" "1" \
-  '{"command":"create","path":"@WORKDIR@/created.txt","file_text":"created by str_replace_editor\n"}' \
-  "str_replace_editor"
+  '{"file_path":"@WORKDIR@/created.txt","content":"created by the write tool\n"}' \
+  "write"
 E2E_ACTIVE_SESSION="dsh-oc-tools-edit"
 e2e_start_dsh "$E2E_ACTIVE_SESSION"
 e2e_wait_bridge_url
@@ -84,7 +84,7 @@ wait_assistant_text "$EDIT_BRIDGE/session/$EDIT_SESSION/message" "mock response 
 
 EDIT_TOOL_JSON="$(curl -s "$EDIT_BRIDGE/session/$EDIT_SESSION/message" | jq -c '[.. | objects | select(.type == "tool") | {tool,state}] | .[0]')"
 jq -e '.tool == "edit" and .state.status == "completed" and (.state.metadata.diff | type) == "string" and (.state.metadata.diff | length > 0)' <<<"$EDIT_TOOL_JSON" >/dev/null
-echo "  str_replace_editor rendered as edit card with metadata.diff"
+echo "  dsh write rendered as edit card with metadata.diff"
 EDIT_DIFF="$(curl -s "$EDIT_BRIDGE/api/session/$EDIT_SESSION/diff")"
 if jq -e 'any(.[]; (.file // "") | endswith("created.txt"))' <<<"$EDIT_DIFF" >/dev/null; then
   echo "e2e: untracked created.txt leaked into API diff" >&2
@@ -92,7 +92,7 @@ if jq -e 'any(.[]; (.file // "") | endswith("created.txt"))' <<<"$EDIT_DIFF" >/d
 fi
 echo "  untracked created.txt excluded from sidebar diff"
 [[ -f "$E2E_WORKDIR/created.txt" ]]
-echo "  str_replace_editor wrote workdir file"
+echo "  dsh write created the workdir file"
 
 stop_sse
 e2e_stop_dsh "$E2E_ACTIVE_SESSION"

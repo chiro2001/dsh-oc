@@ -1,7 +1,7 @@
 {
   "generator": "scripts/build-replay-corpus.mjs",
   "version": 1,
-  "generatedAt": "2026-08-16T19:55:17.240Z",
+  "generatedAt": "2026-09-10T17:28:40.925Z",
   "note": "Synthetic structure-preserving fixtures; no real session content.",
   "fixtures": [
     {
@@ -12,7 +12,7 @@
         "text"
       ],
       "equivalence": true,
-      "bytes": 942
+      "bytes": 988
     },
     {
       "file": "single-tool-followup.jsonl",
@@ -23,7 +23,7 @@
         "followup-text"
       ],
       "equivalence": true,
-      "bytes": 1829
+      "bytes": 1875
     },
     {
       "file": "multi-tool-queued.jsonl",
@@ -34,7 +34,7 @@
         "followup-text"
       ],
       "equivalence": true,
-      "bytes": 3201
+      "bytes": 3272
     },
     {
       "file": "tool-error.jsonl",
@@ -53,7 +53,7 @@
         "text"
       ],
       "equivalence": true,
-      "bytes": 1157
+      "bytes": 1134
     },
     {
       "file": "interrupted.jsonl",
@@ -62,7 +62,7 @@
         "interrupt"
       ],
       "equivalence": false,
-      "bytes": 510
+      "bytes": 487
     },
     {
       "file": "goal-change.jsonl",
@@ -71,7 +71,7 @@
         "goal"
       ],
       "equivalence": true,
-      "bytes": 933
+      "bytes": 910
     },
     {
       "file": "plugin-context.jsonl",
@@ -81,7 +81,7 @@
         "text"
       ],
       "equivalence": true,
-      "bytes": 986
+      "bytes": 1009
     },
     {
       "file": "session-title.jsonl",
@@ -91,7 +91,7 @@
         "text"
       ],
       "equivalence": true,
-      "bytes": 911
+      "bytes": 934
     },
     {
       "file": "unfinished-turn.jsonl",
@@ -100,7 +100,7 @@
         "unfinished-turn"
       ],
       "equivalence": false,
-      "bytes": 393
+      "bytes": 370
     },
     {
       "file": "queued-mid-followup.jsonl",
@@ -110,7 +110,7 @@
         "followup-text"
       ],
       "equivalence": false,
-      "bytes": 2186
+      "bytes": 2256
     }
   ]
 }

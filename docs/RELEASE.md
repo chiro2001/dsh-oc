@@ -1,10 +1,11 @@
 # dsh-oc 发布与回滚流程
 
-`v0.2.0-rc.1` 已于 2026-09-07 发布；`v0.2.0-rc.2` 已于 2026-09-08 发布，
-面向 dsh `>=0.1.2-rc.1`。后续候选复用本清单，把文中的
+`v0.2.0-rc.1` 已于 2026-09-07 发布；`v0.2.0-rc.2` 已于 2026-09-08 发布。
+rc.1–rc.3 面向 dsh `>=0.1.2-rc.1`；rc.4 起面向 dsh `>=0.1.5-rc.2`（host ABI
+破坏性变更，跨 0.1.2/0.1.5 的安装不可混用）。后续候选复用本清单，把文中的
 `<candidate-version>` 替换为实际版本。
 
-本次候选版本为 `v0.2.0-rc.3`；rc.1/rc.2 发布记录保留为历史证据。
+本次候选版本为 `v0.2.0-rc.4`；rc.1–rc.3 发布记录保留为历史证据。
 
 发布决策依据见 `expert-advice/round-0002/decision.md`；npm 继续 NO-GO。包
 `@chiro2001/dsh-oc` 只走 GitHub 源安装，发布物以**完整 commit SHA** 为真相源，
@@ -32,8 +33,11 @@
    ```bash
    bash scripts/e2e-install-rollback.sh \
      --candidate "github:chiro2001/dsh-oc#<full-sha>" \
-     --previous "github:chiro2001/dsh-oc#<同 dsh-0.1.2-ABI 的上一不可变 sha>"
+     --previous "github:chiro2001/dsh-oc#<同 dsh-0.1.5-ABI 的上一不可变 sha>"
    ```
+   rc.4 是首个 0.1.5-ABI 版本，没有同 ABI 的前一不可变 SHA：回滚演练用 rc.4
+   自身的 full SHA 验证冷装/重装幂等，并另外验证跨 ABI 回滚到 rc.3 时必须同时
+   把 dsh CLI 降到 `0.1.2-rc.1`（否则按预期无法启动，不算失败）。
    验证：冷装成功、包版本为 `<candidate-version>`、TUI smoke 通过、旧会话可恢复、
    回滚可操作；脚本同时断言 `pnpm-lock.yaml` 实际解析到指定 full SHA，不能只
    用相同版本号冒充回滚成功。
@@ -98,10 +102,10 @@
 任何一步出现 blocker（stale/missing `lib`、版本与 `<candidate-version>` 不符、远端 SHA 安装
 失败、旧会话不兼容、恢复不一致、CI 语义失败靠 retry 洗绿），停止发布；
 修复后从**全新 profile** 重跑对应演练，不在污染环境续测。当前 RC 是 dsh ABI
-breaking minor：同 dsh `0.1.2-rc.1` 内回滚可重新安装同 ABI 的前一不可变 SHA；
-若回滚到 `dsh-oc v0.1.0`，必须同时将 dsh CLI 回滚到 `0.1.0-rc.6`。只降
-dsh-oc、保留 dsh 0.1.2 会因旧版 `apiProxy` 与新版 `sessionController` 契约不同
-而无法启动。
+breaking minor：同 dsh `0.1.5-rc.2` 内回滚可重新安装同 ABI 的前一不可变 SHA
+（rc.4 的上一不可变 SHA 为 rc.3，但它面向 dsh 0.1.2，不能与本版共用 dsh CLI）；
+若回滚到 `dsh-oc v0.1.0`，必须同时将 dsh CLI 回滚到 `0.1.0-rc.6`。跨 ABI 回滚
+必须同时回滚 dsh CLI，否则旧版 host-services/事件契约与新版 dsh 不同而无法启动。
 
 ## opencode 二进制升级（独立 lane，不混入当前候选）
 

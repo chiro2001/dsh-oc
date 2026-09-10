@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { BridgeFrame, ToolEventView } from './dsh-types.js'
 import type { BridgeEvent } from './dsh-types.js'
-import type { ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
+import type { StreamChunk, ToolResultBlock } from '@deepseek-ai/dsh-llm/types'
 import type { SnapshotFileDiff } from '@opencode-ai/sdk/v2/types'
 import {
   assistantMessageFromEvent,
@@ -812,10 +812,89 @@ export class MuxEventTranslator {
     }
   }
 
+  /**
+   * Translate one dsh 0.1.5 live assistant `StreamChunk` into opencode
+   * streaming events. The wire union is unchanged from the deleted
+   * `assistant/chunk` session event; only its transport moved to
+   * `agent/assistant-stream` frames.
+   */
+  private translateAssistantChunk(
+    sessionId: string,
+    turn: number,
+    step: number,
+    time: number,
+    chunk: StreamChunk,
+    directory: string,
+    project: string,
+  ): BridgeGlobalEvent[] {
+    if (chunk.type === 'block-start') {
+      this.streamState(sessionId).blockStarts.set(`${turn}:${step}:${chunk.index}:${chunk.blockType}`, time)
+      return []
+    }
+    if (chunk.type === 'finish') {
+      this.streamState(sessionId).finishReasons.set(`${turn}:${step}`, chunk.reason.kind)
+      return []
+    }
+    if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+      return this.translateStreamChunks(
+        sessionId,
+        {
+          type: chunk.type === 'text-delta' ? 'text-chunks' : 'reasoning-chunks',
+          // Live frames carry no session seq; the row readers only need time.
+          seq: 0,
+          time,
+          time0: time,
+          data: {
+            turn,
+            step,
+            index: chunk.index,
+            texts: [chunk.text],
+          },
+        },
+        directory,
+        project,
+      )
+    }
+    if (chunk.type === 'tool-call-delta') {
+      return this.feedToolCallDelta(
+        sessionId,
+        turn,
+        step,
+        chunk.index,
+        chunk.id,
+        chunk.name,
+        chunk.argumentsDelta,
+        time,
+        directory,
+        project,
+      )
+    }
+    return []
+  }
+
   translate(frame: BridgeFrame): BridgeGlobalEvent[] {
     switch (frame.type) {
       case 'session/event':
         return this.translateSessionEvent(frame.sessionId, frame.event, frame.view)
+      case 'session/assistant-stream': {
+        const sessionId = String(frame.sessionId)
+        // Live frames are process-local and transient; the attempt identity
+        // still guards against a duplicated listener delivery without ever
+        // colliding with the durable history keys (`sessionId:seq`).
+        const frameKey = `${sessionId}:${frame.attemptId}:${frame.revision}:${frame.index}`
+        if (this.deps.replayGuard?.chunks?.has(frameKey)) return []
+        this.deps.replayGuard?.chunks?.add(frameKey)
+        const directory = directoryFor(sessionId, this.deps)
+        return this.translateAssistantChunk(
+          sessionId,
+          frame.turn,
+          frame.step,
+          frame.time,
+          frame.chunk,
+          directory,
+          projectIdFor(directory),
+        )
+      }
       case 'approval/requested': {
         const approvalId = String(frame.approvalId)
         if (this.deps.replayGuard?.approvals.has(approvalId)) return []
@@ -1213,57 +1292,6 @@ export class MuxEventTranslator {
           directory,
           project,
         )
-      case 'assistant/chunk': {
-        const chunkSeqKey = `${sessionId}:${event.seq}`
-        if (this.deps.replayGuard?.chunks?.has(chunkSeqKey)) return []
-        this.deps.replayGuard?.chunks?.add(chunkSeqKey)
-        const chunk = event.data.chunk
-        if (chunk.type === 'block-start') {
-          this.streamState(sessionId).blockStarts.set(
-            `${event.data.turn}:${event.data.step}:${chunk.index}:${chunk.blockType}`,
-            event.time,
-          )
-          return []
-        }
-        if (chunk.type === 'finish') {
-          this.streamState(sessionId).finishReasons.set(`${event.data.turn}:${event.data.step}`, chunk.reason.kind)
-          return []
-        }
-        if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
-          return this.translateStreamChunks(
-            sessionId,
-            {
-              type: chunk.type === 'text-delta' ? 'text-chunks' : 'reasoning-chunks',
-              seq: event.seq,
-              time: event.time,
-              time0: event.time,
-              data: {
-                turn: event.data.turn,
-                step: event.data.step,
-                index: chunk.index,
-                texts: [chunk.text],
-              },
-            },
-            directory,
-            project,
-          )
-        }
-        if (chunk.type === 'tool-call-delta') {
-          return this.feedToolCallDelta(
-            sessionId,
-            event.data.turn,
-            event.data.step,
-            chunk.index,
-            chunk.id,
-            chunk.name,
-            chunk.argumentsDelta,
-            event.time,
-            directory,
-            project,
-          )
-        }
-        return []
-      }
       case 'tool-call-chunks':
         return this.translateToolCallChunks(
           sessionId,
@@ -1559,6 +1587,11 @@ export class MuxEventTranslator {
       case 'session/end-seed':
       case 'approval/asked':
       case 'approval/decided':
+      // dsh 0.1.5: one model attempt whose settlement committed no surface
+      // message. Its live stream frames were already translated; the
+      // settlement itself has no TUI surface (a retry continues the step and
+      // the committed assistant/message replaces the provisional card).
+      case 'assistant/attempt':
         // Log-only / environment-snapshot events: no TUI surface. Explicitly
         // silent so genuinely unknown event types stay loud in the logs.
         return []

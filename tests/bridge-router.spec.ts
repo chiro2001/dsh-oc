@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Inbox } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-agent'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { createBridgeRouter, hostSessionAddedEvents, recordSessionSummaries, type BridgeRouter } from '../src/bridge/router.js'
@@ -127,18 +127,29 @@ describe('bridge router: startup GET routes', () => {
     expect(router.ctx.state.getHistoryCache(historyCacheKey('s-partial', 100), 1000)).toBeUndefined()
   })
 
-  it('expands packed chunk rows with the final dt end time', () => {
-    const [entry] = expandRecord({
-      type: 'chunks',
+  it('expands an embedded assistant stream run with the final dt end time', () => {
+    const entries = expandRecord({
+      type: 'event',
       event: {
-        type: 'chunkrow/text-chunks',
+        type: 'assistant/message',
         seq: 10,
-        time: 100,
-        data: { turn: 1, step: 1, index: 0, dt: [10, 20], texts: ['a', 'b', 'c'] },
+        time: 200,
+        data: {
+          turn: 1,
+          step: 1,
+          message: { id: 'm1', role: 'assistant', content: [], source: { kind: 'model' } },
+          stream: [
+            { type: 'text-chunks', time0: 100, index: 0, dt: [10, 20], texts: ['a', 'b', 'c'] },
+          ],
+        },
       },
     } as never)
-    expect(entry?.event.time).toBe(130)
-    expect((entry?.event as { time0?: number }).time0).toBe(100)
+    const row = entries[0]?.event as { type?: string; time?: number; time0?: number }
+    expect(row.type).toBe('text-chunks')
+    expect(row.time).toBe(130)
+    expect(row.time0).toBe(100)
+    // The durable settlement itself follows the re-materialized run rows.
+    expect((entries[1]?.event as { type?: string }).type).toBe('assistant/message')
   })
 
   it('bridges the removed Session.events getter for older profile plugins', () => {
@@ -1317,13 +1328,30 @@ describe('bridge router: session routes', () => {
   })
 
   it('executes OpenCode shell mode through Agent maintenance and hydrates the synthetic tool card', async () => {
+    /**
+     * dsh-agent 0.1.5 exposes the Agent inbox as an interface only (the
+     * concrete Inbox lives in dsh-agent-loop), so the test reproduces the two
+     * facts this path observes: the pending next-step list and the durable
+     * `agent/inbox/spliced` event.
+     */
+    class TestInbox {
+      readonly nextStep: Array<{ role: string; source: unknown; content: Array<{ type: string; text?: string }> }> = []
+      constructor(private readonly session: Session) {}
+      append(
+        target: 'next-step',
+        message: { role: string; source: unknown; content: Array<{ type: string; text?: string }> },
+      ): void {
+        this.nextStep.push(message)
+        this.session.append('agent/inbox/spliced', {
+          target,
+          start: this.nextStep.length - 1,
+          inserted: [message as never],
+        })
+      }
+    }
     const base = fakeApi()
     const inboxSession = Session.create(SessionId('s1'))
-    const inbox = new Inbox(inboxSession, {
-      inserted: () => {},
-      discarded: () => {},
-      claimed: () => {},
-    })
+    const inbox = new TestInbox(inboxSession)
     const injected: Array<{
       role: string
       source: { kind: string; plugin?: string; form?: string; summary?: string }

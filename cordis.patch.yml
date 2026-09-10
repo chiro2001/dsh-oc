@@ -25,6 +25,12 @@
     - id: directory-picker
       name: '@deepseek-ai/dsh-host-directory-picker-auto'
 
+    # dsh 0.1.5 moved `fileUploads` into the session-controller inject list.
+    # oc-bridge has no browser transport, so mount the headless provider in
+    # the same insert before the controller (activation follows insert order).
+    - id: oc-file-uploads
+      name: '@chiro2001/dsh-oc/file-uploads'
+
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
 

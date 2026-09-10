@@ -27,18 +27,24 @@ function ev(type, data, extra = {}) {
 }
 
 function chunkRow(type, texts, index, data = {}, time0 = t(), step = 1) {
+  const rowSeq = nextSeq()
   return {
     type,
-    seq0: nextSeq(),
+    seq: rowSeq,
+    seq0: rowSeq,
+    time: time0,
     time0,
     data: { turn, step, index, dt: [], texts, ...data },
   }
 }
 
 function toolChunkRow(args, index, callId, time0 = t(), step = 1) {
+  const rowSeq = nextSeq()
   return {
     type: 'tool-call-chunks',
-    seq0: nextSeq(),
+    seq: rowSeq,
+    seq0: rowSeq,
+    time: time0,
     time0,
     data: { turn, step, index, dt: [], id: callId, name: 'bash', args },
   }
@@ -50,14 +56,6 @@ function user(text = 'synthetic user prompt', id = `msg-user-${nextSeq()}`) {
     source: { kind: 'user' },
     role: 'user',
     id,
-  })
-}
-
-function assistantChunk(blockType, text, index = 0, step = 1) {
-  return ev('assistant/chunk', {
-    turn,
-    step,
-    chunk: { type: 'text-delta', index, blockType, text },
   })
 }
 
@@ -210,7 +208,7 @@ const fixtures = [
     compactionSummary('c-1', 'synthetic compaction summary'),
     startTurn(),
     user('post-compaction prompt'),
-    assistantChunk('text-delta', 'post-compaction answer', 0),
+    chunkRow('text-chunks', ['post-compaction answer'], 0),
     assistantMessage([{ type: 'text', text: 'post-compaction answer' }]),
     endTurn(),
     compactionEnd('c-1'),
@@ -218,14 +216,14 @@ const fixtures = [
   fixture('interrupted', ['interrupt'], () => [
     startTurn(),
     user('interrupt me'),
-    assistantChunk('text-delta', 'partial', 0),
+    chunkRow('text-chunks', ['partial'], 0),
     endTurn('interrupted', { message: 'synthetic interrupt' }),
   ], false),
   fixture('goal-change', ['goal'], () => [
     startTurn(),
     goalChange({ text: 'synthetic goal', status: 'active' }),
     user('work on goal'),
-    assistantChunk('text-delta', 'goal acknowledged', 0),
+    chunkRow('text-chunks', ['goal acknowledged'], 0),
     assistantMessage([{ type: 'text', text: 'goal acknowledged' }]),
     endTurn(),
   ]),
@@ -248,7 +246,7 @@ const fixtures = [
   fixture('unfinished-turn', ['unfinished-turn'], () => [
     startTurn(),
     user('still running'),
-    assistantChunk('text-delta', 'partial answer', 0),
+    chunkRow('text-chunks', ['partial answer'], 0),
   ], false),
   fixture('queued-mid-followup', ['queue', 'followup-text'], () => [
     startTurn(),

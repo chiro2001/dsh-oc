@@ -142,17 +142,21 @@ describe('convert/message (v1)', () => {
     }
   })
 
-  it('uses assistant chunk block-start times for reasoning duration', () => {
+  it('uses embedded stream block-start times for reasoning duration', () => {
     const events = [
-      sessionEvent('assistant/chunk', {
-        turn: 1,
-        step: 1,
-        chunk: { type: 'block-start', index: 0, blockType: 'reasoning' },
-      }, 1, 1000),
-      makeAssistantEvent([
-        { type: 'reasoning', text: 'think' },
-        { type: 'text', text: 'answer' },
-      ]),
+      makeAssistantEvent(
+        [
+          { type: 'reasoning', text: 'think' },
+          { type: 'text', text: 'answer' },
+        ],
+        'msg-assistant-1',
+        1200,
+        undefined,
+        [
+          { type: 'chunk', time: 1000, chunk: { type: 'block-start', index: 0, blockType: 'reasoning' } },
+          { type: 'chunk', time: 1200, chunk: { type: 'block-start', index: 1, blockType: 'text' } },
+        ],
+      ),
     ]
     const [entry] = convertMessagesV1(events, opts)
     expect(entry?.parts[0]).toMatchObject({ type: 'reasoning', time: { start: 1000, end: 1200 } })
@@ -175,23 +179,22 @@ describe('convert/message (v1)', () => {
     expect(entry?.parts[1]).toMatchObject({ type: 'text', time: { start: 1200, end: 1200 } })
   })
 
-  it('uses turn/start and block-start times for assistant history durations', () => {
+  it('uses turn/start and embedded block-start times for assistant history durations', () => {
     const events = [
       sessionEvent('turn/start', { turn: 1 }, 1, 1000),
-      sessionEvent('assistant/chunk', {
-        turn: 1,
-        step: 1,
-        chunk: { type: 'block-start', index: 0, blockType: 'reasoning' },
-      }, 2, 1100),
-      sessionEvent('assistant/chunk', {
-        turn: 1,
-        step: 1,
-        chunk: { type: 'block-start', index: 1, blockType: 'text' },
-      }, 3, 1100),
-      makeAssistantEvent([
-        { type: 'reasoning', text: 'think' },
-        { type: 'text', text: 'answer' },
-      ], 'm-duration', 2000),
+      makeAssistantEvent(
+        [
+          { type: 'reasoning', text: 'think' },
+          { type: 'text', text: 'answer' },
+        ],
+        'm-duration',
+        2000,
+        undefined,
+        [
+          { type: 'chunk', time: 1100, chunk: { type: 'block-start', index: 0, blockType: 'reasoning' } },
+          { type: 'chunk', time: 1100, chunk: { type: 'block-start', index: 1, blockType: 'text' } },
+        ],
+      ),
     ]
     const [entry] = convertMessagesV1(events, opts)
     expect(entry?.info.role).toBe('assistant')
@@ -429,15 +432,18 @@ describe('convert/message (v2)', () => {
   it('fixes v2 assistant created/completed and reasoning part times', () => {
     const messages = convertMessagesV2([
       sessionEvent('turn/start', { turn: 1 }, 1, 1000),
-      sessionEvent('assistant/chunk', {
-        turn: 1,
-        step: 1,
-        chunk: { type: 'block-start', index: 0, blockType: 'reasoning' },
-      }, 2, 1100),
-      makeAssistantEvent([
-        { type: 'reasoning', text: 'think' },
-        { type: 'text', text: 'answer' },
-      ], 'm-v2-duration', 2000),
+      makeAssistantEvent(
+        [
+          { type: 'reasoning', text: 'think' },
+          { type: 'text', text: 'answer' },
+        ],
+        'm-v2-duration',
+        2000,
+        undefined,
+        [
+          { type: 'chunk', time: 1100, chunk: { type: 'block-start', index: 0, blockType: 'reasoning' } },
+        ],
+      ),
     ], opts)
     const assistant = messages[0]
     expect(assistant?.type).toBe('assistant')

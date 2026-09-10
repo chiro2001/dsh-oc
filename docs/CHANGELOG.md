@@ -9,6 +9,33 @@
 - 修复发布后本地安装 resolver：只解析 dsh-oc codeload SHA，区分 dsh-dcp 等其他包；
   无 `rg` 时使用隔离验证过的 grep fallback，扫描失败或 SHA 缺失/歧义时 fail-closed。
 
+## [0.2.0-rc.4] - 2026-09-11
+
+本候选面向 dsh `>=0.1.5-rc.2`，是 host ABI 破坏性适配：dsh 0.1.5 改了
+session-controller 依赖与 assistant 流式事件模型，**不再兼容 dsh 0.1.2 及更早**。
+发布/远端不可变标识以最终 GitHub notes 为准。
+
+- 修复 profile 无法启动：dsh 0.1.5 的 `dsh-api-session-controller` 新增硬依赖
+  `fileUploads`，oc-bridge 现在按顺序插入 headless provider
+  `@chiro2001/dsh-oc/file-uploads`；`bindPrompt` 返回带 `Symbol.dispose` 的绑定，
+  满足 0.1.5 的显式资源管理（否则 prompt 以
+  `session/agent-busy` + `TypeError: Object not disposable` 失败）。
+- 实时流式移植：已删除的 `assistant/chunk` 会话事件改为全局订阅
+  `agent/assistant-stream` 帧（attempt `start` 记录 turn/step，`chunk` 复用原
+  chunk 翻译，`end` 回收 attempt），迟到且无 start 的帧安全丢弃。
+- 历史移植：`SessionHistoryRecord` 的 `chunks` 记录被内嵌
+  `assistant/message.stream` / `assistant/attempt.stream` 取代；`expandRecord`
+  把 packed run 还原为 `text-chunks`/`reasoning-chunks`/`tool-call-chunks` 行，
+  并从 raw `block-start`/`block-end`/`finish` 还原部件时长与 finish reason；
+  `assistant/attempt` 在 live 与历史都不产生 TUI surface。
+- 文件工具适配 dsh 0.1.5：`write`/`edit`（`dsh-tool-fs`）在新文件/无 presentation
+  回放时从调用参数合成 diff，opencode edit 卡片继续携带 `metadata.diff`；
+  `tests/e2e-tui-tools.sh` 的 untracked write 场景改用 `write` 工具。
+- 依赖与门禁：devDeps 升到 dsh 0.1.5-rc.2 / cordis 4.0.2，peer 范围收紧为
+  `>=0.1.5-rc.2`；CI 固定 dsh 0.1.5-rc.2；`pnpm install` 由 pnpm 维护
+  `pnpm-workspace.yaml` 的 prerelease 例外；replay 语料与 perf session 生成器
+  更新为 0.1.5 事件形状（session format v3）。
+
 ## [0.2.0-rc.3] - 2026-09-08
 
 本候选面向 dsh `>=0.1.2-rc.1`；发布/远端不可变标识以最终 GitHub notes 为准。
