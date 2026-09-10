@@ -9,7 +9,7 @@
  * sessions can be generated in seconds.
  *
  * Layout (mirrors @deepseek-ai/dsh-session-persistence-jsonl):
- *   $DSH_HOME/sessions/<projectKey(cwd)>/<encodeSegment(id)>/session.jsonl.zstd
+ *   $DSH_HOME/sessions/<projectKey(cwd)>/<encodeSegment(id)>/session.v3.jsonl.zstd
  *
  * CLI:
  *   node scripts/perf-session-gen.mjs \
@@ -297,7 +297,10 @@ export function makeSessionLog({
 export function writeSessionLog(root, { id, cwd, text }) {
   const dir = join(root, projectKey(cwd), encodeSegment(id))
   mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const path = join(dir, 'session.jsonl.zstd')
+  // dsh 0.1.5 tags the physical generation: v0 keeps the suffix-only name,
+  // later formats carry `v<N>` (current format is v3).
+  const generation = SESSION_FORMAT_VERSION === 0 ? 'session' : `session.v${SESSION_FORMAT_VERSION}`
+  const path = join(dir, `${generation}.jsonl.zstd`)
   const newline = text.indexOf('\n')
   const header = Buffer.from(text.slice(0, newline + 1))
   const body = Buffer.from(text.slice(newline + 1))

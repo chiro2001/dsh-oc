@@ -162,7 +162,7 @@ describe('perf session generator', () => {
       const sessionEntries = readdirSync(sessionDir)
       expect(sessionEntries).toHaveLength(6)
       for (const entry of sessionEntries) {
-        expect(existsSync(join(sessionDir, entry, 'session.jsonl.zstd'))).toBe(true)
+        expect(existsSync(join(sessionDir, entry, 'session.v3.jsonl.zstd'))).toBe(true)
       }
     } finally {
       rmSync(dir, { recursive: true, force: true })

@@ -22,7 +22,7 @@ function walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) out.push(...walk(full))
-    else if (entry.name === 'session.jsonl.zstd') out.push(full)
+    else if (entry.name === 'session.jsonl.zstd' || /^session\.v\d+\.jsonl\.zstd$/.test(entry.name)) out.push(full)
   }
   return out
 }
@@ -106,6 +106,14 @@ for (const file of files) {
     const type = String(event.type ?? 'unknown')
     types[type] = (types[type] ?? 0) + 1
     eventTypes[type] = (eventTypes[type] ?? 0) + 1
+    // dsh 0.1.5 embeds the exact packed model stream in the assistant
+    // settlement event; count those runs as the text/reasoning/tool features
+    // the pre-0.1.5 durable `chunkrow/*` records used to expose.
+    for (const record of event.data?.stream ?? []) {
+      const recordType = String(record?.type ?? 'unknown')
+      types[recordType] = (types[recordType] ?? 0) + 1
+      eventTypes[recordType] = (eventTypes[recordType] ?? 0) + 1
+    }
   }
   for (const feature of featuresOf(types, events)) {
     featureSessions[feature] = (featureSessions[feature] ?? 0) + 1

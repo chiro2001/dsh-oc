@@ -30,7 +30,7 @@ function walk(dir: string): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) out.push(...walk(full))
-    else if (entry.name === 'session.jsonl.zstd') out.push(full)
+    else if (entry.name === 'session.jsonl.zstd' || /^session\.v\d+\.jsonl\.zstd$/.test(entry.name)) out.push(full)
   }
   return out
 }
