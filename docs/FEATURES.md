@@ -154,7 +154,7 @@
 <!-- FEATURES:AUTO:START -->
 ## 自动追踪（脚本生成）
 
-> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`952fb06`（2026-09-09）。
+> 运行 `pnpm run features:update` 重新生成。生成时 HEAD：`54e2d60`（2026-09-11）。
 
 ### 路由注册表
 
@@ -179,22 +179,22 @@
 |---|---|---|
 | `tests/bin.spec.ts` | 5 | 050803b chore(release): bump version to 0.1.0 for first release |
 | `tests/bridge-errors.spec.ts` | 1 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `tests/bridge-events.spec.ts` | 88 | 468c05f feat(bridge): add shell mode and settle preset cards |
+| `tests/bridge-events.spec.ts` | 89 | aade0a7 fix(bridge): expose the live provisional assistant to history reads |
 | `tests/bridge-fs.spec.ts` | 5 | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `tests/bridge-git.spec.ts` | 6 | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
-| `tests/bridge-router.spec.ts` | 144 | caff946 fix(bridge): keep reasoning effort in sync |
+| `tests/bridge-router.spec.ts` | 144 | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `tests/convert/goal.spec.ts` | 5 | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `tests/convert/message.spec.ts` | 25 | caff946 fix(bridge): keep reasoning effort in sync |
+| `tests/convert/message.spec.ts` | 25 | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `tests/convert/model.spec.ts` | 7 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `tests/convert/permission.spec.ts` | 4 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/question.spec.ts` | 5 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `tests/convert/session.spec.ts` | 8 | d6c834f fix(bridge): preserve subagent metadata and canonical order |
 | `tests/convert/todo.spec.ts` | 3 | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `tests/convert/tool.spec.ts` | 19 | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
-| `tests/perf.spec.ts` | 5 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
+| `tests/convert/tool.spec.ts` | 19 | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
+| `tests/perf.spec.ts` | 5 | fb50dbe fix(perf): write v3 session generation filenames |
 | `tests/protocol-probe.spec.ts` | 2 | de7fe57 feat(probe): protocol route/version probe with missing-route reporting |
 | `tests/replay-corpus.spec.ts` | 2 | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `tests/scaffold.spec.ts` | 12 | 46c4319 fix(release): validate ABI-compatible rollback |
+| `tests/scaffold.spec.ts` | 12 | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `tests/tui/binary.spec.ts` | 18 | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `tests/tui/branding-art.spec.ts` | 3 | 3c3984c feat(tui): generate DSH OC home logo with figlet tooling |
 | `tests/tui/download.spec.ts` | 7 | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
@@ -207,38 +207,38 @@
 |---|---|
 | `src/bridge/convert/common.ts` | d86e5fa feat(bridge): model variants, reasoning effort and dsh presets |
 | `src/bridge/convert/goal.ts` | 34f5695 feat(bridge): goal projection, /goal command and sidebar todo merge |
-| `src/bridge/convert/message.ts` | caff946 fix(bridge): keep reasoning effort in sync |
+| `src/bridge/convert/message.ts` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `src/bridge/convert/model.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `src/bridge/convert/permission.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/question.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
 | `src/bridge/convert/session.ts` | caff946 fix(bridge): keep reasoning effort in sync |
 | `src/bridge/convert/todo.ts` | 0af3147 feat(bridge): opencode-compatible HTTP/SSE bridge over dsh api proxy |
-| `src/bridge/convert/tool.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
-| `src/bridge/dsh-types.ts` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
+| `src/bridge/convert/tool.ts` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
+| `src/bridge/dsh-types.ts` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `src/bridge/errors.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `src/bridge/events-util.ts` | caff946 fix(bridge): keep reasoning effort in sync |
-| `src/bridge/events.ts` | caff946 fix(bridge): keep reasoning effort in sync |
-| `src/bridge/file-uploads.ts` | — |
+| `src/bridge/events.ts` | aade0a7 fix(bridge): expose the live provisional assistant to history reads |
+| `src/bridge/file-uploads.ts` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `src/bridge/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/git.ts` | cec436e perf(bridge): merge vcs status numstat into one HEAD diff pass |
 | `src/bridge/http.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
-| `src/bridge/index.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
+| `src/bridge/index.ts` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `src/bridge/router-entry.ts` | 6928f8a feat(bridge): expose router entry and add minimal-server renderer attribution |
-| `src/bridge/router.ts` | caff946 fix(bridge): keep reasoning effort in sync |
+| `src/bridge/router.ts` | aade0a7 fix(bridge): expose the live provisional assistant to history reads |
 | `src/bridge/routes.ts` | 5f6aad0 feat(bridge): serve workspace files over /api/fs with wildcard routing |
 | `src/bridge/routes/boot.ts` | 0637c81 fix(bridge): advertise the configured default preset as the TUI's first agent |
 | `src/bridge/routes/fs.ts` | 2fc8dea feat(bridge): return extension-aware content types from fs read |
 | `src/bridge/routes/permission.ts` | fd1e4b5 feat(bridge): add SDK v2 permission reply alias route |
-| `src/bridge/routes/session-v1.ts` | caff946 fix(bridge): keep reasoning effort in sync |
-| `src/bridge/routes/session-v2.ts` | caff946 fix(bridge): keep reasoning effort in sync |
+| `src/bridge/routes/session-v1.ts` | aade0a7 fix(bridge): expose the live provisional assistant to history reads |
+| `src/bridge/routes/session-v2.ts` | aade0a7 fix(bridge): expose the live provisional assistant to history reads |
 | `src/bridge/routes/vcs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
-| `src/bridge/rpc.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
+| `src/bridge/rpc.ts` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `src/bridge/shell.ts` | 4f7d316 fix(build): stabilize shell context artifacts |
 | `src/bridge/sse.ts` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `src/bridge/state.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
 | `src/bridge/stubs.ts` | c281121 feat(bridge): serve real git info, status and diffs over /vcs |
 | `src/help.ts` | 468c05f feat(bridge): add shell mode and settle preset cards |
-| `src/index.ts` | dacd2a2 chore(release): prepare v0.2.0-rc.3 |
+| `src/index.ts` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `src/tui/binary.ts` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `src/tui/brand.ts` | eba383f feat(tui): print DSH OC brand before --mini launches |
 | `src/tui/download.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
@@ -247,8 +247,8 @@
 | `src/tui/platform.ts` | 81920ee feat(tui): opencode binary resolution, download, spawn and signal handling |
 | `src/tui/temp.ts` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `src/types.ts` | 153f781 feat(tui): show exit hint for resumed sessions with history, not only new input |
-| `scripts/audit-local-sessions.sh` | a5925a5 fix(bridge): close provisional messages on turn/end after interrupt |
-| `scripts/build-replay-corpus.mjs` | 6928f8a feat(bridge): expose router entry and add minimal-server renderer attribution |
+| `scripts/audit-local-sessions.sh` | fb50dbe fix(perf): write v3 session generation filenames |
+| `scripts/build-replay-corpus.mjs` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `scripts/check-all.sh` | db87e31 fix(release): verify local dsh-oc resolution |
 | `scripts/cleanup-e2e-runs.sh` | ec31177 chore: add e2e run directory cleanup script |
 | `scripts/cleanup-merged-branches.sh` | 2f1ab51 chore(scripts): enumerate remote merged branches for cleanup |
@@ -264,7 +264,7 @@
 | `scripts/e2e-real-llm.sh` | 609ccd6 test(real): strengthen real-llm queue FIFO and TUI delivery assertions |
 | `scripts/e2e-real-queued-order.sh` | a603d6a test(e2e): add raw SSE replay mode and full-trace real repro |
 | `scripts/e2e-recovery-consistency.sh` | 008d2ff test(e2e): add crash and SSE-reconnect recovery fault domains |
-| `scripts/e2e-recovery-crash.sh` | 59e1d1e fix(e2e): pin crash cleanup to tmux children |
+| `scripts/e2e-recovery-crash.sh` | 54e2d60 test(recovery): align crash oracle with dsh 0.1.5 stream semantics |
 | `scripts/e2e-recovery-sse-reconnect.sh` | 008d2ff test(e2e): add crash and SSE-reconnect recovery fault domains |
 | `scripts/e2e-tui-abort.sh` | 59074e9 fix(e2e): align status and mini abort oracles |
 | `scripts/e2e-tui-agent-lock.sh` | 1c1e685 test(e2e): cover locked agent switching in the real TUI |
@@ -293,7 +293,7 @@
 | `scripts/e2e-tui-stream.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
 | `scripts/e2e-tui-subagent.sh` | 87d78ef fix(bridge): restore prompt order and native subagent tasks |
 | `scripts/e2e-tui-timestamps.sh` | 4141cf9 test(e2e): wait for stable TUI command frames |
-| `scripts/e2e-tui-tools.sh` | 712535a ci: dump TUI pane on every dsh-exit wait failure |
+| `scripts/e2e-tui-tools.sh` | 3dc26cf feat(bridge): adapt to dsh 0.1.5 host ABI and assistant stream model |
 | `scripts/e2e-tui-turn.sh` | b05d5c9 fix(bridge): keep live message identity stable |
 | `scripts/e2e-tui-version-lock.sh` | ef1419f feat(tui): disable opencode auto-update/background network and enforce version lock |
 | `scripts/flake-mini-scan.sh` | 04239f6 fix(test): keep flake scan observe-only |
@@ -301,15 +301,15 @@
 | `scripts/minimal-oc-server.mjs` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
 | `scripts/monitor-process-io.sh` | d94f52e fix(e2e): harden permission waits and monitor output |
 | `scripts/normalize-golden-trace.mjs` | f10e893 test(e2e): record official-TUI queued-followup order repro and golden |
-| `scripts/perf-session-gen.mjs` | fd1e411 feat(bridge): integrate dsh 0.1.2 host services |
+| `scripts/perf-session-gen.mjs` | fb50dbe fix(perf): write v3 session generation filenames |
 | `scripts/perf.mjs` | 2ae0921 fix(ci): test against required dsh host ABI |
 | `scripts/probe-opencode.mjs` | 942b799 refactor(bridge): split route registrations into domain modules |
-| `scripts/replay-corpus-manifest.mjs` | 9a591f2 test(corpus): add real-session coverage scan and close corpus gaps |
+| `scripts/replay-corpus-manifest.mjs` | fb50dbe fix(perf): write v3 session generation filenames |
 | `scripts/replay-session-audit.sh` | 54c9c31 test(bridge): add reusable real-session replay audit script |
 | `scripts/scan-release-artifact-paths.sh` | f5f016f test(release): harden CI verification |
 | `scripts/update-feature-matrix.mjs` | 8d95367 fix(docs): keep feature matrix generation idempotent |
 | `scripts/update-local-install.sh` | db87e31 fix(release): verify local dsh-oc resolution |
 | `scripts/update-opencode-assets.mjs` | 6ecf354 feat(tui): timestamps, feature matrix and multi-arch binary resolution |
 | `scripts/upgrade-lane.sh` | 81effdd feat(tui): add candidate opencode upgrade lane with golden trace diff |
-| `scripts/verify-release-artifacts.sh` | f5f016f test(release): harden CI verification |
+| `scripts/verify-release-artifacts.sh` | 3ed10a7 fix(release): invoke tsdown directly in artifact rebuild |
 <!-- FEATURES:AUTO:END -->

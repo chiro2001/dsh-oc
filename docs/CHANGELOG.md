@@ -42,6 +42,10 @@ session-controller 依赖与 assistant 流式事件模型，**不再兼容 dsh 0
 - 恢复语义：0.1.5 不持久化未结算的流式内容，崩溃恢复后该回合可以没有 assistant
   消息；`e2e-recovery-crash.sh` 的 oracle 改为“重启图是持久化前缀 + 不伪造崩溃
   attempt + 新回合 exactly-once”，并继续断言 idle 与无残留进程。
+- 本地门禁全绿：`pnpm typecheck`、438 个单测（23 个文件）、probe 63/63、
+  `perf smoke (200)`、release artifact audit（干净重建零差异、pack 无绝对路径）、
+  `scripts/check-all.sh --e2e` 39/39 e2e 首跑 PASSED 且 0 retry；5000 会话压测见
+  [docs/perf/results-2026-09-11-rc4.md](perf/results-2026-09-11-rc4.md)。
 
 ## [0.2.0-rc.3] - 2026-09-08
 
