@@ -2,11 +2,12 @@
 # Process-crash recovery e2e: SIGKILL dsh in the middle of a slow streaming
 # turn, restart with --session in a fresh dsh process, then assert:
 #  1. the restart graph is exactly the persisted prefix (no loss, no fake
-#     completion, no duplicates);
+#     completion, no duplicates; dsh 0.1.5 does not persist unsettled stream
+#     content, so the crashed turn may have no assistant message at all);
 #  2. the session reaches a usable terminal state (idle, or idle after
 #     explicitly cancelling the stale in-flight turn);
-#  3. a new prompt is accepted and completes, and the final graph starts with
-#     the restart graph plus exactly one user + one assistant turn.
+#  3. a new prompt is accepted and completes, adding exactly one user and one
+#     settled assistant without fabricating the crashed attempt.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source tests/e2e/common.sh
@@ -46,8 +47,9 @@ done
 [[ -n "$SID" ]]
 echo "  session $SID"
 
-# Wait until the v2 projection shows a partial assistant text: the stream
-# started and at least one chunk is durable.
+# Wait until the v2 projection shows partial assistant text. dsh 0.1.5 keeps
+# the in-flight stream out of the durable log; the bridge merges its live
+# provisional assistant into history, so this confirms the stream started.
 deadline=$((SECONDS + 60))
 while (( SECONDS < deadline )); do
   if curl -s "$E2E_BRIDGE_URL/api/session/$SID/message" | jq -e '
@@ -59,10 +61,10 @@ while (( SECONDS < deadline )); do
   sleep 1
 done
 if (( SECONDS >= deadline )); then
-  echo "e2e: stream did not produce durable text before crash" >&2
+  echo "e2e: stream did not produce visible partial text before crash" >&2
   exit 1
 fi
-echo "  stream started (partial text durable)"
+echo "  stream started (partial text visible)"
 
 recovery_signature_v2 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/pre-crash-v2.json"
 recovery_signature_v1 "$E2E_BRIDGE_URL" "$SID" "$E2E_RUN_DIR/pre-crash-v1.json"
@@ -125,12 +127,16 @@ recovery_assert_sane "$E2E_RUN_DIR/final-v1.json" "$E2E_RUN_DIR/final-v2.json"
 recovery_assert_prefix "v2 final" "$E2E_RUN_DIR/restart-v2.json" "$E2E_RUN_DIR/final-v2.json"
 recovery_assert_prefix "v1 final" "$E2E_RUN_DIR/restart-v1.json" "$E2E_RUN_DIR/final-v1.json"
 
-# No duplicate message ids and exactly one occurrence of each user text.
+# No duplicate message ids, exactly one continuation user, and exactly one
+# settled assistant. dsh 0.1.5 does not persist the in-flight stream, so the
+# crashed turn legitimately has no assistant message after recovery; the test
+# asserts it is not fabricated (no phantom partial from the dead attempt).
 if ! curl -s "$E2E_BRIDGE_URL/api/session/$SID/message" | jq -e '
     ([.data[].id] | length) == ([.data[].id] | unique | length)
     and ([.data[] | select(.type == "user" and .text == "continue after crash")] | length) == 1
+    and ([.data[] | select(.type == "assistant")] | length) == 1
     and ([.data[] | select(.type == "assistant") | .content[]?
-          | select(.type == "text" and (.text | length) > 0)] | length) >= 2
+          | select(.type == "text" and (.text | length) > 0)] | length) >= 1
   ' >/dev/null; then
   echo "e2e: final graph has duplicates or missing turns after crash recovery" >&2
   cat "$E2E_RUN_DIR/final-v2.json" >&2

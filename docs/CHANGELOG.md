@@ -39,6 +39,9 @@ session-controller 依赖与 assistant 流式事件模型，**不再兼容 dsh 0
   `>=0.1.5-rc.2`；CI 固定 dsh 0.1.5-rc.2；`pnpm install` 由 pnpm 维护
   `pnpm-workspace.yaml` 的 prerelease 例外；replay 语料与 perf session 生成器
   更新为 0.1.5 事件形状（session format v3）。
+- 恢复语义：0.1.5 不持久化未结算的流式内容，崩溃恢复后该回合可以没有 assistant
+  消息；`e2e-recovery-crash.sh` 的 oracle 改为“重启图是持久化前缀 + 不伪造崩溃
+  attempt + 新回合 exactly-once”，并继续断言 idle 与无残留进程。
 
 ## [0.2.0-rc.3] - 2026-09-08
 
