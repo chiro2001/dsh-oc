@@ -23,6 +23,10 @@ session-controller 依赖与 assistant 流式事件模型，**不再兼容 dsh 0
 - 实时流式移植：已删除的 `assistant/chunk` 会话事件改为全局订阅
   `agent/assistant-stream` 帧（attempt `start` 记录 turn/step，`chunk` 复用原
   chunk 翻译，`end` 回收 attempt），迟到且无 start 的帧安全丢弃。
+- 流式期间的 history 读：0.1.5 不再把 in-flight chunk 写进持久化日志，bridge 将
+  translator 的 live provisional assistant（id/created/文本块，`time.completed`
+  未设置）合并进 v1/v2 history 响应，保持 TUI 与 queue-live oracle 的 in-flight
+  契约（`scripts/e2e-tui-queue-live.sh`）。
 - 历史移植：`SessionHistoryRecord` 的 `chunks` 记录被内嵌
   `assistant/message.stream` / `assistant/attempt.stream` 取代；`expandRecord`
   把 packed run 还原为 `text-chunks`/`reasoning-chunks`/`tool-call-chunks` 行，

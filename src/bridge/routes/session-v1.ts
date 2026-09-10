@@ -272,7 +272,9 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
       history.events.map((entry) => entry.view),
     )
     mergeCommandResults(entries, ctx.state.commandResultsFor(id), limit)
-    return R.json(200, remapV1Messages(ctx, id, entries))
+    const remapped = remapV1Messages(ctx, id, entries)
+    R.mergePendingAssistantV1(ctx, id, remapped)
+    return R.json(200, remapped)
   })
 
   register('GET', '/session/:id/message/:messageID', 'json', async (req, ctx) => {
@@ -294,6 +296,7 @@ export function registerSessionV1Routes(register: RouteRegistrar): void {
     )
     mergeCommandResults(entries, ctx.state.commandResultsFor(id))
     const remapped = remapV1Messages(ctx, id, entries)
+    R.mergePendingAssistantV1(ctx, id, remapped)
     const found = remapped.find((entry) => entry.info.id === messageID)
     if (found === undefined) throw notFound('message not found', { messageID })
     return R.json(200, found)

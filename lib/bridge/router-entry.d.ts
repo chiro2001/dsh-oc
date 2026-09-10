@@ -7465,6 +7465,27 @@ interface BridgeGlobalEvent {
   };
 }
 //#endregion
+//#region src/bridge/events.d.ts
+/**
+ * dsh 0.1.5 keeps the in-flight assistant stream out of the durable log, so a
+ * mid-turn history read finds no assistant at all. This snapshot exposes the
+ * translator's live provisional message (id, created time, streamed blocks) so
+ * the history route can merge it and keep the pre-0.1.5 contract: the last
+ * assistant is present with `time.completed` unset while it streams.
+ */
+interface PendingAssistantSnapshot {
+  id: string;
+  created: number;
+  parentID?: string;
+  parts: Array<{
+    type: 'text' | 'reasoning';
+    id: string;
+    text: string;
+    start: number;
+    end?: number;
+  }>;
+}
+//#endregion
 //#region src/bridge/sse.d.ts
 interface SseClient {
   id: number;
@@ -7531,6 +7552,12 @@ interface BridgeRouteContext {
   state: InteractionState;
   log(message: string): void;
   hub: SseHub;
+  /**
+   * dsh 0.1.5 keeps in-flight assistant chunks out of the durable log; history
+   * routes call this to merge the translator's live provisional assistant so a
+   * mid-turn read still exposes the streaming message (`time.completed` unset).
+   */
+  pendingAssistant?(sessionId: string): PendingAssistantSnapshot | undefined;
 }
 interface HandlerResult {
   status: number;

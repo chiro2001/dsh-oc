@@ -138,6 +138,26 @@ interface StreamBlockState {
 }
 
 /**
+ * dsh 0.1.5 keeps the in-flight assistant stream out of the durable log, so a
+ * mid-turn history read finds no assistant at all. This snapshot exposes the
+ * translator's live provisional message (id, created time, streamed blocks) so
+ * the history route can merge it and keep the pre-0.1.5 contract: the last
+ * assistant is present with `time.completed` unset while it streams.
+ */
+export interface PendingAssistantSnapshot {
+  id: string
+  created: number
+  parentID?: string
+  parts: Array<{
+    type: 'text' | 'reasoning'
+    id: string
+    text: string
+    start: number
+    end?: number
+  }>
+}
+
+/**
  * Narrow runtime view of the dsh compaction lifecycle events
  * (`compaction/start`, `compaction/summary`, `compaction/end`). These are
  * plugin-merged session events, so they are read structurally instead of
@@ -287,6 +307,50 @@ export class MuxEventTranslator {
       this.streams.set(sessionId, state)
     }
     return state
+  }
+
+  /**
+   * Snapshot the most recent live provisional assistant for one session.
+   * Returns undefined when no turn is streaming (or the stream closed), which
+   * is the normal state for every settled history read.
+   */
+  pendingAssistantSnapshot(sessionId: string): PendingAssistantSnapshot | undefined {
+    const state = this.streams.get(sessionId)
+    if (state === undefined || state.provisionalMessageIds.size === 0) return undefined
+    let bestId: string | undefined
+    let bestCreated = Number.NEGATIVE_INFINITY
+    for (const [stepKey, id] of state.provisionalMessageIds) {
+      const created = state.provisionalMessageCreatedAt.get(stepKey)
+        ?? state.blockStarts.get(`${stepKey}:text`)
+        ?? state.blockStarts.get(`${stepKey}:reasoning`)
+        ?? state.turnStartTime
+        ?? Date.now()
+      if (created >= bestCreated) {
+        bestCreated = created
+        bestId = id
+      }
+    }
+    if (bestId === undefined) return undefined
+    const parts: PendingAssistantSnapshot['parts'] = []
+    for (const [blockKey, block] of state.blocks) {
+      if (block.messageId !== bestId) continue
+      parts.push({
+        type: block.blockType,
+        id: block.partId,
+        text: block.text,
+        start: block.start,
+        ...(state.blockEnds.get(`${blockKey}:${block.blockType}`) === undefined
+          ? {}
+          : { end: state.blockEnds.get(`${blockKey}:${block.blockType}`) }),
+      })
+    }
+    parts.sort((a, b) => a.start - b.start)
+    return {
+      id: bestId,
+      created: bestCreated,
+      ...(state.lastUserMessageId === undefined ? {} : { parentID: state.lastUserMessageId }),
+      parts,
+    }
   }
 
   /** Emit the merged goal + todo list for one session. */

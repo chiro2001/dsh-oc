@@ -81,7 +81,7 @@ import {
 import { registerRoutes } from './routes.js'
 import { SseHub, type SseClient } from './sse.js'
 import { MuxEventTranslator } from './events.js'
-import type { BridgeGlobalEvent } from './events.js'
+import type { BridgeGlobalEvent, PendingAssistantSnapshot } from './events.js'
 import { stubRoutes } from './stubs.js'
 import { runShellCommand } from './shell.js'
 
@@ -107,6 +107,12 @@ export interface BridgeRouteContext {
   state: InteractionState
   log(message: string): void
   hub: SseHub
+  /**
+   * dsh 0.1.5 keeps in-flight assistant chunks out of the durable log; history
+   * routes call this to merge the translator's live provisional assistant so a
+   * mid-turn read still exposes the streaming message (`time.completed` unset).
+   */
+  pendingAssistant?(sessionId: string): PendingAssistantSnapshot | undefined
 }
 
 export interface HandlerResult {
@@ -1016,6 +1022,75 @@ export function pendingAssistantPlaceholder(
           time: { start: Date.now() },
         }],
   }
+}
+
+/**
+ * Append the live provisional assistant (dsh 0.1.5: no durable chunks) to one
+ * v1 history page. The entry keeps `time.completed` unset so the OpenCode TUI
+ * and the queue-ordering oracle see the same in-flight contract as 0.1.2,
+ * where the partial assistant was present in the durable log.
+ */
+export function mergePendingAssistantV1(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  entries: Array<{ info: Record<string, unknown>; parts: Array<Record<string, unknown>> }>,
+): void {
+  const snapshot = ctx.pendingAssistant?.(sessionId)
+  if (snapshot === undefined) return
+  if (entries.some((entry) => String(entry.info.id ?? '') === snapshot.id)) return
+  const placeholder = pendingAssistantPlaceholder(sessionId, ctx.cwd, undefined, {
+    id: snapshot.id,
+    ...(snapshot.parentID === undefined ? {} : { parentID: snapshot.parentID }),
+  })
+  placeholder.info.time = { created: snapshot.created }
+  placeholder.parts = snapshot.parts.map((part) => ({
+    id: part.id,
+    sessionID: sessionId,
+    messageID: snapshot.id,
+    type: part.type,
+    text: part.text,
+    time: {
+      start: part.start,
+      ...(part.end === undefined ? {} : { end: part.end }),
+    },
+  })) as V1MessageEntry['parts']
+  entries.push(placeholder as unknown as { info: Record<string, unknown>; parts: Array<Record<string, unknown>> })
+}
+
+/** v2 counterpart of {@link mergePendingAssistantV1}. */
+export function mergePendingAssistantV2(
+  ctx: BridgeRouteContext,
+  sessionId: string,
+  messages: Array<Record<string, unknown>>,
+): void {
+  const snapshot = ctx.pendingAssistant?.(sessionId)
+  if (snapshot === undefined) return
+  if (messages.some((message) => message.id === snapshot.id)) return
+  messages.push({
+    id: snapshot.id,
+    time: { created: snapshot.created },
+    type: 'assistant',
+    agent: DEFAULT_AGENT_NAME,
+    model: { providerID: 'deepseek', modelID: 'deepseek-chat' },
+    content: snapshot.parts.map((part) => part.type === 'text'
+      ? { type: 'text', id: part.id, text: part.text }
+      : {
+          type: 'reasoning',
+          id: part.id,
+          text: part.text,
+          time: {
+            created: part.start,
+            ...(part.end === undefined ? {} : { completed: part.end }),
+          },
+        }),
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  })
 }
 
 /** Count user messages still pending in the dsh inbox queue for a session. */
@@ -2427,6 +2502,9 @@ export function createBridgeRouter(
   let translator: MuxEventTranslator | undefined
   let translatorLoading: Promise<MuxEventTranslator> | undefined
   let listRefreshTimer: NodeJS.Timeout | undefined
+  // The shared translator owns the live provisional assistant state that
+  // dsh 0.1.5 no longer writes into the durable session log.
+  ctx.pendingAssistant = (sessionId: string) => translator?.pendingAssistantSnapshot(sessionId)
   // Serialize session-event feeds per session: `feed` awaits translator
   // initialization and projection seeding, so without a per-session queue
   // two near-simultaneous frames can be translated out of order (e.g. a fast

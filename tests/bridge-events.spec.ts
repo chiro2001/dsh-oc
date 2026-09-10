@@ -2240,6 +2240,49 @@ describe('bridge events: projection and control frames', () => {
     expect(state.assistantIdForDshId('s1', 'dsh-asst-1')).toBe('msg_assistant_1')
   })
 
+  it('exposes the live provisional assistant for mid-turn history reads', () => {
+    const instance = new MuxEventTranslator({
+      cwd: '/work',
+      state: new InteractionState(),
+      log: () => {},
+      toolFlushMs: 0,
+    })
+    instance.translate({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: makeUserEvent('hi', 'msg-user-live', 900),
+    })
+    instance.translate({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: sessionEvent('turn/start', { turn: 1 }, 2, 950),
+    })
+    // dsh 0.1.5 keeps these chunks out of the durable log; the history route
+    // merges this snapshot instead so an in-flight assistant stays visible.
+    instance.translate(streamFrame({ turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'hel' } }, 1000, {
+      sessionId: 's1',
+      frameIndex: 0,
+    }))
+    instance.translate(streamFrame({ turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'lo' } }, 1010, {
+      sessionId: 's1',
+      frameIndex: 1,
+    }))
+    const snapshot = instance.pendingAssistantSnapshot('s1')
+    expect(snapshot).toBeDefined()
+    expect(snapshot?.id).toBe('msg_pending:s1:1:1')
+    expect(snapshot?.created).toBeGreaterThanOrEqual(900)
+    expect(snapshot?.parts).toEqual([
+      { type: 'text', id: 'prt_stream:s1:1:1:text:0', text: 'hello', start: 1000, end: 1010 },
+    ])
+    // The durable settlement replaces the provisional card and clears it.
+    instance.translate({
+      type: 'session/event',
+      sessionId: 's1' as never,
+      event: makeAssistantEvent([{ type: 'text', text: 'hello' }], 'msg-live-final', 1200),
+    })
+    expect(instance.pendingAssistantSnapshot('s1')).toBeUndefined()
+  })
+
   it('keeps the placeholder assistant id across streamed chunks', () => {
     const state = new InteractionState()
     state.registerAssistantIdForUser('s1', 'msg-user-2', 'msg_assistant_2')

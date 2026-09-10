@@ -415,6 +415,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
     )
     mergeCommandResultsV2(data, ctx.state.commandResultsFor(id))
     const remapped = remapV2Messages(ctx, id, data)
+    R.mergePendingAssistantV2(ctx, id, remapped as unknown as Array<Record<string, unknown>>)
     const response: SessionMessagesResponse = {
       data: req.query.get('order') === 'desc' ? remapped.reverse() : remapped,
       cursor: {
@@ -508,6 +509,7 @@ export function registerSessionV2Routes(register: RouteRegistrar): void {
       entries.map((entry) => entry.view),
     )
     const remapped = remapV2Messages(ctx, id, data)
+    R.mergePendingAssistantV2(ctx, id, remapped as unknown as Array<Record<string, unknown>>)
     const found = remapped.find((message) => message.id === messageID)
     if (found === undefined) throw notFound('message not found', { messageID })
     return R.json(200, { data: found })
