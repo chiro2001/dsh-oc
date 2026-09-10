@@ -25,7 +25,11 @@ git archive --format=tar HEAD | tar -x -C "$TMP/build"
 ln -s "$REPO_ROOT/node_modules" "$TMP/build/node_modules"
 
 echo "-- clean rebuild --"
-(cd "$TMP/build" && pnpm build >/dev/null)
+# Invoke the workspace's own tsdown binary directly: `pnpm build` runs pnpm's
+# verify-deps-before-run check, which sees the symlinked node_modules metadata
+# as a foreign workspace and prompts to reinstall. The build still uses the
+# committed config and committed sources.
+(cd "$TMP/build" && ./node_modules/.bin/tsdown >/dev/null)
 # tsdown emits `//#region <path>` comments in .d.ts files; the temp build
 # resolves node_modules through an absolute symlink while the committed lib
 # uses repo-relative paths. Normalize the region prefix before diffing.
